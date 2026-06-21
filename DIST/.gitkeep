@@ -1,0 +1,2 @@
+# Questa cartella conterrà lo zip distribuibile del plugin: system-markdown-alternate.zip
+# Lo zip viene generato da bin/build.sh e include la cartella vendor/ (dipendenze Composer).
