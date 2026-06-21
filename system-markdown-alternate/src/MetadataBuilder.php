@@ -12,6 +12,13 @@ defined( 'ABSPATH' ) || exit;
  */
 class MetadataBuilder {
 
+	/** @var ShortcodeCleaner */
+	private $shortcodes;
+
+	public function __construct( ShortcodeCleaner $shortcodes ) {
+		$this->shortcodes = $shortcodes;
+	}
+
 	/**
 	 * @param \WP_Post $post Post di riferimento.
 	 * @return string Blocco front matter (--- ... ---) con newline finale.
@@ -144,8 +151,14 @@ class MetadataBuilder {
 			}
 		}
 
-		$text = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
-		$text = trim( preg_replace( '/\s+/', ' ', $text ) );
+		$raw = $post->post_content;
+		$raw = $this->shortcodes->strip( $raw );   // Rimuove gli shortcode esclusi (anche se non registrati).
+		$raw = strip_shortcodes( $raw );           // Rimuove gli altri shortcode registrati.
+		$raw = preg_replace( '/<!--.*?-->/s', ' ', $raw ); // Delimitatori di blocco → spazio.
+		$raw = preg_replace( '/<[^>]+>/', ' ', $raw );     // Tag → spazio (evita parole concatenate).
+
+		$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( $raw ) ) );
+		$text = preg_replace( '/\s+([.,;:!?…])/u', '$1', $text ); // Niente spazio prima della punteggiatura.
 
 		if ( '' === $text ) {
 			return '';

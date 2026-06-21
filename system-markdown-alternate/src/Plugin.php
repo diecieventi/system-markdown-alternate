@@ -21,12 +21,13 @@ class Plugin {
 	 * Costruisce il grafo delle dipendenze e aggancia gli hook.
 	 */
 	public function boot(): void {
-		$renderer = new ContentRenderer( new BlockCleaner(), new ShortcodeCleaner() );
+		$shortcodes = new ShortcodeCleaner();
+		$renderer   = new ContentRenderer( new BlockCleaner(), $shortcodes );
 
 		$this->controller = new MarkdownController(
 			$renderer,
 			new MarkdownConverter(),
-			new MetadataBuilder()
+			new MetadataBuilder( $shortcodes )
 		);
 
 		// Priorità 0: intercettiamo le richieste *.md prima del caricamento del template.
