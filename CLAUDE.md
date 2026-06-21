@@ -148,9 +148,9 @@ PSR-4, PHP 7.4+/WP 6.0+. Cosa adottiamo / cosa no:
 - **Fallback conversione:** se `convert()` lancia un'eccezione, fallback a estrazione testo
   semplice invece di rompere la risposta.
 - **escape_yaml:** decodifica entità + escape di `\` e `"` (conferma il nostro punto sul front matter).
-- **Front matter — aggiunta proposta:** includere `featured_image` (URL) ed eventuale
-  `featured_image_alt` (il piano non li prevede; il riferimento sì). Opzionale: linkare
-  i termini (categorie/tag) ai rispettivi `.md`.
+- **Front matter — CONFERMATO:** includere `featured_image` (URL) ed eventuale
+  `featured_image_alt` (il piano non li prevede; aggiunti su richiesta utente).
+  Opzionale/v2: linkare i termini (categorie/tag) ai rispettivi `.md`.
 
 **Da NON adottare in v1** (coerenza con `piano.md` e con l'obiettivo "no marketplace"):
 - loro applicano `the_content` completo → noi preferiamo `render_block()` sui blocchi
