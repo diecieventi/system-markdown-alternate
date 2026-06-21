@@ -121,6 +121,44 @@ Default esclusioni:
 4. **URL assoluti** per immagini e link nel Markdown.
 5. **Cache**: chiave `sma_md_{post_id}_{hash(post_modified_gmt)}`; rigenera al cambio.
 
+## Spunti dal plugin di riferimento (ProgressPlanner/markdown-alternate)
+
+Plugin GPL di Joost de Valk. Stessa libreria (`league/html-to-markdown ^5.1`), stesso
+PSR-4, PHP 7.4+/WP 6.0+. Cosa adottiamo / cosa no:
+
+- **Config converter (da adottare così com'è):**
+  ```php
+  new HtmlConverter([
+      'header_style'    => 'atx',          // # Heading
+      'strip_tags'      => true,
+      'remove_nodes'    => 'script style iframe',
+      'hard_break'      => false,
+      'list_item_style' => '-',
+  ]);
+  ```
+- **Code block (spunto chiave per Code Block Pro):** invece di leggere solo gli attrs
+  del blocco, fare uno **strip degli `<span>` di syntax-highlighting preservando la
+  classe `language-*`** e lasciare che il converter produca il fenced block. Approccio
+  generico che copre Code Block Pro e qualsiasi highlighter. (Loro: `strip_code_block_markup()`.)
+- **Trailing slash:** `/{slug}.md/` → **301** verso `/{slug}.md`. Pattern di match non-greedy.
+- **Robustezza server:** loro usano rewrite rules + un hook `parse_request` per compat
+  **Nginx**. Per la v1 il nostro approccio `template_redirect` + `REQUEST_URI` resta valido
+  e **non richiede flush_rewrite_rules**. Se in v2 passiamo a `add_rewrite_rule`, ricordare
+  `flush_rewrite_rules()` su activation/deactivation.
+- **Fallback conversione:** se `convert()` lancia un'eccezione, fallback a estrazione testo
+  semplice invece di rompere la risposta.
+- **escape_yaml:** decodifica entità + escape di `\` e `"` (conferma il nostro punto sul front matter).
+- **Front matter — aggiunta proposta:** includere `featured_image` (URL) ed eventuale
+  `featured_image_alt` (il piano non li prevede; il riferimento sì). Opzionale: linkare
+  i termini (categorie/tag) ai rispettivi `.md`.
+
+**Da NON adottare in v1** (coerenza con `piano.md` e con l'obiettivo "no marketplace"):
+- loro applicano `the_content` completo → noi preferiamo `render_block()` sui blocchi
+  ripuliti per escludere related/CTA iniettati (requisito esplicito del piano);
+- content negotiation (`Accept: text/markdown`, `?format=markdown`), `llms.txt` (Yoast),
+  filtro `supported_post_types`, auto-update da GitHub (`plugin-update-checker`) →
+  candidati per **v2**.
+
 ## Build & deploy
 
 ```bash
