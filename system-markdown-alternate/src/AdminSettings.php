@@ -141,23 +141,50 @@ class AdminSettings {
 			)
 		);
 
+		// ── Sezioni sempre presenti ───────────────────────────────────────────
 		add_settings_section( 'sma_cache', 'Cache', '__return_false', self::PAGE );
-		add_settings_section( 'sma_exclusions', 'Exclusions', array( $this, 'render_exclusions_intro' ), self::PAGE );
-		add_settings_section( 'sma_acf', 'ACF Integration', array( $this, 'render_acf_intro' ), self::PAGE );
-		add_settings_section( 'sma_integrations', 'Shortcode & Dynamic Tag', array( $this, 'render_integrations_intro' ), self::PAGE );
-		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
-		add_settings_section( 'sma_advanced', 'Advanced', '__return_false', self::PAGE );
-
 		add_settings_field( 'sma_cache_ttl', 'Cache TTL (seconds)', array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_cache' );
+
+		add_settings_section( 'sma_exclusions', 'Exclusions', array( $this, 'render_exclusions_intro' ), self::PAGE );
 		add_settings_field( 'sma_excluded_shortcodes', 'Excluded shortcodes', array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_exclusions' );
 		add_settings_field( 'sma_excluded_block_names', 'Excluded block names', array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_exclusions' );
 		add_settings_field( 'sma_excluded_classes', 'Excluded CSS classes', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_exclusions' );
-		add_settings_field( 'sma_acf_subtitle_key', 'Subtitle field', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_acf' );
-		add_settings_field( 'sma_acf_tldr_key', 'TL;DR field', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_acf' );
-		add_settings_field( 'sma_dynamic_tag_enabled', 'Dynamic Tag GenerateBlocks', array( $this, 'field_dynamic_tag_enabled' ), self::PAGE, 'sma_integrations' );
+
+		add_settings_section( 'sma_shortcode', 'Shortcode', array( $this, 'render_shortcode_intro' ), self::PAGE );
+
+		// ── Integrazione GenerateBlocks: solo se il plugin è attivo ────────────
+		if ( $this->generateblocks_active() ) {
+			add_settings_section( 'sma_generateblocks', 'GenerateBlocks Integration', array( $this, 'render_generateblocks_intro' ), self::PAGE );
+			add_settings_field( 'sma_dynamic_tag_enabled', 'Dynamic Tag', array( $this, 'field_dynamic_tag_enabled' ), self::PAGE, 'sma_generateblocks' );
+		}
+
+		// ── Integrazione ACF: solo se il plugin è attivo ───────────────────────
+		if ( $this->acf_active() ) {
+			add_settings_section( 'sma_acf', 'ACF Integration', array( $this, 'render_acf_intro' ), self::PAGE );
+			add_settings_field( 'sma_acf_subtitle_key', 'Subtitle field', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_acf' );
+			add_settings_field( 'sma_acf_tldr_key', 'TL;DR field', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_acf' );
+		}
+
+		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
 		add_settings_field( 'sma_llms_txt_enabled', 'Attiva /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
+
+		add_settings_section( 'sma_advanced', 'Advanced', '__return_false', self::PAGE );
 		add_settings_field( 'sma_supported_post_types', 'Supported post types', array( $this, 'field_post_types' ), self::PAGE, 'sma_advanced' );
 		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
+	}
+
+	/**
+	 * ACF è attivo? (definisce la funzione get_field()).
+	 */
+	private function acf_active(): bool {
+		return function_exists( 'get_field' );
+	}
+
+	/**
+	 * GenerateBlocks 2.x (con Dynamic Tags) è attivo?
+	 */
+	private function generateblocks_active(): bool {
+		return class_exists( 'GenerateBlocks_Register_Dynamic_Tag' );
 	}
 
 	/**
@@ -281,21 +308,25 @@ class AdminSettings {
 
 	// ─── Rendering ────────────────────────────────────────────────────────────
 
-	public function render_integrations_intro(): void {
-		echo '<p>Per inserire l\'URL del <code>.md</code> in modo dinamico (bottoni, link, template) senza scriverlo a mano.</p>';
-		echo '<p><strong>Shortcode</strong> (sempre disponibile): <code>[sma_md_url]</code> restituisce l\'URL del .md del post corrente. ';
-		echo 'Per un post specifico: <code>[sma_md_url id="123"]</code>. ';
-		echo 'Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto).</p>';
+	public function render_shortcode_intro(): void {
+		echo '<p>Shortcode per inserire dati del Markdown nei contenuti, bottoni e template. Sempre disponibili.</p>';
+		echo '<table class="widefat striped" style="max-width:780px"><thead><tr><th>Shortcode</th><th>Descrizione</th></tr></thead><tbody>';
+		echo '<tr><td><code>[sma_md_url]</code></td><td>URL del <code>.md</code> del post corrente. Per un post specifico: <code>[sma_md_url id="123"]</code>. Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto da password).</td></tr>';
+		echo '</tbody></table>';
+	}
+
+	public function render_generateblocks_intro(): void {
+		echo '<p>Rilevato GenerateBlocks. Puoi esporre l\'URL del <code>.md</code> come Dynamic Tag, da usare negli elementi GenerateBlocks/GeneratePress (es. campo URL di un Button).</p>';
 	}
 
 	public function field_dynamic_tag_enabled(): void {
 		$v = get_option( 'sma_dynamic_tag_enabled', '0' ); // disattivato per default
-		echo '<label><input type="checkbox" name="sma_dynamic_tag_enabled" value="1"' . checked( '1', $v, false ) . ' /> Registra il Dynamic Tag <code>{{sma_md_url}}</code> per GenerateBlocks</label>';
-		echo '<p class="description">Richiede GenerateBlocks 2.x. Una volta attivo, usa <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress (es. URL di un Button). Se disattivato, il tag non viene registrato.</p>';
+		echo '<label><input type="checkbox" name="sma_dynamic_tag_enabled" value="1"' . checked( '1', $v, false ) . ' /> Registra il Dynamic Tag <code>{{sma_md_url}}</code></label>';
+		echo '<p class="description">Una volta attivo, usa <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress (es. URL di un Button). Se disattivato, il tag non viene registrato.</p>';
 	}
 
 	public function render_acf_intro(): void {
-		echo '<p>Campi ACF inclusi nel Markdown come preambolo (tra titolo H1 e corpo). Richiede ACF attivo. Lascia vuoto per disabilitare.</p>';
+		echo '<p>Rilevato ACF. Campi inclusi nel Markdown come preambolo (tra titolo H1 e corpo). Lascia vuoto per disabilitare.</p>';
 	}
 
 	public function render_exclusions_intro(): void {
