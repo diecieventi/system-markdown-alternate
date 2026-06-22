@@ -220,7 +220,9 @@ class AdminSettings {
 	}
 
 	public function field_post_types(): void {
-		$saved     = (array) get_option( 'sma_supported_post_types', array() );
+		$raw   = get_option( 'sma_supported_post_types' ); // false = mai salvato esplicitamente
+		$saved = false !== $raw ? (array) $raw : array( 'post' ); // rispecchia il default del codice
+
 		$all_types = get_post_types( array( 'public' => true ), 'objects' );
 
 		foreach ( $all_types as $pt ) {
