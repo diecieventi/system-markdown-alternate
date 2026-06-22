@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.9.1
+Stable tag: 0.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,13 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.10.0 =
+* Automatic conflict detection for `/llms.txt`: warns in the settings if another
+  SEO plugin (Rank Math, Yoast, AIOSEO, SEOPress) has an llms.txt feature active,
+  if a physical `llms.txt` file exists at the site root, or (on demand) if the
+  URL already responds. Detection checks the feature state, not just whether the
+  plugin is installed.
 
 = 0.9.1 =
 * No `rel="alternate"` link is printed when no post type is enabled (previously

@@ -36,8 +36,8 @@ $wpdb->query(
 	"DELETE FROM {$wpdb->options}
 	 WHERE option_name LIKE '\_transient\_sma\_md\_%'
 	    OR option_name LIKE '\_transient\_timeout\_sma\_md\_%'
-	    OR option_name LIKE '\_transient\_sma\_llms\_txt%'
-	    OR option_name LIKE '\_transient\_timeout\_sma\_llms\_txt%'"
+	    OR option_name LIKE '\_transient\_sma\_llms\_%'
+	    OR option_name LIKE '\_transient\_timeout\_sma\_llms\_%'"
 );
 
 // Object cache persistente: svuota il gruppo se l'API è disponibile.

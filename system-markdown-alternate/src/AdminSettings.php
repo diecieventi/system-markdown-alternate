@@ -324,6 +324,67 @@ class AdminSettings {
 
 	public function render_llmstxt_intro(): void {
 		echo '<p>Il file <code>/llms.txt</code> elenca i contenuti del sito in formato leggibile da LLM e agenti AI.</p>';
+		$this->render_conflict_warning();
+	}
+
+	/**
+	 * Avviso automatico se un altro gestore di /llms.txt è attivo (altri plugin SEO,
+	 * file fisico) o se l'endpoint risponde quando non dovrebbe.
+	 */
+	private function render_conflict_warning(): void {
+		$detector     = new ConflictDetector();
+		$ours_enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
+		$force        = isset( $_GET['sma_recheck'] ); // phpcs:ignore WordPress.Security.NonceVerification
+
+		$alerts = array(); // Conflitti probabili (rosso).
+		$notes  = array(); // Note informative (descrizione).
+
+		if ( $detector->physical_file_exists() ) {
+			$alerts[] = 'Esiste un file fisico <code>llms.txt</code> nella root del sito: il web server lo serve <strong>prima</strong> di WordPress, quindi questo endpoint (e quello di altri plugin) viene ignorato.';
+		}
+
+		foreach ( $detector->active_providers() as $p ) {
+			$alerts[] = sprintf(
+				'<strong>%1$s</strong> ha la funzione llms.txt <strong>attiva</strong>: gestisce già <code>/llms.txt</code>. Tieni attivo un solo gestore (disattiva questo qui sotto, oppure quello di %1$s).',
+				esc_html( $p['name'] )
+			);
+		}
+
+		foreach ( $detector->unknown_providers() as $p ) {
+			$notes[] = sprintf(
+				'<strong>%s</strong> è attivo e potrebbe gestire llms.txt: verifica nelle sue impostazioni.',
+				esc_html( $p['name'] )
+			);
+		}
+
+		$endpoint = $detector->endpoint_status( $force );
+		if ( null === $endpoint ) {
+			$notes[] = 'Controllo HTTP di <code>/llms.txt</code> non ancora eseguito.';
+		} elseif ( ! empty( $endpoint['reachable'] ) ) {
+			if ( $ours_enabled ) {
+				$notes[] = sprintf( '<code>/llms.txt</code> risponde HTTP %d (verosimilmente servito da questo plugin).', (int) $endpoint['status'] );
+			} else {
+				$alerts[] = sprintf( 'Questo endpoint è <strong>disattivato</strong> ma <code>/llms.txt</code> risponde comunque (HTTP %d): qualcos\'altro lo sta servendo.', (int) $endpoint['status'] );
+			}
+		} else {
+			$status_txt = ! empty( $endpoint['status'] ) ? ' (HTTP ' . (int) $endpoint['status'] . ')' : '';
+			$notes[]    = 'Il controllo di <code>/llms.txt</code> non ha ricevuto una risposta valida' . $status_txt . '. Può essere un blocco del WAF sul controllo automatico (le richieste reali dei browser potrebbero comunque funzionare).';
+		}
+
+		if ( $alerts ) {
+			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin-top:0"><strong>Possibile conflitto su /llms.txt:</strong></p><ul style="list-style:disc;margin:0 0 0 20px">';
+			foreach ( $alerts as $a ) {
+				echo '<li>' . $a . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput
+			}
+			echo '</ul></div>';
+		}
+
+		if ( $notes ) {
+			echo '<p class="description">' . implode( '<br>', $notes ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
+		}
+
+		$recheck = esc_url( add_query_arg( 'sma_recheck', time() ) );
+		echo '<p><a href="' . $recheck . '" class="button button-secondary">Controlla /llms.txt ora</a></p>';
 	}
 
 	public function field_acf_subtitle_key(): void {
