@@ -143,7 +143,9 @@ class ConflictDetector {
 				'timeout'             => 5,
 				'redirection'         => 3,
 				'limit_response_size' => 2048,
-				'user-agent'          => 'SystemMarkdownAlternate/llms-check; ' . home_url( '/' ),
+				// UA da browser: molti WAF (es. RunCloud 8G) bloccano gli UA "bot",
+				// dando un falso negativo su un endpoint che per i browser funziona.
+				'user-agent'          => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
 			)
 		);
 

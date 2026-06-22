@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.10.0
+Stable tag: 0.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,11 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.10.1 =
+* The on-demand `/llms.txt` HTTP check now uses a browser User-Agent (avoids
+  false negatives from WAFs that block bot user agents) and uses the response
+  content type to tell a real text llms.txt from an HTML block/soft-404 page.
 
 = 0.10.0 =
 * Automatic conflict detection for `/llms.txt`: warns in the settings if another

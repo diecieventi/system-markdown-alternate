@@ -361,10 +361,16 @@ class AdminSettings {
 		if ( null === $endpoint ) {
 			$notes[] = 'Controllo HTTP di <code>/llms.txt</code> non ancora eseguito.';
 		} elseif ( ! empty( $endpoint['reachable'] ) ) {
+			$ct        = (string) ( $endpoint['content_type'] ?? '' );
+			$is_textual = ( false !== stripos( $ct, 'text/plain' ) || false !== stripos( $ct, 'markdown' ) );
+			$ct_txt     = '' !== $ct ? ', content-type ' . esc_html( $ct ) : '';
+
 			if ( $ours_enabled ) {
-				$notes[] = sprintf( '<code>/llms.txt</code> risponde HTTP %d (verosimilmente servito da questo plugin).', (int) $endpoint['status'] );
+				$notes[] = sprintf( '<code>/llms.txt</code> risponde HTTP %d%s (verosimilmente servito da questo plugin).', (int) $endpoint['status'], $ct_txt );
+			} elseif ( $is_textual ) {
+				$alerts[] = sprintf( 'Questo endpoint è <strong>disattivato</strong> ma <code>/llms.txt</code> risponde con un file di testo (HTTP %d%s): qualcos\'altro lo sta servendo.', (int) $endpoint['status'], $ct_txt );
 			} else {
-				$alerts[] = sprintf( 'Questo endpoint è <strong>disattivato</strong> ma <code>/llms.txt</code> risponde comunque (HTTP %d): qualcos\'altro lo sta servendo.', (int) $endpoint['status'] );
+				$notes[] = sprintf( 'Questo endpoint è disattivato e <code>/llms.txt</code> risponde HTTP %d%s: sembra HTML, forse una pagina di blocco/soft-404 più che un vero llms.txt. Verifica manualmente.', (int) $endpoint['status'], $ct_txt );
 			}
 		} else {
 			$status_txt = ! empty( $endpoint['status'] ) ? ' (HTTP ' . (int) $endpoint['status'] . ')' : '';
