@@ -8,7 +8,8 @@ namespace SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Intercetta le richieste *.md, valida il post, serve il Markdown e stampa il link alternate.
+ * Intercetta le richieste *.md e tramite content negotiation, valida il post,
+ * serve il Markdown e stampa il link alternate.
  */
 class MarkdownController {
 
@@ -30,34 +31,48 @@ class MarkdownController {
 	/**
 	 * Hook: template_redirect (priorità 0).
 	 *
-	 * Rileva il suffisso `.md`, risolve e valida il post, quindi serve il Markdown.
-	 * Per le richieste non `.md` esce subito lasciando proseguire WordPress.
+	 * 1. Suffisso .md → risolve il post, valida, serve Markdown.
+	 * 2. Content negotiation (Accept: text/markdown o ?format=markdown) → serve
+	 *    il Markdown del post già risolto da WordPress.
 	 */
 	public function maybe_render_markdown(): void {
+		// --- Via suffisso .md ---
 		$post = $this->resolve_requested_post();
 
-		if ( ! $post instanceof \WP_Post ) {
-			return; // Non è una richiesta .md gestibile: WordPress prosegue normalmente.
+		if ( $post instanceof \WP_Post ) {
+			if ( ! $this->is_servable( $post ) ) {
+				$this->force_404();
+				return;
+			}
+			$this->send_headers( $post );
+			echo $this->get_markdown( $post ); // phpcs:ignore WordPress.Security.EscapeOutput
+			exit;
 		}
 
-		if ( ! $this->is_servable( $post ) ) {
-			$this->force_404();
-			return; // Lascia che WordPress renderizzi il template 404.
+		// --- Via content negotiation ---
+		if ( ! $this->is_negotiation_request() ) {
+			return;
 		}
 
-		$markdown = $this->get_markdown( $post );
+		$queried = get_queried_object();
+		if ( ! $queried instanceof \WP_Post ) {
+			return;
+		}
 
-		$this->send_headers( $post );
+		if ( ! $this->is_servable( $queried ) ) {
+			return; // Non servibile: WP prosegue con il rendering normale.
+		}
 
-		echo $markdown; // phpcs:ignore WordPress.Security.EscapeOutput -- output Markdown grezzo voluto.
+		$this->send_headers( $queried );
+		echo $this->get_markdown( $queried ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
 	}
 
 	/**
-	 * Hook: wp_head. Stampa il link alternate solo sui singoli articoli pubblici.
+	 * Hook: wp_head. Stampa il link alternate solo sui post/CPT supportati pubblici.
 	 */
 	public function print_alternate_link(): void {
-		if ( ! is_singular( 'post' ) ) {
+		if ( ! is_singular( $this->supported_post_types() ) ) {
 			return;
 		}
 
@@ -74,10 +89,18 @@ class MarkdownController {
 	}
 
 	/**
+	 * Hook: save_post / deleted_post. Elimina la cache Markdown del post.
+	 */
+	public function invalidate_cache( int $post_id ): void {
+		delete_transient( 'sma_md_' . $post_id );
+	}
+
+	// ─── Risoluzione ──────────────────────────────────────────────────────────
+
+	/**
 	 * Ricostruisce il post a partire dalla REQUEST_URI con suffisso `.md`.
 	 *
 	 * Gestisce query string e trailing slash (`/slug.md/` → 301 verso `/slug.md`).
-	 * Usa l'host fidato di home_url() e url_to_postid() (richiede permalink "puri").
 	 */
 	private function resolve_requested_post(): ?\WP_Post {
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
@@ -93,7 +116,7 @@ class MarkdownController {
 
 		$path = rawurldecode( $path );
 
-		// Trailing slash: /slug.md/ → 301 verso /slug.md (preservando la query string).
+		// Trailing slash: /slug.md/ → 301 verso /slug.md.
 		if ( (bool) preg_match( '#\.md/+$#', $path ) ) {
 			$target = preg_replace( '#\.md/+$#', '.md', $path );
 			$query  = wp_parse_url( $request_uri, PHP_URL_QUERY );
@@ -104,7 +127,6 @@ class MarkdownController {
 			exit;
 		}
 
-		// Deve terminare con `.md`.
 		if ( '.md' !== substr( $path, -3 ) ) {
 			return null;
 		}
@@ -127,6 +149,19 @@ class MarkdownController {
 	}
 
 	/**
+	 * Controlla se la richiesta usa content negotiation (Accept header o query param).
+	 */
+	private function is_negotiation_request(): bool {
+		// ?format=markdown
+		if ( isset( $_GET['format'] ) && 'markdown' === $_GET['format'] ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return true;
+		}
+		// Accept: text/markdown
+		$accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
+		return false !== strpos( $accept, 'text/markdown' );
+	}
+
+	/**
 	 * Compone uno URL assoluto usando scheme/host fidati di home_url() e il path della richiesta.
 	 * Robusto anche per install in sottocartella ed evita lo spoofing di HTTP_HOST.
 	 */
@@ -141,11 +176,13 @@ class MarkdownController {
 		return $scheme . '://' . $host . $port . '/' . ltrim( $path, '/' );
 	}
 
+	// ─── Validazione ──────────────────────────────────────────────────────────
+
 	/**
 	 * Verifica che il post sia servibile come Markdown.
 	 */
 	private function is_servable( \WP_Post $post ): bool {
-		if ( 'post' !== $post->post_type ) {
+		if ( ! in_array( $post->post_type, $this->supported_post_types(), true ) ) {
 			return false;
 		}
 
@@ -158,6 +195,16 @@ class MarkdownController {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Post type supportati (filtrabile).
+	 *
+	 * @return string[]
+	 */
+	private function supported_post_types(): array {
+		/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
+		return (array) apply_filters( 'sma_markdown_supported_post_types', array( 'post' ) );
 	}
 
 	/**
@@ -174,25 +221,39 @@ class MarkdownController {
 		nocache_headers();
 	}
 
+	// ─── Cache & output ───────────────────────────────────────────────────────
+
 	/**
 	 * Recupera il Markdown dalla cache transient o lo rigenera.
+	 *
+	 * Chiave: `sma_md_{post_id}`. Il valore include un hash di post_modified_gmt
+	 * per rilevare modifiche senza chiavi orfane, e viene invalidato proattivamente
+	 * dall'hook save_post tramite invalidate_cache().
 	 */
 	private function get_markdown( \WP_Post $post ): string {
 		/** Filtro: TTL cache in secondi. 0 disabilita la cache. */
 		$ttl       = (int) apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );
-		$cache_key = 'sma_md_' . $post->ID . '_' . md5( (string) $post->post_modified_gmt );
+		$cache_key = 'sma_md_' . $post->ID;
 
 		if ( $ttl > 0 ) {
 			$cached = get_transient( $cache_key );
-			if ( is_string( $cached ) && '' !== $cached ) {
-				return $cached;
+			if ( is_array( $cached ) && isset( $cached['v'], $cached['md'] ) &&
+				$cached['v'] === md5( (string) $post->post_modified_gmt ) ) {
+				return $cached['md'];
 			}
 		}
 
 		$markdown = $this->build_markdown( $post );
 
 		if ( $ttl > 0 ) {
-			set_transient( $cache_key, $markdown, $ttl );
+			set_transient(
+				$cache_key,
+				array(
+					'v'  => md5( (string) $post->post_modified_gmt ),
+					'md' => $markdown,
+				),
+				$ttl
+			);
 		}
 
 		return $markdown;

@@ -99,7 +99,9 @@ class BlockCleaner {
 
 		if ( '' !== $class_attr ) {
 			$classes = preg_split( '/\s+/', $class_attr );
-			foreach ( self::EXCLUDED_CLASSES as $excluded ) {
+			/** Filtro: classi CSS i cui blocchi vengono esclusi dall'output Markdown. */
+			$excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+			foreach ( $excluded_classes as $excluded ) {
 				if ( in_array( $excluded, $classes, true ) ) {
 					return true;
 				}

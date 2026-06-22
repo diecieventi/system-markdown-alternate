@@ -98,7 +98,10 @@ class ContentRenderer {
 	private function remove_excluded_nodes( \DOMDocument $dom ): void {
 		$xpath = new \DOMXPath( $dom );
 
-		foreach ( self::EXCLUDED_CLASSES as $class ) {
+		/** Filtro: classi CSS i cui elementi vengono rimossi dall'output Markdown. */
+		$excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+
+		foreach ( $excluded_classes as $class ) {
 			$query = sprintf(
 				"//*[contains(concat(' ', normalize-space(@class), ' '), ' %s ')]",
 				$class
