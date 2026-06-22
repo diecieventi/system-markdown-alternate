@@ -126,14 +126,6 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
-			'sma_dynamic_tag_enabled',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
 			'sma_llms_txt_enabled',
 			array(
 				'type'              => 'string',
@@ -153,9 +145,10 @@ class AdminSettings {
 		add_settings_section( 'sma_shortcode', 'Shortcode', array( $this, 'render_shortcode_intro' ), self::PAGE );
 
 		// ── Integrazione GenerateBlocks: solo se il plugin è attivo ────────────
+		// Nessun toggle: il Dynamic Tag si auto-registra quando GB è attivo.
+		// La sezione fa solo da riepilogo d'uso.
 		if ( $this->generateblocks_active() ) {
 			add_settings_section( 'sma_generateblocks', 'GenerateBlocks Integration', array( $this, 'render_generateblocks_intro' ), self::PAGE );
-			add_settings_field( 'sma_dynamic_tag_enabled', 'Dynamic Tag', array( $this, 'field_dynamic_tag_enabled' ), self::PAGE, 'sma_generateblocks' );
 		}
 
 		// ── Integrazione ACF: solo se il plugin è attivo ───────────────────────
@@ -316,13 +309,9 @@ class AdminSettings {
 	}
 
 	public function render_generateblocks_intro(): void {
-		echo '<p>Rilevato GenerateBlocks. Puoi esporre l\'URL del <code>.md</code> come Dynamic Tag, da usare negli elementi GenerateBlocks/GeneratePress (es. campo URL di un Button).</p>';
-	}
-
-	public function field_dynamic_tag_enabled(): void {
-		$v = get_option( 'sma_dynamic_tag_enabled', '0' ); // disattivato per default
-		echo '<label><input type="checkbox" name="sma_dynamic_tag_enabled" value="1"' . checked( '1', $v, false ) . ' /> Registra il Dynamic Tag <code>{{sma_md_url}}</code></label>';
-		echo '<p class="description">Una volta attivo, usa <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress (es. URL di un Button). Se disattivato, il tag non viene registrato.</p>';
+		echo '<p>Rilevato GenerateBlocks: il Dynamic Tag <code>{{sma_md_url}}</code> è <strong>attivo automaticamente</strong>, nessuna configurazione necessaria.</p>';
+		echo '<p><strong>Uso:</strong> inserisci <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress che accettano un Dynamic Tag (es. il campo URL di un Button). Restituisce l\'URL del <code>.md</code> del post corrente.</p>';
+		echo '<p class="description">Se il post non espone un <code>.md</code> (tipo non abilitato, bozza o protetto), il tag si risolve a vuoto e l\'opzione "required to render" di GenerateBlocks nasconde l\'elemento — così non resta mai un link rotto. <em>Nota:</em> il tag viene risolto da GenerateBlocks: se disattivi GenerateBlocks o questo plugin, eventuali <code>{{sma_md_url}}</code> già inseriti restano come testo (vale per qualsiasi dynamic tag).</p>';
 	}
 
 	public function render_acf_intro(): void {

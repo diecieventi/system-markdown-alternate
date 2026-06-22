@@ -11,9 +11,11 @@ defined( 'ABSPATH' ) || exit;
  * Dynamic Tag per GenerateBlocks 2.x: espone {{sma_md_url}} negli elementi
  * GenerateBlocks/GeneratePress (es. campo URL di un Button).
  *
- * Si registra SOLO se l'opzione `sma_dynamic_tag_enabled` è attiva (pannello
- * Impostazioni) e se GenerateBlocks è presente. Se disattivata, il tag non
- * viene registrato affatto.
+ * Si auto-registra quando GenerateBlocks 2.x è presente (come l'integrazione
+ * ACF si attiva con ACF). Tenere il tag SEMPRE registrato è una scelta voluta:
+ * se il post non è servibile il callback restituisce '' e il "required to render"
+ * di GenerateBlocks nasconde l'elemento, evitando di lasciare {{sma_md_url}}
+ * letterale nell'href (cosa che accadrebbe se il tag non fosse registrato).
  *
  * API verificata sul sorgente di GenerateBlocks 2.2.1:
  * - registrazione: new GenerateBlocks_Register_Dynamic_Tag([...]) su `init`
@@ -24,13 +26,11 @@ class DynamicTags {
 	const TAG = 'sma_md_url';
 
 	/**
-	 * Aggancia la registrazione solo se la funzionalità è attiva.
+	 * Aggancia la registrazione del tag su `init`. La presenza di GenerateBlocks
+	 * viene verificata in register_tag() (la classe potrebbe non essere ancora
+	 * caricata al momento del boot).
 	 */
 	public function register(): void {
-		if ( '1' !== get_option( 'sma_dynamic_tag_enabled', '0' ) ) {
-			return; // Disattivato: non registriamo nulla.
-		}
-
 		// GenerateBlocks registra i propri tag su `init`; ci agganciamo dopo (prio 20).
 		add_action( 'init', array( $this, 'register_tag' ), 20 );
 	}

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.7.0
+Stable tag: 0.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -44,8 +44,8 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
-  * **GenerateBlocks 2.x**: a `{{sma_md_url}}` Dynamic Tag usable in element
-    fields (e.g. a Button URL).
+  * **GenerateBlocks 2.x**: a `{{sma_md_url}}` Dynamic Tag, available
+    automatically, usable in element fields (e.g. a Button URL).
 
 = Developer filters =
 
@@ -98,9 +98,11 @@ engines are told to prefer the original page.
 
 = How do I get the Markdown URL in a button or template? =
 
-Use the `[sma_md_url]` shortcode. If you run GenerateBlocks 2.x, enable the
-Dynamic Tag in the settings and use `{{sma_md_url}}` in element fields such as a
-Button URL.
+Use the `[sma_md_url]` shortcode. If you run GenerateBlocks 2.x, the
+`{{sma_md_url}}` Dynamic Tag is available automatically — use it in element
+fields such as a Button URL. When the post has no `.md`, the tag resolves to an
+empty value so GenerateBlocks can hide the element instead of leaving a broken
+link.
 
 = Is the .md content cached? =
 
@@ -108,6 +110,12 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.8.0 =
+* The GenerateBlocks `{{sma_md_url}}` Dynamic Tag now registers automatically
+  whenever GenerateBlocks 2.x is active (the on/off toggle has been removed). It
+  resolves to an empty value for non-servable posts, so leftover tags never
+  render as literal text while the plugin and GenerateBlocks are active.
 
 = 0.7.0 =
 * Admin panel reorganized into sections; ACF and GenerateBlocks integrations are
@@ -143,6 +151,10 @@ the post is edited, when the plugin is updated, or when you save the settings.
   cleaning and transient cache.
 
 == Upgrade Notice ==
+
+= 0.8.0 =
+The GenerateBlocks Dynamic Tag is now always available when GenerateBlocks is
+active; the enable/disable toggle was removed. No action required.
 
 = 0.7.0 =
 Integrations now appear only when ACF or GenerateBlocks are active. No action

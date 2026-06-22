@@ -53,7 +53,7 @@ class Plugin {
 		// Shortcode [sma_md_url] per l'URL dinamico del .md.
 		( new Shortcodes() )->register();
 
-		// Dynamic Tag GenerateBlocks {{sma_md_url}} (solo se attivato nel pannello).
+		// Dynamic Tag GenerateBlocks {{sma_md_url}} (auto-attivo se GB 2.x è presente).
 		( new DynamicTags() )->register();
 
 		// AdminSettings: registra i filtri su tutti i contesti (front-end incluso),
