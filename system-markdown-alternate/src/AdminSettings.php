@@ -343,17 +343,11 @@ class AdminSettings {
 			$alerts[] = 'Esiste un file fisico <code>llms.txt</code> nella root del sito: il web server lo serve <strong>prima</strong> di WordPress, quindi questo endpoint (e quello di altri plugin) viene ignorato.';
 		}
 
-		foreach ( $detector->active_providers() as $p ) {
-			$alerts[] = sprintf(
-				'<strong>%1$s</strong> ha la funzione llms.txt <strong>attiva</strong>: gestisce già <code>/llms.txt</code>. Tieni attivo un solo gestore (disattiva questo qui sotto, oppure quello di %1$s).',
-				esc_html( $p['name'] )
-			);
-		}
-
-		foreach ( $detector->unknown_providers() as $p ) {
+		$providers = $detector->detected_providers();
+		if ( $providers ) {
 			$notes[] = sprintf(
-				'<strong>%s</strong> è attivo e potrebbe gestire llms.txt: verifica nelle sue impostazioni.',
-				esc_html( $p['name'] )
+				'Plugin SEO attivi che <em>potrebbero</em> gestire <code>/llms.txt</code>: <strong>%s</strong>. Se uno di loro lo genera già, tieni attivo un solo gestore (disattiva questo qui sotto, oppure la funzione llms.txt nell\'altro plugin).',
+				esc_html( implode( ', ', $providers ) )
 			);
 		}
 

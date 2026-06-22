@@ -8,11 +8,14 @@ namespace SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Rileva possibili conflitti sull'endpoint /llms.txt: altri plugin SEO con la
- * funzione llms.txt attiva, un file fisico nella root, o una risposta HTTP 200.
+ * Rileva possibili conflitti sull'endpoint /llms.txt:
+ * - plugin SEO noti ATTIVI che potrebbero generare /llms.txt (rilevamento per
+ *   presenza, stabile nel tempo: non leggiamo le opzioni interne di terzi, che
+ *   cambierebbero senza preavviso e ci costringerebbero a manutenzione continua);
+ * - un file fisico llms.txt nella root;
+ * - on-demand, una risposta HTTP all'URL (best effort).
  *
- * Pensato per essere usato nel pannello admin (informativo): le rilevazioni via
- * opzione sono economiche; il controllo HTTP loopback è on-demand e cachato.
+ * Pensato per il pannello admin (informativo): avvisa, poi decide l'utente.
  */
 class ConflictDetector {
 
@@ -20,30 +23,27 @@ class ConflictDetector {
 	const AUDIT_CACHE_KEY = 'sma_llms_audit';
 
 	/**
-	 * Stato per provider noto.
+	 * Plugin SEO noti che POSSONO gestire /llms.txt, con il rispettivo check di
+	 * "attivo" (costante/classe definita quando il plugin è caricato).
 	 *
-	 * enabled: true = funzione llms.txt attiva; false = presente ma spenta;
-	 *          null = non determinabile (verificare manualmente).
-	 *
-	 * @return array<string,array{name:string,detected:bool,enabled:?bool,confidence:string}>
+	 * @return array<string,bool>
 	 */
-	public function providers(): array {
+	private function known_providers(): array {
 		return array(
-			'rank_math' => $this->rank_math(),
-			'yoast'     => $this->yoast(),
-			'aioseo'    => $this->aioseo(),
-			'seopress'  => $this->seopress(),
+			'Rank Math'      => defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ),
+			'Yoast SEO'      => defined( 'WPSEO_VERSION' ),
+			'All in One SEO' => defined( 'AIOSEO_VERSION' ),
+			'SEOPress'       => defined( 'SEOPRESS_VERSION' ) || defined( 'SEOPRESS_PRO_VERSION' ),
 		);
 	}
 
-	/** Provider con funzione llms.txt sicuramente attiva. */
-	public function active_providers(): array {
-		return array_filter( $this->providers(), static fn( $p ) => true === $p['enabled'] );
-	}
-
-	/** Provider rilevati ma con stato llms.txt ignoto (da verificare a mano). */
-	public function unknown_providers(): array {
-		return array_filter( $this->providers(), static fn( $p ) => $p['detected'] && null === $p['enabled'] );
+	/**
+	 * Nomi dei plugin SEO attivi che potrebbero gestire /llms.txt.
+	 *
+	 * @return string[]
+	 */
+	public function detected_providers(): array {
+		return array_keys( array_filter( $this->known_providers() ) );
 	}
 
 	/**
@@ -71,67 +71,6 @@ class ConflictDetector {
 		Cache::set( self::AUDIT_CACHE_KEY, $result, 6 * HOUR_IN_SECONDS );
 
 		return $result;
-	}
-
-	// ─── Provider ───────────────────────────────────────────────────────────
-
-	private function rank_math(): array {
-		$detected = defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' );
-		// Modulo attivo: Rank Math salva gli slug attivi in 'rank_math_modules'.
-		$enabled = $detected
-			? in_array( 'llms-txt', (array) get_option( 'rank_math_modules', array() ), true )
-			: null;
-
-		return array(
-			'name'       => 'Rank Math',
-			'detected'   => $detected,
-			'enabled'    => $enabled,
-			'confidence' => 'high',
-		);
-	}
-
-	private function yoast(): array {
-		$detected = defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Options' );
-		$enabled  = null;
-
-		if ( $detected && class_exists( 'WPSEO_Options' ) ) {
-			foreach ( array( 'enable_llms_txt', 'llms_txt' ) as $key ) {
-				$value = \WPSEO_Options::get( $key, null );
-				if ( null !== $value ) {
-					$enabled = (bool) $value;
-					break;
-				}
-			}
-		}
-
-		return array(
-			'name'       => 'Yoast SEO',
-			'detected'   => $detected,
-			'enabled'    => $enabled,
-			'confidence' => 'medium',
-		);
-	}
-
-	private function aioseo(): array {
-		$detected = defined( 'AIOSEO_VERSION' );
-
-		return array(
-			'name'       => 'All in One SEO',
-			'detected'   => $detected,
-			'enabled'    => null, // Nome opzione non verificato: stato ignoto.
-			'confidence' => 'low',
-		);
-	}
-
-	private function seopress(): array {
-		$detected = defined( 'SEOPRESS_VERSION' ) || defined( 'SEOPRESS_PRO_VERSION' );
-
-		return array(
-			'name'       => 'SEOPress',
-			'detected'   => $detected,
-			'enabled'    => null, // Spesso virtuale via rewrite: affidarsi al check URL.
-			'confidence' => 'low',
-		);
 	}
 
 	// ─── Loopback ─────────────────────────────────────────────────────────────
