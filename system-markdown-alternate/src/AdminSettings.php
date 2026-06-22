@@ -21,7 +21,32 @@ class AdminSettings {
 	public function boot(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
+
+		// Invalida la cache Markdown quando un'opzione del plugin cambia.
+		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
+		add_action( 'updated_option', array( $this, 'maybe_bump_cache_salt' ) );
+
 		$this->hook_filters();
+	}
+
+	/**
+	 * Bumpa il salt di cache quando viene salvata un'opzione del plugin, così
+	 * tutto il Markdown in cache viene rigenerato al prossimo accesso.
+	 *
+	 * @param string $option Nome dell'opzione appena salvata.
+	 */
+	public function maybe_bump_cache_salt( $option ): void {
+		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sma_' ) || 'sma_cache_salt' === $option ) {
+			return;
+		}
+
+		static $bumped = false;
+		if ( $bumped ) {
+			return; // Un solo bump per richiesta, anche se cambiano più opzioni.
+		}
+		$bumped = true;
+
+		update_option( 'sma_cache_salt', (string) time() );
 	}
 
 	public function add_menu(): void {

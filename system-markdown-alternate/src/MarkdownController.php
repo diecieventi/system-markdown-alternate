@@ -226,19 +226,24 @@ class MarkdownController {
 	/**
 	 * Recupera il Markdown dalla cache transient o lo rigenera.
 	 *
-	 * Chiave: `sma_md_{post_id}`. Il valore include un hash di post_modified_gmt
-	 * per rilevare modifiche senza chiavi orfane, e viene invalidato proattivamente
-	 * dall'hook save_post tramite invalidate_cache().
+	 * Chiave: `sma_md_{post_id}`. Il valore include un hash di versione
+	 * (post_modified_gmt + versione plugin + salt impostazioni) per rilevare
+	 * modifiche senza chiavi orfane. Viene invalidato proattivamente:
+	 * - all'edit del post (post_modified_gmt cambia)
+	 * - all'aggiornamento del plugin (SMA_VERSION cambia)
+	 * - al salvataggio delle impostazioni (salt cambia, vedi AdminSettings)
+	 * - dall'hook save_post tramite invalidate_cache().
 	 */
 	private function get_markdown( \WP_Post $post ): string {
 		/** Filtro: TTL cache in secondi. 0 disabilita la cache. */
 		$ttl       = (int) apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );
 		$cache_key = 'sma_md_' . $post->ID;
+		$version   = $this->cache_version( $post );
 
 		if ( $ttl > 0 ) {
 			$cached = get_transient( $cache_key );
 			if ( is_array( $cached ) && isset( $cached['v'], $cached['md'] ) &&
-				$cached['v'] === md5( (string) $post->post_modified_gmt ) ) {
+				$cached['v'] === $version ) {
 				return $cached['md'];
 			}
 		}
@@ -249,7 +254,7 @@ class MarkdownController {
 			set_transient(
 				$cache_key,
 				array(
-					'v'  => md5( (string) $post->post_modified_gmt ),
+					'v'  => $version,
 					'md' => $markdown,
 				),
 				$ttl
@@ -257,6 +262,16 @@ class MarkdownController {
 		}
 
 		return $markdown;
+	}
+
+	/**
+	 * Hash di validità della cache: cambia all'edit del post, all'aggiornamento
+	 * del plugin o al salvataggio delle impostazioni (salt globale).
+	 */
+	private function cache_version( \WP_Post $post ): string {
+		$salt = (string) get_option( 'sma_cache_salt', '0' );
+
+		return md5( (string) $post->post_modified_gmt . '|' . SMA_VERSION . '|' . $salt );
 	}
 
 	/**
