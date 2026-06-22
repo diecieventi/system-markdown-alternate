@@ -48,9 +48,9 @@ class Plugin {
 		$acf = new AcfIntegration();
 		add_filter( 'sma_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
 
-		// Pannello admin.
-		if ( is_admin() ) {
-			( new AdminSettings() )->boot();
-		}
+		// AdminSettings: registra i filtri su tutti i contesti (front-end incluso),
+		// il pannello admin viene agganciato da admin_menu/admin_init che sparano
+		// solo nell'admin da soli — nessun gate is_admin() necessario.
+		( new AdminSettings() )->boot();
 	}
 }
