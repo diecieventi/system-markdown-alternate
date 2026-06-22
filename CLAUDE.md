@@ -189,6 +189,7 @@ Verificare sempre: `Content-Type: text/markdown; charset=utf-8` e
 
 ## Git
 
-- Sviluppo sul branch **`claude/intelligent-bell-aew3mi`**.
-- Commit chiari e atomici; push con `git push -u origin claude/intelligent-bell-aew3mi`.
-- Non aprire PR salvo richiesta esplicita.
+- **Si lavora SEMPRE e SOLO su `main`** (l'utente è l'unico sviluppatore; niente feature branch, niente PR salvo richiesta esplicita).
+- Commit chiari e atomici; push con `git push -u origin main`.
+- L'utente sincronizza il proprio Mac **manualmente** (`git fetch origin` / pull da GitHub Desktop): nessun automatismo lato locale.
+
