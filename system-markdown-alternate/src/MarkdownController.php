@@ -295,5 +295,15 @@ class MarkdownController {
 		if ( is_string( $robots ) && '' !== $robots ) {
 			header( 'X-Robots-Tag: ' . $robots );
 		}
+
+		/**
+		 * Filtro: URL canonico verso l'originale HTML (header Link rel="canonical").
+		 * Stringa vuota = header non inviato.
+		 */
+		$canonical = apply_filters( 'sma_markdown_canonical_url', get_permalink( $post ), $post );
+
+		if ( is_string( $canonical ) && '' !== $canonical ) {
+			header( 'Link: <' . $canonical . '>; rel="canonical"', false );
+		}
 	}
 }

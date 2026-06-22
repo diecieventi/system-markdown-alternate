@@ -94,13 +94,18 @@ ACF avanzato, indicizzazione dei `.md`.
 ## Filtri (contratto pubblico)
 
 ```php
-apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post ); // '' = non inviare header
+apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post );   // '' = non inviare header
+apply_filters( 'sma_markdown_canonical_url', get_permalink( $post ), $post ); // '' = non inviare Link rel=canonical
 apply_filters( 'sma_markdown_source_content', $post->post_content, $post );
 apply_filters( 'sma_markdown_rendered_html', $html, $post );
 apply_filters( 'sma_markdown_output', $markdown, $post );
 apply_filters( 'sma_markdown_excluded_block_names', $block_names );
 apply_filters( 'sma_markdown_excluded_shortcodes', $shortcodes );
-apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post ); // 0 = cache disabilitata
+apply_filters( 'sma_markdown_excluded_classes', $css_classes );
+apply_filters( 'sma_markdown_supported_post_types', array() );            // [] = plugin inattivo finché non si seleziona un tipo
+apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );         // 0 = cache disabilitata
+apply_filters( 'sma_acf_field_keys', array(), $post );                    // chiavi campi ACF da accodare al sorgente
+apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max post per tipo in /llms.txt
 ```
 
 Default esclusioni:
