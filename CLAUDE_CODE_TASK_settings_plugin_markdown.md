@@ -6,6 +6,24 @@ Obiettivo: migliorare UI e struttura della pagina impostazioni, senza cambiare i
 
 Non implementare traduzioni/i18n ora. I testi possono restare in italiano semplice. Le traduzioni verranno fatte dopo.
 
+---
+
+## ⚠️ Aggiornamento — decisioni applicate (v0.12.0)
+
+Questa spec è stata adattata alla reale architettura del plugin. Differenze rispetto al testo originale qui sotto:
+
+1. **Niente tab multi-form.** Su decisione utente la pagina resta **una sola pagina, un solo form**, con la **Settings API nativa**, migliorando solo la UX (sezioni raggruppate come "card", CSS scoped, copy più chiaro). Le 5 aree (Generale, Output Markdown, llms.txt, Integrazioni, Avanzate) sono **sezioni** nella stessa pagina, non tab separati.
+
+2. **Storage per-opzione, non array unico.** Il plugin salva una option per impostazione (`sma_cache_ttl`, `sma_supported_post_types`, `sma_excluded_*`, `sma_robots_header`, `sma_llms_txt_enabled`, `sma_acf_*`). Quindi **niente hidden field + merge manuale**: con un unico form + `settings_fields()` la Settings API scrive tutte le opzioni del gruppo, nessun rischio di perdere altre sezioni. Le opzioni ACF sono registrate **solo se ACF è attivo**, così salvando con ACF spento non vengono azzerate.
+
+3. **Supported post types: non solo `post`/`page`.** Il plugin supporta i CPT (feature reale). Si mostrano e si validano **tutti i tipi pubblici** (Media escluso), non solo post e page.
+
+4. **ACF/GenerateBlocks: rilevamento per presenza.** Le sezioni/integrazioni si mostrano in base alla presenza del plugin (ACF mostra un avviso se assente). Il rilevamento conflitti `/llms.txt` è già implementato in forma **leggera** (presenza plugin SEO + file fisico + check HTTP on-demand), senza leggere gli interni di terzi.
+
+Il resto della spec resta valido come riferimento di intenti.
+
+---
+
 ## Regole fondamentali
 
 - Non rompere le opzioni già salvate.

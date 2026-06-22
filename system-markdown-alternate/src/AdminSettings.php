@@ -10,17 +10,31 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Pannello di configurazione in wp-admin (Impostazioni → Markdown Alternate).
  *
- * Le opzioni salvate sovrascrivono i default definiti nel codice tramite i filtri
- * `sma_markdown_*`. Se un campo viene lasciato vuoto, il codice mantiene il default.
+ * Pagina unica, Settings API nativa, una option per impostazione. Le sezioni
+ * sono raggruppate per ambito (Generale, Output Markdown, llms.txt, Integrazioni,
+ * Avanzate) ma restano un solo form: salvando si scrivono tutte le opzioni del
+ * gruppo, quindi nessun rischio di perdere impostazioni di altre sezioni.
+ *
+ * Le opzioni salvate sovrascrivono i default del codice tramite i filtri
+ * `sma_markdown_*`. Campo vuoto = si usa il default.
  */
 class AdminSettings {
 
 	const PAGE         = 'sma-settings';
 	const OPTION_GROUP = 'sma_options';
 
+	/** Default di esclusione (solo a scopo visivo nel pannello). */
+	const DEFAULT_SHORTCODES   = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
+	const DEFAULT_BLOCK_NAMES  = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
+	const DEFAULT_CSS_CLASSES  = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
+
+	/** @var string Hook della pagina settings (per caricare gli asset solo lì). */
+	private $hook = '';
+
 	public function boot(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
 		// Invalida la cache Markdown quando un'opzione del plugin cambia.
 		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
@@ -50,7 +64,7 @@ class AdminSettings {
 	}
 
 	public function add_menu(): void {
-		add_options_page(
+		$this->hook = (string) add_options_page(
 			'Markdown Alternate',
 			'Markdown Alternate',
 			'manage_options',
@@ -59,110 +73,69 @@ class AdminSettings {
 		);
 	}
 
+	/**
+	 * Carica il CSS del pannello solo nella nostra pagina settings.
+	 *
+	 * @param string $hook Hook suffix della pagina admin corrente.
+	 */
+	public function enqueue_assets( $hook ): void {
+		if ( $hook !== $this->hook ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'sma-admin-settings',
+			SMA_PLUGIN_URL . 'assets/admin-settings.css',
+			array(),
+			SMA_VERSION
+		);
+	}
+
 	public function register_settings(): void {
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_cache_ttl',
-			array(
-				'type'              => 'integer',
-				'sanitize_callback' => 'absint',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_excluded_shortcodes',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_textarea_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_excluded_block_names',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_textarea_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_excluded_classes',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_textarea_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_supported_post_types',
-			array(
-				'type'              => 'array',
-				'sanitize_callback' => array( $this, 'sanitize_post_types' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_robots_header',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_acf_subtitle_key',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_acf_tldr_key',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sma_llms_txt_enabled',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
-			)
-		);
+		// ── Opzioni sempre registrate ──────────────────────────────────────────
+		register_setting( self::OPTION_GROUP, 'sma_cache_ttl', array( 'type' => 'integer', 'sanitize_callback' => 'absint' ) );
+		register_setting( self::OPTION_GROUP, 'sma_excluded_shortcodes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_excluded_block_names', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 
-		// ── Sezioni sempre presenti ───────────────────────────────────────────
-		add_settings_section( 'sma_cache', 'Cache', '__return_false', self::PAGE );
-		add_settings_field( 'sma_cache_ttl', 'Cache TTL (seconds)', array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_cache' );
-
-		add_settings_section( 'sma_exclusions', 'Exclusions', array( $this, 'render_exclusions_intro' ), self::PAGE );
-		add_settings_field( 'sma_excluded_shortcodes', 'Excluded shortcodes', array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_exclusions' );
-		add_settings_field( 'sma_excluded_block_names', 'Excluded block names', array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_exclusions' );
-		add_settings_field( 'sma_excluded_classes', 'Excluded CSS classes', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_exclusions' );
-
-		add_settings_section( 'sma_shortcode', 'Shortcode', array( $this, 'render_shortcode_intro' ), self::PAGE );
-
-		// ── Integrazione GenerateBlocks: solo se il plugin è attivo ────────────
-		// Nessun toggle: il Dynamic Tag si auto-registra quando GB è attivo.
-		// La sezione fa solo da riepilogo d'uso.
-		if ( $this->generateblocks_active() ) {
-			add_settings_section( 'sma_generateblocks', 'GenerateBlocks Integration', array( $this, 'render_generateblocks_intro' ), self::PAGE );
-		}
-
-		// ── Integrazione ACF: solo se il plugin è attivo ───────────────────────
+		// Opzioni ACF: registrate SOLO se ACF è attivo. Così, quando ACF è spento e
+		// i suoi campi non sono nel form, il salvataggio NON le azzera (options.php
+		// scrive solo le opzioni registrate nel gruppo).
 		if ( $this->acf_active() ) {
-			add_settings_section( 'sma_acf', 'ACF Integration', array( $this, 'render_acf_intro' ), self::PAGE );
-			add_settings_field( 'sma_acf_subtitle_key', 'Subtitle field', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_acf' );
-			add_settings_field( 'sma_acf_tldr_key', 'TL;DR field', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_acf' );
+			register_setting( self::OPTION_GROUP, 'sma_acf_subtitle_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+			register_setting( self::OPTION_GROUP, 'sma_acf_tldr_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 		}
 
-		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
-		add_settings_field( 'sma_llms_txt_enabled', 'Attiva /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
+		// ── Generale ───────────────────────────────────────────────────────────
+		add_settings_section( 'sma_general', 'Generale', array( $this, 'render_general_intro' ), self::PAGE );
+		add_settings_field( 'sma_supported_post_types', 'Tipi di contenuto abilitati', array( $this, 'field_post_types' ), self::PAGE, 'sma_general' );
+		add_settings_field( 'sma_cache_ttl', 'Cache TTL (secondi)', array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_general' );
 
-		add_settings_section( 'sma_advanced', 'Advanced', '__return_false', self::PAGE );
-		add_settings_field( 'sma_supported_post_types', 'Supported post types', array( $this, 'field_post_types' ), self::PAGE, 'sma_advanced' );
+		// ── Output Markdown ──────────────────────────────────────────────────────
+		add_settings_section( 'sma_markdown', 'Output Markdown', array( $this, 'render_markdown_intro' ), self::PAGE );
+		add_settings_field( 'sma_excluded_shortcodes', 'Shortcode esclusi', array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_markdown' );
+		add_settings_field( 'sma_excluded_block_names', 'Blocchi esclusi', array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_markdown' );
+		add_settings_field( 'sma_excluded_classes', 'Classi CSS escluse', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_markdown' );
+
+		if ( $this->acf_active() ) {
+			add_settings_field( 'sma_acf_subtitle_key', 'Campo ACF sottotitolo', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sma_acf_tldr_key', 'Campo ACF TL;DR', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_markdown' );
+		} else {
+			add_settings_field( 'sma_acf_notice', 'Campi ACF', array( $this, 'field_acf_notice' ), self::PAGE, 'sma_markdown' );
+		}
+
+		// ── llms.txt ─────────────────────────────────────────────────────────────
+		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
+		add_settings_field( 'sma_llms_txt_enabled', 'Abilita /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
+
+		// ── Integrazioni (solo informativa) ──────────────────────────────────────
+		add_settings_section( 'sma_integrations', 'Integrazioni', array( $this, 'render_integrations_intro' ), self::PAGE );
+
+		// ── Avanzate ─────────────────────────────────────────────────────────────
+		add_settings_section( 'sma_advanced', 'Avanzate', array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
 	}
 
@@ -180,7 +153,11 @@ class AdminSettings {
 		return class_exists( 'GenerateBlocks_Register_Dynamic_Tag' );
 	}
 
+	// ─── Sanitizzazione ─────────────────────────────────────────────────────────
+
 	/**
+	 * Whitelist dei post type: tiene solo i tipi pubblici registrati (Media escluso).
+	 *
 	 * @param mixed $value
 	 * @return string[]
 	 */
@@ -188,7 +165,39 @@ class AdminSettings {
 		if ( ! is_array( $value ) ) {
 			return array();
 		}
-		return array_values( array_filter( array_map( 'sanitize_key', $value ) ) );
+
+		$allowed = get_post_types( array( 'public' => true ), 'names' );
+		unset( $allowed['attachment'] );
+
+		$clean = array();
+		foreach ( $value as $item ) {
+			$item = sanitize_key( $item );
+			if ( '' !== $item && isset( $allowed[ $item ] ) ) {
+				$clean[] = $item;
+			}
+		}
+
+		return array_values( array_unique( $clean ) );
+	}
+
+	/**
+	 * Normalizza una textarea "una voce per riga": trim, niente righe vuote,
+	 * sanitize_text_field, niente duplicati. Mantiene il formato stringa multilinea.
+	 *
+	 * @param mixed $value
+	 */
+	public function sanitize_lines( $value ): string {
+		$lines = preg_split( '/\r\n|\r|\n/', (string) $value );
+		$out   = array();
+
+		foreach ( (array) $lines as $line ) {
+			$line = sanitize_text_field( trim( $line ) );
+			if ( '' !== $line && ! in_array( $line, $out, true ) ) {
+				$out[] = $line;
+			}
+		}
+
+		return implode( "\n", $out );
 	}
 
 	/**
@@ -299,37 +308,65 @@ class AdminSettings {
 		return ! empty( $items ) ? $items : $defaults;
 	}
 
-	// ─── Rendering ────────────────────────────────────────────────────────────
+	// ─── Intro sezioni ──────────────────────────────────────────────────────────
 
-	public function render_shortcode_intro(): void {
-		echo '<p>Shortcode per inserire dati del Markdown nei contenuti, bottoni e template. Sempre disponibili.</p>';
-		echo '<table class="widefat striped" style="max-width:780px"><thead><tr><th>Shortcode</th><th>Descrizione</th></tr></thead><tbody>';
-		echo '<tr><td><code>[sma_md_url]</code></td><td>URL del <code>.md</code> del post corrente. Per un post specifico: <code>[sma_md_url id="123"]</code>. Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto da password).</td></tr>';
-		echo '</tbody></table>';
+	public function render_general_intro(): void {
+		echo '<p class="sma-help">Impostazioni principali. Senza almeno un tipo di contenuto selezionato, il plugin resta inattivo.</p>';
 	}
 
-	public function render_generateblocks_intro(): void {
-		echo '<p>Rilevato GenerateBlocks: il Dynamic Tag <code>{{sma_md_url}}</code> è <strong>attivo automaticamente</strong>, nessuna configurazione necessaria.</p>';
-		echo '<p><strong>Uso:</strong> inserisci <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress che accettano un Dynamic Tag (es. il campo URL di un Button). Restituisce l\'URL del <code>.md</code> del post corrente.</p>';
-		echo '<p class="description">Se il post non espone un <code>.md</code> (tipo non abilitato, bozza o protetto), il tag si risolve a vuoto e l\'opzione "required to render" di GenerateBlocks nasconde l\'elemento — così non resta mai un link rotto. <em>Nota:</em> il tag viene risolto da GenerateBlocks: se disattivi GenerateBlocks o questo plugin, eventuali <code>{{sma_md_url}}</code> già inseriti restano come testo (vale per qualsiasi dynamic tag).</p>';
+	public function render_markdown_intro(): void {
+		echo '<p class="sma-help">Decide cosa entra o resta fuori dal file <code>.md</code>. Per le esclusioni: una voce per riga, lascia vuoto per usare i default interni.</p>';
 	}
 
-	public function render_acf_intro(): void {
-		echo '<p>Rilevato ACF. Campi inclusi nel Markdown come preambolo (tra titolo H1 e corpo). Lascia vuoto per disabilitare.</p>';
-	}
-
-	public function render_exclusions_intro(): void {
-		echo '<p>One per line. Leave empty to use the built-in defaults.</p>';
+	public function render_advanced_intro(): void {
+		echo '<p class="sma-help">Impostazioni per utenti esperti.</p>';
 	}
 
 	public function render_llmstxt_intro(): void {
-		echo '<p>Il file <code>/llms.txt</code> elenca i contenuti del sito in formato leggibile da LLM e agenti AI.</p>';
+		echo '<p class="sma-help">Il file <code>/llms.txt</code> espone risorse selezionate del sito in un formato leggibile da LLM e agenti AI. Attualmente elenca i contenuti Markdown abilitati.</p>';
+
+		$enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
+		$url     = home_url( '/llms.txt' );
+		echo '<div class="sma-status">';
+		echo 'Abilitato nelle impostazioni: <strong>' . ( $enabled ? 'sì' : 'no' ) . '</strong><br>';
+		echo 'URL: <a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a>';
+		echo '</div>';
+
 		$this->render_conflict_warning();
 	}
 
+	public function render_integrations_intro(): void {
+		echo '<p class="sma-help">Sezione informativa: come usare l\'URL del <code>.md</code> nei contenuti e nei template.</p>';
+
+		echo '<div class="sma-integration-card">';
+		echo '<h3>Shortcode</h3>';
+		echo '<p><code>[sma_md_url]</code> — URL del <code>.md</code> del post corrente.<br>';
+		echo '<code>[sma_md_url id="123"]</code> — URL del <code>.md</code> di un post specifico.</p>';
+		echo '<p class="description">Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto da password).</p>';
+		echo '</div>';
+
+		echo '<div class="sma-integration-card">';
+		echo '<h3>GenerateBlocks</h3>';
+		if ( $this->generateblocks_active() ) {
+			echo '<p>GenerateBlocks rilevato. Il dynamic tag è disponibile automaticamente.</p>';
+			echo '<p><code>{{sma_md_url}}</code></p>';
+			echo '<p class="description">Inserisci <code>{{sma_md_url}}</code> nei campi GenerateBlocks/GeneratePress che accettano un dynamic tag, ad esempio l\'URL di un bottone. Se il post non ha un <code>.md</code>, il tag si risolve a vuoto e l\'elemento viene nascosto (required to render).</p>';
+		} else {
+			echo '<p>GenerateBlocks non rilevato. Il dynamic tag non è disponibile.</p>';
+		}
+		echo '</div>';
+
+		echo '<div class="sma-integration-card">';
+		echo '<h3>ACF</h3>';
+		echo $this->acf_active()
+			? '<p>ACF rilevato. I campi Sottotitolo e TL;DR si configurano nella sezione <strong>Output Markdown</strong>.</p>'
+			: '<p>ACF non rilevato. I campi Sottotitolo e TL;DR non sono disponibili.</p>';
+		echo '</div>';
+	}
+
 	/**
-	 * Avviso automatico se un altro gestore di /llms.txt è attivo (altri plugin SEO,
-	 * file fisico) o se l'endpoint risponde quando non dovrebbe.
+	 * Avviso se un altro gestore di /llms.txt è attivo (plugin SEO, file fisico)
+	 * o se l'endpoint risponde quando non dovrebbe.
 	 */
 	private function render_conflict_warning(): void {
 		$detector     = new ConflictDetector();
@@ -355,7 +392,7 @@ class AdminSettings {
 		if ( null === $endpoint ) {
 			$notes[] = 'Controllo HTTP di <code>/llms.txt</code> non ancora eseguito.';
 		} elseif ( ! empty( $endpoint['reachable'] ) ) {
-			$ct        = (string) ( $endpoint['content_type'] ?? '' );
+			$ct         = (string) ( $endpoint['content_type'] ?? '' );
 			$is_textual = ( false !== stripos( $ct, 'text/plain' ) || false !== stripos( $ct, 'markdown' ) );
 			$ct_txt     = '' !== $ct ? ', content-type ' . esc_html( $ct ) : '';
 
@@ -387,49 +424,7 @@ class AdminSettings {
 		echo '<p><a href="' . $recheck . '" class="button button-secondary">Controlla /llms.txt ora</a></p>';
 	}
 
-	public function field_acf_subtitle_key(): void {
-		$v = (string) get_option( 'sma_acf_subtitle_key', '' );
-		echo '<input type="text" name="sma_acf_subtitle_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Nome del campo ACF per il sottotitolo (tipo: testo). Viene inserito in corsivo subito dopo il titolo H1.</p>';
-	}
-
-	public function field_acf_tldr_key(): void {
-		$v = (string) get_option( 'sma_acf_tldr_key', '' );
-		echo '<input type="text" name="sma_acf_tldr_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Nome del campo ACF per il TL;DR (tipo: editor WYSIWYG). Viene inserito come sezione <code>**TL;DR**</code> con separatori <code>---</code>.</p>';
-	}
-
-	public function field_llms_txt_enabled(): void {
-		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
-		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> Abilita l\'endpoint <code>/llms.txt</code></label>';
-		echo '<p class="description">Disattiva se un altro plugin gestisce già <code>/llms.txt</code>.</p>';
-		echo '<p class="description" style="margin-top:8px;color:#888"><strong>Sviluppi futuri:</strong> integrazione con Rank Math / Yoast SEO per meta e descrizioni; possibilità di configurare il file con contenuti non limitati ai soli .md (da verificare con la specifica Cloudflare e i LLM Signals).</p>';
-	}
-
-	public function field_cache_ttl(): void {
-		$v = get_option( 'sma_cache_ttl' );
-		$v = false !== $v ? (int) $v : DAY_IN_SECONDS;
-		echo '<input type="number" min="0" step="1" name="sma_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" />';
-		echo '<p class="description">0 = cache disabled. Default: 86400 (24 h).</p>';
-	}
-
-	public function field_excluded_shortcodes(): void {
-		$v = (string) get_option( 'sma_excluded_shortcodes', '' );
-		echo '<textarea name="sma_excluded_shortcodes" rows="5" class="large-text code">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description">Default: contact-form-7, gravityform, wpforms, mailerlite_form, lwptoc</p>';
-	}
-
-	public function field_excluded_block_names(): void {
-		$v = (string) get_option( 'sma_excluded_block_names', '' );
-		echo '<textarea name="sma_excluded_block_names" rows="5" class="large-text code">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description">Default: gravityforms/form, contact-form-7/contact-form-selector, wpforms/form-selector, mailerlite/form, luckywp/toc</p>';
-	}
-
-	public function field_excluded_classes(): void {
-		$v = (string) get_option( 'sma_excluded_classes', '' );
-		echo '<textarea name="sma_excluded_classes" rows="3" class="large-text code">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description">Default: no-md, md-exclude, exclude-from-markdown</p>';
-	}
+	// ─── Campi ──────────────────────────────────────────────────────────────────
 
 	public function field_post_types(): void {
 		$raw   = get_option( 'sma_supported_post_types' ); // false = mai salvato
@@ -448,14 +443,67 @@ class AdminSettings {
 				esc_html( $pt->name )
 			);
 		}
-		echo '<p class="description">Seleziona i tipi da esporre come .md e in llms.txt. Nessuna selezione = plugin inattivo. <em>Nota: in futuro si potrà filtrare i CPT mostrando solo quelli realmente pubblici (esclusi quelli ad uso interno).</em></p>';
+		echo '<p class="description">Tipi di contenuto esposti come <code>.md</code> e in <code>/llms.txt</code>. Nessuna selezione = plugin inattivo.</p>';
+	}
+
+	public function field_cache_ttl(): void {
+		$v = get_option( 'sma_cache_ttl' );
+		$v = false !== $v ? (int) $v : DAY_IN_SECONDS;
+		echo '<input type="number" min="0" step="1" name="sma_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" /> secondi';
+		echo '<p class="description">0 = cache disabilitata. Default: 86400 (24 ore).</p>';
+	}
+
+	public function field_excluded_shortcodes(): void {
+		$this->render_exclusion_field( 'sma_excluded_shortcodes', self::DEFAULT_SHORTCODES );
+	}
+
+	public function field_excluded_block_names(): void {
+		$this->render_exclusion_field( 'sma_excluded_block_names', self::DEFAULT_BLOCK_NAMES );
+	}
+
+	public function field_excluded_classes(): void {
+		$this->render_exclusion_field( 'sma_excluded_classes', self::DEFAULT_CSS_CLASSES );
+	}
+
+	/**
+	 * Textarea compatta "una per riga" + lista dei default.
+	 *
+	 * @param string[] $defaults
+	 */
+	private function render_exclusion_field( string $option, array $defaults ): void {
+		$v = (string) get_option( $option, '' );
+		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sma-help">Uno per riga. Lascia vuoto per usare i default interni.</p>';
+		echo '<pre class="sma-defaults">' . esc_html( "Default:\n" . implode( "\n", $defaults ) ) . '</pre>';
+	}
+
+	public function field_acf_subtitle_key(): void {
+		$v = (string) get_option( 'sma_acf_subtitle_key', '' );
+		echo '<input type="text" name="sma_acf_subtitle_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
+		echo '<p class="description">Nome del campo ACF per il sottotitolo (tipo: testo). Inserito in corsivo subito dopo il titolo H1.</p>';
+	}
+
+	public function field_acf_tldr_key(): void {
+		$v = (string) get_option( 'sma_acf_tldr_key', '' );
+		echo '<input type="text" name="sma_acf_tldr_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
+		echo '<p class="description">Nome del campo ACF per il TL;DR (tipo: editor WYSIWYG). Inserito come sezione <code>**TL;DR**</code> con separatori <code>---</code>.</p>';
+	}
+
+	public function field_acf_notice(): void {
+		echo '<p class="description">ACF non rilevato: i campi Sottotitolo e TL;DR appariranno qui quando ACF sarà attivo. Le eventuali impostazioni già salvate restano conservate.</p>';
+	}
+
+	public function field_llms_txt_enabled(): void {
+		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
+		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> Abilita l\'endpoint <code>/llms.txt</code></label>';
+		echo '<p class="description">Disattiva se un altro plugin gestisce già <code>/llms.txt</code>.</p>';
 	}
 
 	public function field_robots_header(): void {
 		$v = get_option( 'sma_robots_header' );
 		$v = false !== $v ? (string) $v : 'noindex, follow';
 		echo '<input type="text" name="sma_robots_header" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Default: "noindex, follow". Empty = header not sent.</p>';
+		echo '<p class="description">Default: <code>noindex, follow</code>. Lascia vuoto per non inviare l\'header.</p>';
 	}
 
 	public function render_page(): void {
@@ -463,7 +511,7 @@ class AdminSettings {
 			return;
 		}
 		?>
-		<div class="wrap">
+		<div class="wrap sma-settings-page">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
 			<form method="post" action="options.php">
 				<?php

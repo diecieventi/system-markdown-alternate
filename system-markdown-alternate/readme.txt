@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.11.0
+Stable tag: 0.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,16 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.12.0 =
+* Settings page UX overhaul (single page, native Settings API): sections grouped
+  into Generale, Output Markdown, llms.txt, Integrazioni, Avanzate; supported
+  post types moved to the top; compact exclusion textareas with defaults shown
+  one per line; llms.txt status (enabled + URL); page-scoped admin CSS.
+* Exclusion lists are normalized on save (trim, drop empty lines, de-duplicate).
+* Supported post types are validated against the registered public types.
+* ACF settings are registered only when ACF is active, so saving while ACF is
+  inactive no longer wipes the saved field names.
 
 = 0.11.0 =
 * Simpler, low-maintenance `/llms.txt` conflict detection: it now only checks

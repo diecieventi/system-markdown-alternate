@@ -1,0 +1,67 @@
+/* System Markdown Alternate — stile pagina settings (caricato solo lì). */
+
+.sma-settings-page h2 {
+	margin-top: 28px;
+	padding: 6px 0 6px 12px;
+	border-left: 4px solid #2271b1;
+	font-size: 15px;
+}
+
+.sma-settings-page .sma-help {
+	max-width: 760px;
+}
+
+/* Textarea esclusioni: compatte, non enormi. */
+.sma-settings-page textarea.sma-textarea {
+	width: 100%;
+	max-width: 480px;
+	min-height: 90px;
+	font-size: 12px;
+}
+
+/* Lista dei default sotto ogni textarea. */
+.sma-settings-page .sma-defaults {
+	margin: 6px 0 0;
+	padding: 6px 10px;
+	max-width: 480px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: #50575e;
+	white-space: pre-wrap;
+}
+
+/* Box di stato (es. llms.txt abilitato + URL). */
+.sma-settings-page .sma-status {
+	display: inline-block;
+	margin: 8px 0;
+	padding: 8px 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	line-height: 1.7;
+}
+
+/* Card informative nella sezione Integrazioni. */
+.sma-settings-page .sma-integration-card {
+	max-width: 760px;
+	margin: 10px 0;
+	padding: 12px 16px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.sma-settings-page .sma-integration-card h3 {
+	margin: 0 0 8px;
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+	color: #1d2327;
+}
+
+.sma-settings-page .sma-integration-card p {
+	margin: 6px 0;
+}
