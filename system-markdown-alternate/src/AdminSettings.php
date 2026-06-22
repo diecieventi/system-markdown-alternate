@@ -369,9 +369,7 @@ class AdminSettings {
 	 * o se l'endpoint risponde quando non dovrebbe.
 	 */
 	private function render_conflict_warning(): void {
-		$detector     = new ConflictDetector();
-		$ours_enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
-		$force        = isset( $_GET['sma_recheck'] ); // phpcs:ignore WordPress.Security.NonceVerification
+		$detector = new ConflictDetector();
 
 		$alerts = array(); // Conflitti probabili (rosso).
 		$notes  = array(); // Note informative (descrizione).
@@ -388,26 +386,6 @@ class AdminSettings {
 			);
 		}
 
-		$endpoint = $detector->endpoint_status( $force );
-		if ( null === $endpoint ) {
-			$notes[] = 'Controllo HTTP di <code>/llms.txt</code> non ancora eseguito.';
-		} elseif ( ! empty( $endpoint['reachable'] ) ) {
-			$ct         = (string) ( $endpoint['content_type'] ?? '' );
-			$is_textual = ( false !== stripos( $ct, 'text/plain' ) || false !== stripos( $ct, 'markdown' ) );
-			$ct_txt     = '' !== $ct ? ', content-type ' . esc_html( $ct ) : '';
-
-			if ( $ours_enabled ) {
-				$notes[] = sprintf( '<code>/llms.txt</code> risponde HTTP %d%s (verosimilmente servito da questo plugin).', (int) $endpoint['status'], $ct_txt );
-			} elseif ( $is_textual ) {
-				$alerts[] = sprintf( 'Questo endpoint è <strong>disattivato</strong> ma <code>/llms.txt</code> risponde con un file di testo (HTTP %d%s): qualcos\'altro lo sta servendo.', (int) $endpoint['status'], $ct_txt );
-			} else {
-				$notes[] = sprintf( 'Questo endpoint è disattivato e <code>/llms.txt</code> risponde HTTP %d%s: sembra HTML, forse una pagina di blocco/soft-404 più che un vero llms.txt. Verifica manualmente.', (int) $endpoint['status'], $ct_txt );
-			}
-		} else {
-			$status_txt = ! empty( $endpoint['status'] ) ? ' (HTTP ' . (int) $endpoint['status'] . ')' : '';
-			$notes[]    = 'Il controllo di <code>/llms.txt</code> non ha ricevuto una risposta valida' . $status_txt . '. Può essere un blocco del WAF sul controllo automatico (le richieste reali dei browser potrebbero comunque funzionare).';
-		}
-
 		if ( $alerts ) {
 			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin-top:0"><strong>Possibile conflitto su /llms.txt:</strong></p><ul style="list-style:disc;margin:0 0 0 20px">';
 			foreach ( $alerts as $a ) {
@@ -419,9 +397,6 @@ class AdminSettings {
 		if ( $notes ) {
 			echo '<p class="description">' . implode( '<br>', $notes ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		}
-
-		$recheck = esc_url( add_query_arg( 'sma_recheck', time() ) );
-		echo '<p><a href="' . $recheck . '" class="button button-secondary">Controlla /llms.txt ora</a></p>';
 	}
 
 	// ─── Campi ──────────────────────────────────────────────────────────────────

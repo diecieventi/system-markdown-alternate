@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.12.0
+Stable tag: 0.12.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,12 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.12.1 =
+* Removed the on-demand HTTP "Check /llms.txt now" button and the loopback
+  request: it was unreliable behind a WAF/CDN and added no real value. The
+  /llms.txt conflict detection now relies only on stable local signals (active
+  SEO plugins + physical file).
 
 = 0.12.0 =
 * Settings page UX overhaul (single page, native Settings API): sections grouped
