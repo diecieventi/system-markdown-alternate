@@ -18,6 +18,10 @@ class LlmsTxtController {
 	 * Intercetta /llms.txt e serve il file di testo; per qualsiasi altro path esce subito.
 	 */
 	public function maybe_render_llms_txt(): void {
+		if ( get_option( 'sma_llms_txt_enabled', '1' ) !== '1' ) {
+			return; // Disabilitato dal pannello admin.
+		}
+
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}

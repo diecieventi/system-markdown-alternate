@@ -83,15 +83,25 @@ class AdminSettings {
 				'sanitize_callback' => 'sanitize_text_field',
 			)
 		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sma_llms_txt_enabled',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
 
 		add_settings_section( 'sma_cache', 'Cache', '__return_false', self::PAGE );
 		add_settings_section( 'sma_exclusions', 'Exclusions', array( $this, 'render_exclusions_intro' ), self::PAGE );
+		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
 		add_settings_section( 'sma_advanced', 'Advanced', '__return_false', self::PAGE );
 
 		add_settings_field( 'sma_cache_ttl', 'Cache TTL (seconds)', array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_cache' );
 		add_settings_field( 'sma_excluded_shortcodes', 'Excluded shortcodes', array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_exclusions' );
 		add_settings_field( 'sma_excluded_block_names', 'Excluded block names', array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_exclusions' );
 		add_settings_field( 'sma_excluded_classes', 'Excluded CSS classes', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_exclusions' );
+		add_settings_field( 'sma_llms_txt_enabled', 'Attiva /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
 		add_settings_field( 'sma_supported_post_types', 'Supported post types', array( $this, 'field_post_types' ), self::PAGE, 'sma_advanced' );
 		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
 	}
@@ -105,6 +115,13 @@ class AdminSettings {
 			return array();
 		}
 		return array_values( array_filter( array_map( 'sanitize_key', $value ) ) );
+	}
+
+	/**
+	 * @param mixed $value
+	 */
+	public function sanitize_checkbox( $value ): string {
+		return '1' === (string) $value ? '1' : '0';
 	}
 
 	/**
@@ -192,6 +209,17 @@ class AdminSettings {
 
 	public function render_exclusions_intro(): void {
 		echo '<p>One per line. Leave empty to use the built-in defaults.</p>';
+	}
+
+	public function render_llmstxt_intro(): void {
+		echo '<p>Il file <code>/llms.txt</code> elenca i contenuti del sito in formato leggibile da LLM e agenti AI.</p>';
+	}
+
+	public function field_llms_txt_enabled(): void {
+		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
+		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> Abilita l\'endpoint <code>/llms.txt</code></label>';
+		echo '<p class="description">Disattiva se un altro plugin gestisce già <code>/llms.txt</code>.</p>';
+		echo '<p class="description" style="margin-top:8px;color:#888"><strong>Sviluppi futuri:</strong> integrazione con Rank Math / Yoast SEO per meta e descrizioni; possibilità di configurare il file con contenuti non limitati ai soli .md (da verificare con la specifica Cloudflare e i LLM Signals).</p>';
 	}
 
 	public function field_cache_ttl(): void {
