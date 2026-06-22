@@ -126,6 +126,14 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
+			'sma_dynamic_tag_enabled',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
 			'sma_llms_txt_enabled',
 			array(
 				'type'              => 'string',
@@ -136,6 +144,7 @@ class AdminSettings {
 		add_settings_section( 'sma_cache', 'Cache', '__return_false', self::PAGE );
 		add_settings_section( 'sma_exclusions', 'Exclusions', array( $this, 'render_exclusions_intro' ), self::PAGE );
 		add_settings_section( 'sma_acf', 'ACF Integration', array( $this, 'render_acf_intro' ), self::PAGE );
+		add_settings_section( 'sma_integrations', 'Shortcode & Dynamic Tag', array( $this, 'render_integrations_intro' ), self::PAGE );
 		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
 		add_settings_section( 'sma_advanced', 'Advanced', '__return_false', self::PAGE );
 
@@ -145,6 +154,7 @@ class AdminSettings {
 		add_settings_field( 'sma_excluded_classes', 'Excluded CSS classes', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_exclusions' );
 		add_settings_field( 'sma_acf_subtitle_key', 'Subtitle field', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_acf' );
 		add_settings_field( 'sma_acf_tldr_key', 'TL;DR field', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_acf' );
+		add_settings_field( 'sma_dynamic_tag_enabled', 'Dynamic Tag GenerateBlocks', array( $this, 'field_dynamic_tag_enabled' ), self::PAGE, 'sma_integrations' );
 		add_settings_field( 'sma_llms_txt_enabled', 'Attiva /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
 		add_settings_field( 'sma_supported_post_types', 'Supported post types', array( $this, 'field_post_types' ), self::PAGE, 'sma_advanced' );
 		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
@@ -270,6 +280,19 @@ class AdminSettings {
 	}
 
 	// ─── Rendering ────────────────────────────────────────────────────────────
+
+	public function render_integrations_intro(): void {
+		echo '<p>Per inserire l\'URL del <code>.md</code> in modo dinamico (bottoni, link, template) senza scriverlo a mano.</p>';
+		echo '<p><strong>Shortcode</strong> (sempre disponibile): <code>[sma_md_url]</code> restituisce l\'URL del .md del post corrente. ';
+		echo 'Per un post specifico: <code>[sma_md_url id="123"]</code>. ';
+		echo 'Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto).</p>';
+	}
+
+	public function field_dynamic_tag_enabled(): void {
+		$v = get_option( 'sma_dynamic_tag_enabled', '0' ); // disattivato per default
+		echo '<label><input type="checkbox" name="sma_dynamic_tag_enabled" value="1"' . checked( '1', $v, false ) . ' /> Registra il Dynamic Tag <code>{{sma_md_url}}</code> per GenerateBlocks</label>';
+		echo '<p class="description">Richiede GenerateBlocks 2.x. Una volta attivo, usa <code>{{sma_md_url}}</code> nei campi degli elementi GenerateBlocks/GeneratePress (es. URL di un Button). Se disattivato, il tag non viene registrato.</p>';
+	}
 
 	public function render_acf_intro(): void {
 		echo '<p>Campi ACF inclusi nel Markdown come preambolo (tra titolo H1 e corpo). Richiede ACF attivo. Lascia vuoto per disabilitare.</p>';

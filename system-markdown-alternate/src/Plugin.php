@@ -50,8 +50,11 @@ class Plugin {
 		add_filter( 'sma_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
 		add_filter( 'sma_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
 
-		// Shortcode per URL/link dinamici del .md ([sma_md_url], [sma_md_link]).
+		// Shortcode [sma_md_url] per l'URL dinamico del .md.
 		( new Shortcodes() )->register();
+
+		// Dynamic Tag GenerateBlocks {{sma_md_url}} (solo se attivato nel pannello).
+		( new DynamicTags() )->register();
 
 		// AdminSettings: registra i filtri su tutti i contesti (front-end incluso),
 		// il pannello admin viene agganciato da admin_menu/admin_init che sparano
