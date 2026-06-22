@@ -20,8 +20,19 @@ defined( 'ABSPATH' ) || exit;
  * attraversano l'intera pipeline (pulizia blocchi, DOM, URL assoluti).
  * Supporta campi text e wysiwyg; campi complessi (repeater, gallery) vanno
  * gestiti tramite filtro personalizzato su `sma_markdown_source_content`.
+ *
+ * Per sottotitolo e TL;DR, configurare `sma_acf_subtitle_key` e
+ * `sma_acf_tldr_key` (tramite admin panel o filtro): vengono inseriti
+ * tra il titolo H1 e il corpo dell'articolo.
  */
 class AcfIntegration {
+
+	/** @var MarkdownConverter */
+	private $converter;
+
+	public function __construct( MarkdownConverter $converter ) {
+		$this->converter = $converter;
+	}
 
 	/**
 	 * Aggiunge il contenuto dei campi ACF configurati in coda al sorgente.
@@ -66,5 +77,57 @@ class AcfIntegration {
 		}
 
 		return $content . $extra;
+	}
+
+	/**
+	 * Inserisce sottotitolo e TL;DR nel preambolo Markdown (tra # Titolo e corpo).
+	 *
+	 * Hook: sma_markdown_preamble (priorità 20).
+	 *
+	 * @param string   $preamble Preambolo corrente.
+	 * @param \WP_Post $post     Post di riferimento.
+	 * @return string Preambolo con sottotitolo e/o TL;DR.
+	 */
+	public function build_preamble( string $preamble, \WP_Post $post ): string {
+		if ( ! function_exists( 'get_field' ) ) {
+			return $preamble;
+		}
+
+		/**
+		 * Filtro: nome/chiave del campo ACF per il sottotitolo (testo).
+		 * Stringa vuota = disabilitato.
+		 */
+		$subtitle_key = (string) apply_filters( 'sma_acf_subtitle_key', '', $post );
+
+		/**
+		 * Filtro: nome/chiave del campo ACF per il TL;DR (WYSIWYG).
+		 * Stringa vuota = disabilitato.
+		 */
+		$tldr_key = (string) apply_filters( 'sma_acf_tldr_key', '', $post );
+
+		$parts = array();
+
+		if ( '' !== $subtitle_key ) {
+			$subtitle = trim( wp_strip_all_tags( (string) get_field( $subtitle_key, $post->ID ) ) );
+			if ( '' !== $subtitle ) {
+				$parts[] = '*' . $subtitle . '*';
+			}
+		}
+
+		if ( '' !== $tldr_key ) {
+			$tldr_html = trim( (string) get_field( $tldr_key, $post->ID ) );
+			if ( '' !== $tldr_html ) {
+				$tldr_md = trim( $this->converter->convert( $tldr_html ) );
+				if ( '' !== $tldr_md ) {
+					$parts[] = "---\n\n**TL;DR**\n\n" . $tldr_md . "\n\n---";
+				}
+			}
+		}
+
+		if ( empty( $parts ) ) {
+			return $preamble;
+		}
+
+		return $preamble . implode( "\n\n", $parts ) . "\n\n";
 	}
 }

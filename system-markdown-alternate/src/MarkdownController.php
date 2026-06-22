@@ -270,7 +270,10 @@ class MarkdownController {
 		$title = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
 		$title = trim( preg_replace( '/\s+/', ' ', $title ) );
 
-		$markdown = $front_matter . "\n# " . $title . "\n\n" . $body;
+		/** Filtro: blocco Markdown tra # Titolo e corpo (sottotitolo, TL;DR, ecc.). */
+		$preamble = (string) apply_filters( 'sma_markdown_preamble', '', $post );
+
+		$markdown = $front_matter . "\n# " . $title . "\n\n" . $preamble . $body;
 
 		/** Filtro: Markdown finale (front matter + contenuto). */
 		$markdown = apply_filters( 'sma_markdown_output', $markdown, $post );
