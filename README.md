@@ -33,7 +33,6 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 .
 ├── README.md                     ← questo file (GitHub)
 ├── CLAUDE.md                     ← guida operativa per lo sviluppo
-├── piano.md                      ← piano funzionale completo
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← il plugin

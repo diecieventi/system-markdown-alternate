@@ -1,8 +1,8 @@
 # CLAUDE.md — System Markdown Alternate
 
-Guida operativa per sviluppare e mantenere questo plugin WordPress. Il piano
-funzionale completo è in [`piano.md`](./piano.md); questo file riassume decisioni,
-struttura, convenzioni e workflow di build/test.
+Guida operativa per sviluppare e mantenere questo plugin WordPress: decisioni,
+struttura, convenzioni e workflow di build/test. Lo stato funzionale corrente è
+documentato qui, nel `README.md` e nel changelog di `readme.txt`.
 
 ## Cos'è
 
@@ -59,7 +59,7 @@ ACF avanzato, indicizzazione dei `.md`.
 ```
 .
 ├── CLAUDE.md                     ← questo file
-├── piano.md                      ← piano funzionale completo
+├── README.md                     ← panoramica repo (GitHub)
 ├── .gitignore
 ├── bin/
 │   └── build.sh                  ← genera DIST/system-markdown-alternate.zip
@@ -157,7 +157,7 @@ PSR-4, PHP 7.4+/WP 6.0+. Cosa adottiamo / cosa no:
   `featured_image_alt` (il piano non li prevede; aggiunti su richiesta utente).
   Opzionale/v2: linkare i termini (categorie/tag) ai rispettivi `.md`.
 
-**Da NON adottare in v1** (coerenza con `piano.md` e con l'obiettivo "no marketplace"):
+**Da NON adottare in v1** (coerenza con l'obiettivo "no marketplace"):
 - loro applicano `the_content` completo → noi preferiamo `render_block()` sui blocchi
   ripuliti per escludere related/CTA iniettati (requisito esplicito del piano);
 - content negotiation (`Accept: text/markdown`, `?format=markdown`), `llms.txt` (Yoast),
@@ -182,7 +182,7 @@ Ambiente di build locale: PHP 8.4, Composer e `zip` disponibili (no `wp-cli`).
 
 ## Test (acceptance v1)
 
-Articoli di test richiesti (vedi `piano.md` §Test manuali):
+Articoli di test richiesti:
 1. Articolo semplice (heading, paragrafi, lista, link) → `.md` ok, header corretti, front matter, link alternate.
 2. Articolo con immagini + codice (Code Block Pro) + blockquote → conversione corretta.
 3. Articolo con sezione `md-exclude` → assente nel `.md`.
