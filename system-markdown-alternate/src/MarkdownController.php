@@ -72,13 +72,17 @@ class MarkdownController {
 	 * Hook: wp_head. Stampa il link alternate solo sui post/CPT supportati pubblici.
 	 */
 	public function print_alternate_link(): void {
-		if ( ! is_singular( $this->supported_post_types() ) ) {
+		$types = $this->supported_post_types();
+
+		// Guard esplicito: is_singular([]) in WP è true per QUALSIASI singular.
+		// Senza tipi selezionati il plugin è inattivo e non deve stampare il link.
+		if ( empty( $types ) || ! is_singular( $types ) ) {
 			return;
 		}
 
 		$post = get_queried_object();
 
-		if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || post_password_required( $post ) ) {
+		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
 			return;
 		}
 

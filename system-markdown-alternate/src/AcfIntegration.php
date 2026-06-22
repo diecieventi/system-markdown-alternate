@@ -30,8 +30,12 @@ class AcfIntegration {
 	/** @var MarkdownConverter */
 	private $converter;
 
-	public function __construct( MarkdownConverter $converter ) {
+	/** @var ContentRenderer */
+	private $renderer;
+
+	public function __construct( MarkdownConverter $converter, ContentRenderer $renderer ) {
 		$this->converter = $converter;
+		$this->renderer  = $renderer;
 	}
 
 	/**
@@ -117,7 +121,9 @@ class AcfIntegration {
 		if ( '' !== $tldr_key ) {
 			$tldr_html = trim( (string) get_field( $tldr_key, $post->ID ) );
 			if ( '' !== $tldr_html ) {
-				$tldr_md = trim( $this->converter->convert( $tldr_html ) );
+				// Passa dalla stessa pipeline del corpo (esclusioni, code, URL assoluti).
+				$tldr_html = $this->renderer->render_fragment( $tldr_html, $post );
+				$tldr_md   = trim( $this->converter->convert( $tldr_html ) );
 				if ( '' !== $tldr_md ) {
 					$parts[] = "---\n\n**TL;DR**\n\n" . $tldr_md . "\n\n---";
 				}

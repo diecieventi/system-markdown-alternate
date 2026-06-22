@@ -51,16 +51,31 @@ class ContentRenderer {
 		}
 
 		// 3-5. Passaggio DOM: normalizza code block, rimuove classi escluse, assolutizza URL.
-		$html = $this->process_dom( $html );
+		$html = $this->process_dom( $html, (string) get_permalink( $post ) );
 
 		/** Filtro: HTML renderizzato e ripulito, prima della conversione. */
 		return (string) apply_filters( 'sma_markdown_rendered_html', $html, $post );
 	}
 
 	/**
-	 * Passaggio unico su DOM: code block, classi escluse, URL assoluti.
+	 * Processa un frammento HTML (es. campo WYSIWYG ACF) con la stessa pipeline
+	 * del corpo classico: rimozione shortcode esclusi, shortcode/wpautop, e
+	 * passaggio DOM (esclusioni per classe, normalizzazione code, URL assoluti
+	 * risolti rispetto al permalink del post).
 	 */
-	private function process_dom( string $html ): string {
+	public function render_fragment( string $html, \WP_Post $post ): string {
+		$html = $this->shortcodes->strip( $html );
+		$html = wpautop( do_shortcode( $html ) );
+
+		return $this->process_dom( $html, (string) get_permalink( $post ) );
+	}
+
+	/**
+	 * Passaggio unico su DOM: code block, classi escluse, URL assoluti.
+	 *
+	 * @param string $base URL di base (permalink del post) per risolvere i relativi.
+	 */
+	private function process_dom( string $html, string $base ): string {
 		if ( '' === trim( $html ) ) {
 			return $html;
 		}
@@ -82,7 +97,7 @@ class ContentRenderer {
 		$this->remove_excluded_nodes( $dom );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
-		$this->absolutize_urls( $dom );
+		$this->absolutize_urls( $dom, $base );
 
 		$out = '';
 		foreach ( iterator_to_array( $root->childNodes ) as $child ) {
@@ -184,28 +199,32 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Converte gli href dei link e i src delle immagini in URL assoluti.
+	 * Converte gli href dei link e i src delle immagini in URL assoluti,
+	 * risolvendo i relativi rispetto al permalink del post ($base).
 	 */
-	private function absolutize_urls( \DOMDocument $dom ): void {
+	private function absolutize_urls( \DOMDocument $dom, string $base ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'a' ) ) as $a ) {
 			$href = $a->getAttribute( 'href' );
 			if ( $href ) {
-				$a->setAttribute( 'href', $this->absolutize( $href ) );
+				$a->setAttribute( 'href', $this->absolutize( $href, $base ) );
 			}
 		}
 
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'img' ) ) as $img ) {
 			$src = $img->getAttribute( 'src' );
 			if ( $src ) {
-				$img->setAttribute( 'src', $this->absolutize( $src ) );
+				$img->setAttribute( 'src', $this->absolutize( $src, $base ) );
 			}
 		}
 	}
 
 	/**
-	 * Risolve un URL relativo rispetto a home_url(). Lascia intatti URL assoluti e schemi speciali.
+	 * Rende assoluto un URL risolvendolo rispetto a $base (il permalink sorgente):
+	 * - assoluti / protocol-relative / schemi speciali → invariati;
+	 * - root-relative (/x) → contro l'origine (scheme://host);
+	 * - document-relative (x, ../x) → contro la directory del permalink.
 	 */
-	private function absolutize( string $url ): string {
+	private function absolutize( string $url, string $base ): string {
 		$url = trim( $url );
 
 		if ( '' === $url ) {
@@ -224,6 +243,51 @@ class ContentRenderer {
 			}
 		}
 
-		return home_url( '/' . ltrim( $url, '/' ) );
+		$parts = wp_parse_url( $base );
+
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			// Base non interpretabile: fallback all'origine del sito.
+			return home_url( '/' . ltrim( $url, '/' ) );
+		}
+
+		$port   = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+		$origin = $parts['scheme'] . '://' . $parts['host'] . $port;
+
+		// Root-relative: contro l'origine.
+		if ( '/' === $url[0] ) {
+			return $origin . $this->resolve_dot_segments( $url );
+		}
+
+		// Document-relative: contro la directory del permalink.
+		$base_path = isset( $parts['path'] ) ? $parts['path'] : '/';
+		$dir       = ( '/' === substr( $base_path, -1 ) )
+			? $base_path
+			: (string) preg_replace( '#/[^/]*$#', '/', $base_path );
+
+		return $origin . $this->resolve_dot_segments( $dir . $url );
+	}
+
+	/**
+	 * Normalizza i segmenti "." e ".." di un path, preservando lo slash iniziale.
+	 */
+	private function resolve_dot_segments( string $path ): string {
+		$out = array();
+
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '.' === $segment ) {
+				continue;
+			}
+			if ( '..' === $segment ) {
+				if ( ! empty( $out ) && '' !== end( $out ) ) {
+					array_pop( $out );
+				}
+				continue;
+			}
+			$out[] = $segment;
+		}
+
+		$result = implode( '/', $out );
+
+		return '' === $result || '/' !== $result[0] ? '/' . ltrim( $result, '/' ) : $result;
 	}
 }

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,16 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.9.1 =
+* No `rel="alternate"` link is printed when no post type is enabled (previously
+  it could appear on any singular content).
+* Relative links and images are now resolved against the source permalink, not
+  the site root (e.g. `file.pdf` inside `/blog/post/` resolves correctly).
+* The Rank Math description is only discarded when it contains an unresolved
+  `%variable%` placeholder, not any `%` (so "20% off" is kept).
+* The ACF TL;DR now goes through the same DOM pipeline as the body (exclusions,
+  code normalization, absolute URLs).
 
 = 0.9.0 =
 * Performance: the `/llms.txt` index is now cached and skips priming meta/term

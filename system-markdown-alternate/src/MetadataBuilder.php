@@ -139,8 +139,10 @@ class MetadataBuilder {
 	private function description( \WP_Post $post ): string {
 		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );
 
-		// Scarta i template Rank Math con variabili %...% non risolte.
-		if ( is_string( $rank_math ) && '' !== $rank_math && false === strpos( $rank_math, '%' ) ) {
+		// Scarta solo se contiene un placeholder Rank Math non risolto (%var% o
+		// %var(args)%). Non scartare descrizioni con % "normale" (es. "Sconto 20%").
+		if ( is_string( $rank_math ) && '' !== $rank_math
+			&& ! preg_match( '/%[a-z0-9_]+(?:\([^)]*\))?%/i', $rank_math ) ) {
 			return $rank_math;
 		}
 

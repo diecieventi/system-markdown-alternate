@@ -46,7 +46,7 @@ class Plugin {
 		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );
 
 		// Integrazione ACF (opt-in tramite filtri sma_acf_field_keys, sma_acf_subtitle_key, sma_acf_tldr_key).
-		$acf = new AcfIntegration( $converter );
+		$acf = new AcfIntegration( $converter, $renderer );
 		add_filter( 'sma_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
 		add_filter( 'sma_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
 
