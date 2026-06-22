@@ -204,7 +204,7 @@ class MarkdownController {
 	 */
 	private function supported_post_types(): array {
 		/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
-		return (array) apply_filters( 'sma_markdown_supported_post_types', array( 'post' ) );
+		return (array) apply_filters( 'sma_markdown_supported_post_types', array() );
 	}
 
 	/**

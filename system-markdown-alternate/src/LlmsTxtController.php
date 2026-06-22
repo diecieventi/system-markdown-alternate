@@ -52,7 +52,7 @@ class LlmsTxtController {
 			header( 'X-Robots-Tag: noindex, follow' );
 		}
 
-		$post_types = (array) apply_filters( 'sma_markdown_supported_post_types', array( 'post' ) );
+		$post_types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
 
 		$lines   = array();
 		$lines[] = '# ' . get_bloginfo( 'name' );

@@ -220,10 +220,11 @@ class AdminSettings {
 	}
 
 	public function field_post_types(): void {
-		$raw   = get_option( 'sma_supported_post_types' ); // false = mai salvato esplicitamente
-		$saved = false !== $raw ? (array) $raw : array( 'post' ); // rispecchia il default del codice
+		$raw   = get_option( 'sma_supported_post_types' ); // false = mai salvato
+		$saved = false !== $raw ? (array) $raw : array();
 
 		$all_types = get_post_types( array( 'public' => true ), 'objects' );
+		unset( $all_types['attachment'] ); // Media: sempre escluso.
 
 		foreach ( $all_types as $pt ) {
 			$checked = in_array( $pt->name, $saved, true ) ? ' checked' : '';
@@ -235,7 +236,7 @@ class AdminSettings {
 				esc_html( $pt->name )
 			);
 		}
-		echo '<p class="description">Default: Posts only. Check additional types to enable .md endpoints and llms.txt listing.</p>';
+		echo '<p class="description">Seleziona i tipi da esporre come .md e in llms.txt. Nessuna selezione = plugin inattivo. <em>Nota: in futuro si potrà filtrare i CPT mostrando solo quelli realmente pubblici (esclusi quelli ad uso interno).</em></p>';
 	}
 
 	public function field_robots_header(): void {
