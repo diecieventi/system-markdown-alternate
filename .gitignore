@@ -1,0 +1,23 @@
+# --- Sistema operativo / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- Composer ---
+# vendor/ viene rigenerato in fase di build (bin/build.sh) e incluso SOLO nello zip
+# distribuibile, così non serve Composer sul server di produzione.
+/system-markdown-alternate/vendor/
+
+# --- Node (eventuale tooling futuro) ---
+node_modules/
+
+# --- Build / staging temporanei ---
+/build/
+/.build-tmp/
+*.log
+
+# NOTA: composer.lock è volutamente versionato → build riproducibili.
+# NOTA: lo zip in DIST/ è volutamente versionato → artefatto scaricabile e da
+#       caricare manualmente sul sito di test.

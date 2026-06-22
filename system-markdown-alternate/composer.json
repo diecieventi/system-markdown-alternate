@@ -1,0 +1,19 @@
+{
+    "name": "system4pc/system-markdown-alternate",
+    "description": "Espone una versione Markdown pulita degli articoli del blog tramite URL con suffisso .md.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4",
+        "league/html-to-markdown": "^5.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "SystemMarkdownAlternate\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
