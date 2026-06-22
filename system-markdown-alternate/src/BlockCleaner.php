@@ -15,11 +15,23 @@ class BlockCleaner {
 	/** Classi CSS che marcano un blocco da escludere. */
 	const EXCLUDED_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
+	/** @var string[] Nomi blocco esclusi, risolti una volta per clean(). */
+	private $excluded_names = array();
+
+	/** @var string[] Classi escluse, risolte una volta per clean(). */
+	private $excluded_classes = array();
+
 	/**
 	 * @param array $blocks Output di parse_blocks().
 	 * @return array Blocchi ripuliti (con innerBlocks/innerContent riallineati).
 	 */
 	public function clean( array $blocks ): array {
+		// Risolviamo le liste filtrabili una sola volta: is_excluded() viene
+		// chiamato per ogni blocco (anche annidato) e i filtri non vanno rilanciati N volte.
+		$this->excluded_names   = $this->excluded_block_names();
+		/** Filtro: classi CSS i cui blocchi vengono esclusi dall'output Markdown. */
+		$this->excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+
 		$out = array();
 
 		foreach ( $blocks as $block ) {
@@ -91,7 +103,7 @@ class BlockCleaner {
 	private function is_excluded( array $block ): bool {
 		$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
 
-		if ( in_array( $name, $this->excluded_block_names(), true ) ) {
+		if ( in_array( $name, $this->excluded_names, true ) ) {
 			return true;
 		}
 
@@ -99,9 +111,7 @@ class BlockCleaner {
 
 		if ( '' !== $class_attr ) {
 			$classes = preg_split( '/\s+/', $class_attr );
-			/** Filtro: classi CSS i cui blocchi vengono esclusi dall'output Markdown. */
-			$excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
-			foreach ( $excluded_classes as $excluded ) {
+			foreach ( $this->excluded_classes as $excluded ) {
 				if ( in_array( $excluded, $classes, true ) ) {
 					return true;
 				}

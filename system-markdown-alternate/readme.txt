@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.8.0
+Stable tag: 0.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,14 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.9.0 =
+* Performance: the `/llms.txt` index is now cached and skips priming meta/term
+  caches; password-protected posts are excluded from it.
+* Caching now uses the persistent object cache (Redis/Memcached) when available,
+  falling back to transients otherwise.
+* Cache invalidation skips revisions and autosaves.
+* Added `uninstall.php` to remove all plugin options and cached data on deletion.
 
 = 0.8.0 =
 * The GenerateBlocks `{{sma_md_url}}` Dynamic Tag now registers automatically

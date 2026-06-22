@@ -89,10 +89,20 @@ class MarkdownController {
 	}
 
 	/**
-	 * Hook: save_post / deleted_post. Elimina la cache Markdown del post.
+	 * Hook: save_post / deleted_post. Elimina la cache Markdown del post e
+	 * l'indice /llms.txt (così nuovi post, modifiche e cancellazioni si
+	 * riflettono subito).
+	 *
+	 * Salta revisioni e autosave: save_post scatta di continuo durante
+	 * l'editing e quegli ID non hanno cache propria.
 	 */
 	public function invalidate_cache( int $post_id ): void {
-		delete_transient( 'sma_md_' . $post_id );
+		if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+			return;
+		}
+
+		Cache::delete( 'sma_md_' . $post_id );
+		Cache::delete( LlmsTxtController::CACHE_KEY );
 	}
 
 	// ─── Risoluzione ──────────────────────────────────────────────────────────
@@ -203,8 +213,14 @@ class MarkdownController {
 	 * @return string[]
 	 */
 	private function supported_post_types(): array {
-		/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
-		return (array) apply_filters( 'sma_markdown_supported_post_types', array() );
+		static $types = null;
+
+		if ( null === $types ) {
+			/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
+			$types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
+		}
+
+		return $types;
 	}
 
 	/**
@@ -241,7 +257,7 @@ class MarkdownController {
 		$version   = $this->cache_version( $post );
 
 		if ( $ttl > 0 ) {
-			$cached = get_transient( $cache_key );
+			$cached = Cache::get( $cache_key );
 			if ( is_array( $cached ) && isset( $cached['v'], $cached['md'] ) &&
 				$cached['v'] === $version ) {
 				return $cached['md'];
@@ -251,7 +267,7 @@ class MarkdownController {
 		$markdown = $this->build_markdown( $post );
 
 		if ( $ttl > 0 ) {
-			set_transient(
+			Cache::set(
 				$cache_key,
 				array(
 					'v'  => $version,

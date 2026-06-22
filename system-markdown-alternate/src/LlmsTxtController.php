@@ -12,16 +12,15 @@ defined( 'ABSPATH' ) || exit;
  */
 class LlmsTxtController {
 
+	/** Chiave di cache dell'output /llms.txt. */
+	const CACHE_KEY = 'sma_llms_txt';
+
 	/**
 	 * Hook: template_redirect (priorità 0).
 	 *
 	 * Intercetta /llms.txt e serve il file di testo; per qualsiasi altro path esce subito.
 	 */
 	public function maybe_render_llms_txt(): void {
-		if ( get_option( 'sma_llms_txt_enabled', '1' ) !== '1' ) {
-			return; // Disabilitato dal pannello admin.
-		}
-
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
@@ -32,8 +31,13 @@ class LlmsTxtController {
 		$home_path = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
 		$expected  = $home_path . '/llms.txt';
 
+		// Check URI per primo (string op economica) prima di leggere le opzioni.
 		if ( $path !== $expected && $path !== $expected . '/' ) {
 			return;
+		}
+
+		if ( '1' !== get_option( 'sma_llms_txt_enabled', '1' ) ) {
+			return; // Disabilitato dal pannello admin.
 		}
 
 		// Trailing slash: /llms.txt/ → 301 verso /llms.txt.
@@ -47,7 +51,7 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Genera e stampa il contenuto /llms.txt.
+	 * Stampa l'output /llms.txt, servendolo dalla cache se disponibile.
 	 */
 	private function render(): void {
 		if ( ! headers_sent() ) {
@@ -56,6 +60,38 @@ class LlmsTxtController {
 			header( 'X-Robots-Tag: noindex, follow' );
 		}
 
+		/** Filtro: TTL cache in secondi. 0 disabilita la cache. */
+		$ttl     = (int) apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, null );
+		$version = md5( SMA_VERSION . '|' . (string) get_option( 'sma_cache_salt', '0' ) );
+
+		if ( $ttl > 0 ) {
+			$cached = Cache::get( self::CACHE_KEY );
+			if ( is_array( $cached ) && isset( $cached['v'], $cached['txt'] ) && $cached['v'] === $version ) {
+				echo $cached['txt']; // phpcs:ignore WordPress.Security.EscapeOutput
+				return;
+			}
+		}
+
+		$body = $this->build();
+
+		if ( $ttl > 0 ) {
+			Cache::set(
+				self::CACHE_KEY,
+				array(
+					'v'   => $version,
+					'txt' => $body,
+				),
+				$ttl
+			);
+		}
+
+		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput
+	}
+
+	/**
+	 * Genera il contenuto /llms.txt.
+	 */
+	private function build(): string {
 		$post_types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
 
 		$lines   = array();
@@ -76,12 +112,15 @@ class LlmsTxtController {
 
 			$posts = get_posts(
 				array(
-					'post_type'      => $post_type,
-					'post_status'    => 'publish',
-					'posts_per_page' => $limit,
-					'orderby'        => 'date',
-					'order'          => 'DESC',
-					'no_found_rows'  => true,
+					'post_type'              => $post_type,
+					'post_status'            => 'publish',
+					'has_password'           => false, // Esclude i contenuti protetti (come l'endpoint .md).
+					'posts_per_page'         => $limit,
+					'orderby'                => 'date',
+					'order'                  => 'DESC',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false, // Non leggiamo meta qui.
+					'update_post_term_cache' => false, // Né termini.
 				)
 			);
 
@@ -107,6 +146,6 @@ class LlmsTxtController {
 			}
 		}
 
-		echo implode( "\n", $lines ) . "\n";
+		return implode( "\n", $lines ) . "\n";
 	}
 }
