@@ -1,0 +1,155 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: System Markdown Alternate 0.13.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-23 10:07+0000\n"
+"PO-Revision-Date: 2026-06-23 10:07+0000\n"
+"Last-Translator: Diecieventi Digital Marketing\n"
+"Language-Team: \n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: system-markdown-alternate\n"
+
+msgid "Markdown Alternate"
+msgstr ""
+
+msgid "General"
+msgstr ""
+
+msgid "Enabled content types"
+msgstr ""
+
+msgid "Cache TTL (seconds)"
+msgstr ""
+
+msgid "Markdown output"
+msgstr ""
+
+msgid "Excluded shortcodes"
+msgstr ""
+
+msgid "Excluded blocks"
+msgstr ""
+
+msgid "Excluded CSS classes"
+msgstr ""
+
+msgid "ACF subtitle field"
+msgstr ""
+
+msgid "ACF TL;DR field"
+msgstr ""
+
+msgid "ACF fields"
+msgstr ""
+
+msgid "Enable /llms.txt"
+msgstr ""
+
+msgid "Integrations"
+msgstr ""
+
+msgid "Advanced"
+msgstr ""
+
+msgid "Main settings. Without at least one selected content type, the plugin stays inactive."
+msgstr ""
+
+msgid "Controls what goes into or stays out of the <code>.md</code> file. For exclusions: one entry per line, leave empty to use the built-in defaults."
+msgstr ""
+
+msgid "Settings for advanced users."
+msgstr ""
+
+msgid "The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content."
+msgstr ""
+
+msgid "Enabled in the settings:"
+msgstr ""
+
+msgid "yes"
+msgstr ""
+
+msgid "no"
+msgstr ""
+
+msgid "URL:"
+msgstr ""
+
+msgid "Informational section: how to use the <code>.md</code> URL in content and templates."
+msgstr ""
+
+msgid "Shortcode"
+msgstr ""
+
+msgid "<code>[sma_md_url]</code> — <code>.md</code> URL of the current post."
+msgstr ""
+
+msgid "<code>[sma_md_url id=\"123\"]</code> — <code>.md</code> URL of a specific post."
+msgstr ""
+
+msgid "Returns empty if the post does not expose a .md (type not enabled, draft, or password-protected)."
+msgstr ""
+
+msgid "GenerateBlocks detected. The dynamic tag is available automatically."
+msgstr ""
+
+msgid "Insert <code>{{sma_md_url}}</code> in GenerateBlocks/GeneratePress fields that accept a dynamic tag, e.g. a button URL. If the post has no <code>.md</code>, the tag resolves to empty and the element is hidden (required to render)."
+msgstr ""
+
+msgid "GenerateBlocks not detected. The dynamic tag is not available."
+msgstr ""
+
+msgid "ACF detected. The Subtitle and TL;DR fields are configured in the <strong>Markdown output</strong> section."
+msgstr ""
+
+msgid "ACF not detected. The Subtitle and TL;DR fields are not available."
+msgstr ""
+
+msgid "A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin's) is ignored."
+msgstr ""
+
+msgid "Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin)."
+msgstr ""
+
+msgid "Possible /llms.txt conflict:"
+msgstr ""
+
+msgid "Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive."
+msgstr ""
+
+msgid "seconds"
+msgstr ""
+
+msgid "0 = cache disabled. Default: 86400 (24 hours)."
+msgstr ""
+
+msgid "One per line. Leave empty to use the built-in defaults."
+msgstr ""
+
+msgid "Default:"
+msgstr ""
+
+msgid "ACF field name for the subtitle (type: text). Inserted in italics right after the H1 title."
+msgstr ""
+
+msgid "ACF field name for the TL;DR (type: WYSIWYG editor). Inserted as a <code>**TL;DR**</code> section with <code>---</code> separators."
+msgstr ""
+
+msgid "ACF not detected: the Subtitle and TL;DR fields will appear here when ACF is active. Any previously saved settings are preserved."
+msgstr ""
+
+msgid "Enable the <code>/llms.txt</code> endpoint"
+msgstr ""
+
+msgid "Disable if another plugin already handles <code>/llms.txt</code>."
+msgstr ""
+
+msgid "Default: <code>noindex, follow</code>. Leave empty to not send the header."
+msgstr ""
+
+msgid "System Markdown Alternate: missing dependencies. Run \"composer install\" in the plugin folder, or install the built zip (DIST folder)."
+msgstr ""

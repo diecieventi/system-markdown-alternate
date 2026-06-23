@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.12.1
+Stable tag: 0.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,13 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.13.0 =
+* Internationalization (i18n): all admin panel strings are now translatable
+  through the `system-markdown-alternate` text domain, with English as the
+  source language. A bundled `it_IT` translation keeps the panel in Italian.
+  Translation template (`.pot`) and the Italian `.po`/`.mo` files ship in
+  `/languages`, and the text domain is loaded on `init`.
 
 = 0.12.1 =
 * Removed the on-demand HTTP "Check /llms.txt now" button and the loopback

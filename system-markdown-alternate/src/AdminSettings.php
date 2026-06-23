@@ -65,8 +65,8 @@ class AdminSettings {
 
 	public function add_menu(): void {
 		$this->hook = (string) add_options_page(
-			'Markdown Alternate',
-			'Markdown Alternate',
+			__( 'Markdown Alternate', 'system-markdown-alternate' ),
+			__( 'Markdown Alternate', 'system-markdown-alternate' ),
 			'manage_options',
 			self::PAGE,
 			array( $this, 'render_page' )
@@ -110,32 +110,32 @@ class AdminSettings {
 		}
 
 		// ── Generale ───────────────────────────────────────────────────────────
-		add_settings_section( 'sma_general', 'Generale', array( $this, 'render_general_intro' ), self::PAGE );
-		add_settings_field( 'sma_supported_post_types', 'Tipi di contenuto abilitati', array( $this, 'field_post_types' ), self::PAGE, 'sma_general' );
-		add_settings_field( 'sma_cache_ttl', 'Cache TTL (secondi)', array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_general' );
+		add_settings_section( 'sma_general', __( 'General', 'system-markdown-alternate' ), array( $this, 'render_general_intro' ), self::PAGE );
+		add_settings_field( 'sma_supported_post_types', __( 'Enabled content types', 'system-markdown-alternate' ), array( $this, 'field_post_types' ), self::PAGE, 'sma_general' );
+		add_settings_field( 'sma_cache_ttl', __( 'Cache TTL (seconds)', 'system-markdown-alternate' ), array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_general' );
 
 		// ── Output Markdown ──────────────────────────────────────────────────────
-		add_settings_section( 'sma_markdown', 'Output Markdown', array( $this, 'render_markdown_intro' ), self::PAGE );
-		add_settings_field( 'sma_excluded_shortcodes', 'Shortcode esclusi', array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_markdown' );
-		add_settings_field( 'sma_excluded_block_names', 'Blocchi esclusi', array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_markdown' );
-		add_settings_field( 'sma_excluded_classes', 'Classi CSS escluse', array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_markdown' );
+		add_settings_section( 'sma_markdown', __( 'Markdown output', 'system-markdown-alternate' ), array( $this, 'render_markdown_intro' ), self::PAGE );
+		add_settings_field( 'sma_excluded_shortcodes', __( 'Excluded shortcodes', 'system-markdown-alternate' ), array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_markdown' );
+		add_settings_field( 'sma_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_markdown' );
+		add_settings_field( 'sma_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_markdown' );
 
 		if ( $this->acf_active() ) {
-			add_settings_field( 'sma_acf_subtitle_key', 'Campo ACF sottotitolo', array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_markdown' );
-			add_settings_field( 'sma_acf_tldr_key', 'Campo ACF TL;DR', array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sma_acf_subtitle_key', __( 'ACF subtitle field', 'system-markdown-alternate' ), array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sma_acf_tldr_key', __( 'ACF TL;DR field', 'system-markdown-alternate' ), array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_markdown' );
 		} else {
-			add_settings_field( 'sma_acf_notice', 'Campi ACF', array( $this, 'field_acf_notice' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sma_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sma_markdown' );
 		}
 
 		// ── llms.txt ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
-		add_settings_field( 'sma_llms_txt_enabled', 'Abilita /llms.txt', array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_field( 'sma_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
 
 		// ── Integrazioni (solo informativa) ──────────────────────────────────────
-		add_settings_section( 'sma_integrations', 'Integrazioni', array( $this, 'render_integrations_intro' ), self::PAGE );
+		add_settings_section( 'sma_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
 
 		// ── Avanzate ─────────────────────────────────────────────────────────────
-		add_settings_section( 'sma_advanced', 'Avanzate', array( $this, 'render_advanced_intro' ), self::PAGE );
+		add_settings_section( 'sma_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
 	}
 
@@ -311,56 +311,57 @@ class AdminSettings {
 	// ─── Intro sezioni ──────────────────────────────────────────────────────────
 
 	public function render_general_intro(): void {
-		echo '<p class="sma-help">Impostazioni principali. Senza almeno un tipo di contenuto selezionato, il plugin resta inattivo.</p>';
+		echo '<p class="sma-help">' . esc_html__( 'Main settings. Without at least one selected content type, the plugin stays inactive.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function render_markdown_intro(): void {
-		echo '<p class="sma-help">Decide cosa entra o resta fuori dal file <code>.md</code>. Per le esclusioni: una voce per riga, lascia vuoto per usare i default interni.</p>';
+		echo '<p class="sma-help">' . wp_kses_post( __( 'Controls what goes into or stays out of the <code>.md</code> file. For exclusions: one entry per line, leave empty to use the built-in defaults.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function render_advanced_intro(): void {
-		echo '<p class="sma-help">Impostazioni per utenti esperti.</p>';
+		echo '<p class="sma-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function render_llmstxt_intro(): void {
-		echo '<p class="sma-help">Il file <code>/llms.txt</code> espone risorse selezionate del sito in un formato leggibile da LLM e agenti AI. Attualmente elenca i contenuti Markdown abilitati.</p>';
+		echo '<p class="sma-help">' . wp_kses_post( __( 'The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content.', 'system-markdown-alternate' ) ) . '</p>';
 
 		$enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
 		$url     = home_url( '/llms.txt' );
+		$state   = $enabled ? __( 'yes', 'system-markdown-alternate' ) : __( 'no', 'system-markdown-alternate' );
 		echo '<div class="sma-status">';
-		echo 'Abilitato nelle impostazioni: <strong>' . ( $enabled ? 'sì' : 'no' ) . '</strong><br>';
-		echo 'URL: <a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a>';
+		echo esc_html__( 'Enabled in the settings:', 'system-markdown-alternate' ) . ' <strong>' . esc_html( $state ) . '</strong><br>';
+		echo esc_html__( 'URL:', 'system-markdown-alternate' ) . ' <a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a>';
 		echo '</div>';
 
 		$this->render_conflict_warning();
 	}
 
 	public function render_integrations_intro(): void {
-		echo '<p class="sma-help">Sezione informativa: come usare l\'URL del <code>.md</code> nei contenuti e nei template.</p>';
+		echo '<p class="sma-help">' . wp_kses_post( __( 'Informational section: how to use the <code>.md</code> URL in content and templates.', 'system-markdown-alternate' ) ) . '</p>';
 
 		echo '<div class="sma-integration-card">';
-		echo '<h3>Shortcode</h3>';
-		echo '<p><code>[sma_md_url]</code> — URL del <code>.md</code> del post corrente.<br>';
-		echo '<code>[sma_md_url id="123"]</code> — URL del <code>.md</code> di un post specifico.</p>';
-		echo '<p class="description">Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o protetto da password).</p>';
+		echo '<h3>' . esc_html__( 'Shortcode', 'system-markdown-alternate' ) . '</h3>';
+		echo '<p>' . wp_kses_post( __( '<code>[sma_md_url]</code> — <code>.md</code> URL of the current post.', 'system-markdown-alternate' ) ) . '<br>';
+		echo wp_kses_post( __( '<code>[sma_md_url id="123"]</code> — <code>.md</code> URL of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Returns empty if the post does not expose a .md (type not enabled, draft, or password-protected).', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
 
 		echo '<div class="sma-integration-card">';
 		echo '<h3>GenerateBlocks</h3>';
 		if ( $this->generateblocks_active() ) {
-			echo '<p>GenerateBlocks rilevato. Il dynamic tag è disponibile automaticamente.</p>';
+			echo '<p>' . esc_html__( 'GenerateBlocks detected. The dynamic tag is available automatically.', 'system-markdown-alternate' ) . '</p>';
 			echo '<p><code>{{sma_md_url}}</code></p>';
-			echo '<p class="description">Inserisci <code>{{sma_md_url}}</code> nei campi GenerateBlocks/GeneratePress che accettano un dynamic tag, ad esempio l\'URL di un bottone. Se il post non ha un <code>.md</code>, il tag si risolve a vuoto e l\'elemento viene nascosto (required to render).</p>';
+			echo '<p class="description">' . wp_kses_post( __( 'Insert <code>{{sma_md_url}}</code> in GenerateBlocks/GeneratePress fields that accept a dynamic tag, e.g. a button URL. If the post has no <code>.md</code>, the tag resolves to empty and the element is hidden (required to render).', 'system-markdown-alternate' ) ) . '</p>';
 		} else {
-			echo '<p>GenerateBlocks non rilevato. Il dynamic tag non è disponibile.</p>';
+			echo '<p>' . esc_html__( 'GenerateBlocks not detected. The dynamic tag is not available.', 'system-markdown-alternate' ) . '</p>';
 		}
 		echo '</div>';
 
 		echo '<div class="sma-integration-card">';
 		echo '<h3>ACF</h3>';
 		echo $this->acf_active()
-			? '<p>ACF rilevato. I campi Sottotitolo e TL;DR si configurano nella sezione <strong>Output Markdown</strong>.</p>'
-			: '<p>ACF non rilevato. I campi Sottotitolo e TL;DR non sono disponibili.</p>';
+			? '<p>' . wp_kses_post( __( 'ACF detected. The Subtitle and TL;DR fields are configured in the <strong>Markdown output</strong> section.', 'system-markdown-alternate' ) ) . '</p>'
+			: '<p>' . esc_html__( 'ACF not detected. The Subtitle and TL;DR fields are not available.', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
 	}
 
@@ -375,27 +376,28 @@ class AdminSettings {
 		$notes  = array(); // Note informative (descrizione).
 
 		if ( $detector->physical_file_exists() ) {
-			$alerts[] = 'Esiste un file fisico <code>llms.txt</code> nella root del sito: il web server lo serve <strong>prima</strong> di WordPress, quindi questo endpoint (e quello di altri plugin) viene ignorato.';
+			$alerts[] = __( 'A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin\'s) is ignored.', 'system-markdown-alternate' );
 		}
 
 		$providers = $detector->detected_providers();
 		if ( $providers ) {
 			$notes[] = sprintf(
-				'Plugin SEO attivi che <em>potrebbero</em> gestire <code>/llms.txt</code>: <strong>%s</strong>. Se uno di loro lo genera già, tieni attivo un solo gestore (disattiva questo qui sotto, oppure la funzione llms.txt nell\'altro plugin).',
+				/* translators: %s is a comma-separated list of active SEO plugin names. */
+				__( 'Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin).', 'system-markdown-alternate' ),
 				esc_html( implode( ', ', $providers ) )
 			);
 		}
 
 		if ( $alerts ) {
-			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin-top:0"><strong>Possibile conflitto su /llms.txt:</strong></p><ul style="list-style:disc;margin:0 0 0 20px">';
+			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin-top:0"><strong>' . esc_html__( 'Possible /llms.txt conflict:', 'system-markdown-alternate' ) . '</strong></p><ul style="list-style:disc;margin:0 0 0 20px">';
 			foreach ( $alerts as $a ) {
-				echo '<li>' . $a . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<li>' . wp_kses_post( $a ) . '</li>';
 			}
 			echo '</ul></div>';
 		}
 
 		if ( $notes ) {
-			echo '<p class="description">' . implode( '<br>', $notes ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
+			echo '<p class="description">' . wp_kses_post( implode( '<br>', $notes ) ) . '</p>';
 		}
 	}
 
@@ -418,14 +420,14 @@ class AdminSettings {
 				esc_html( $pt->name )
 			);
 		}
-		echo '<p class="description">Tipi di contenuto esposti come <code>.md</code> e in <code>/llms.txt</code>. Nessuna selezione = plugin inattivo.</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_cache_ttl(): void {
 		$v = get_option( 'sma_cache_ttl' );
 		$v = false !== $v ? (int) $v : DAY_IN_SECONDS;
-		echo '<input type="number" min="0" step="1" name="sma_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" /> secondi';
-		echo '<p class="description">0 = cache disabilitata. Default: 86400 (24 ore).</p>';
+		echo '<input type="number" min="0" step="1" name="sma_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" /> ' . esc_html__( 'seconds', 'system-markdown-alternate' );
+		echo '<p class="description">' . esc_html__( '0 = cache disabled. Default: 86400 (24 hours).', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_excluded_shortcodes(): void {
@@ -448,37 +450,37 @@ class AdminSettings {
 	private function render_exclusion_field( string $option, array $defaults ): void {
 		$v = (string) get_option( $option, '' );
 		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sma-help">Uno per riga. Lascia vuoto per usare i default interni.</p>';
-		echo '<pre class="sma-defaults">' . esc_html( "Default:\n" . implode( "\n", $defaults ) ) . '</pre>';
+		echo '<p class="description sma-help">' . esc_html__( 'One per line. Leave empty to use the built-in defaults.', 'system-markdown-alternate' ) . '</p>';
+		echo '<pre class="sma-defaults">' . esc_html( __( 'Default:', 'system-markdown-alternate' ) . "\n" . implode( "\n", $defaults ) ) . '</pre>';
 	}
 
 	public function field_acf_subtitle_key(): void {
 		$v = (string) get_option( 'sma_acf_subtitle_key', '' );
 		echo '<input type="text" name="sma_acf_subtitle_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Nome del campo ACF per il sottotitolo (tipo: testo). Inserito in corsivo subito dopo il titolo H1.</p>';
+		echo '<p class="description">' . esc_html__( 'ACF field name for the subtitle (type: text). Inserted in italics right after the H1 title.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_acf_tldr_key(): void {
 		$v = (string) get_option( 'sma_acf_tldr_key', '' );
 		echo '<input type="text" name="sma_acf_tldr_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Nome del campo ACF per il TL;DR (tipo: editor WYSIWYG). Inserito come sezione <code>**TL;DR**</code> con separatori <code>---</code>.</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'ACF field name for the TL;DR (type: WYSIWYG editor). Inserted as a <code>**TL;DR**</code> section with <code>---</code> separators.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_acf_notice(): void {
-		echo '<p class="description">ACF non rilevato: i campi Sottotitolo e TL;DR appariranno qui quando ACF sarà attivo. Le eventuali impostazioni già salvate restano conservate.</p>';
+		echo '<p class="description">' . esc_html__( 'ACF not detected: the Subtitle and TL;DR fields will appear here when ACF is active. Any previously saved settings are preserved.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_llms_txt_enabled(): void {
 		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
-		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> Abilita l\'endpoint <code>/llms.txt</code></label>';
-		echo '<p class="description">Disattiva se un altro plugin gestisce già <code>/llms.txt</code>.</p>';
+		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_robots_header(): void {
 		$v = get_option( 'sma_robots_header' );
 		$v = false !== $v ? (string) $v : 'noindex, follow';
 		echo '<input type="text" name="sma_robots_header" value="' . esc_attr( $v ) . '" class="regular-text" />';
-		echo '<p class="description">Default: <code>noindex, follow</code>. Lascia vuoto per non inviare l\'header.</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'Default: <code>noindex, follow</code>. Leave empty to not send the header.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function render_page(): void {

@@ -3,13 +3,14 @@
  * Plugin Name:       System Markdown Alternate
  * Plugin URI:        https://github.com/system4pc/system-markdown-alternate
  * Description:       Espone una versione Markdown pulita (leggibile da LLM, agenti e tool tecnici) degli articoli del blog tramite URL con suffisso .md.
- * Version:           0.12.1
+ * Version:           0.13.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Diecieventi Digital Marketing
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       system-markdown-alternate
+ * Domain Path:       /languages
  *
  * @package SystemMarkdownAlternate
  */
@@ -18,7 +19,7 @@ namespace SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMA_VERSION', '0.12.1' );
+define( 'SMA_VERSION', '0.13.0' );
 define( 'SMA_PLUGIN_FILE', __FILE__ );
 define( 'SMA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SMA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -35,7 +36,7 @@ if ( ! is_readable( $sma_autoload ) ) {
 		static function () {
 			echo '<div class="notice notice-error"><p>';
 			echo esc_html__(
-				'System Markdown Alternate: dipendenze mancanti. Esegui "composer install" nella cartella del plugin oppure installa lo zip buildato (cartella DIST).',
+				'System Markdown Alternate: missing dependencies. Run "composer install" in the plugin folder, or install the built zip (DIST folder).',
 				'system-markdown-alternate'
 			);
 			echo '</p></div>';

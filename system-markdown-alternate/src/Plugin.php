@@ -21,6 +21,18 @@ class Plugin {
 	 * Costruisce il grafo delle dipendenze e aggancia gli hook.
 	 */
 	public function boot(): void {
+		// Traduzioni bundlate in /languages (caricate su init per il timing di WP 6.7+).
+		add_action(
+			'init',
+			static function () {
+				load_plugin_textdomain(
+					'system-markdown-alternate',
+					false,
+					dirname( plugin_basename( SMA_PLUGIN_FILE ) ) . '/languages'
+				);
+			}
+		);
+
 		$shortcodes = new ShortcodeCleaner();
 		$renderer   = new ContentRenderer( new BlockCleaner(), $shortcodes );
 		$converter  = new MarkdownConverter();

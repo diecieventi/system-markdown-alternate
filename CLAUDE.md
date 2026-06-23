@@ -19,7 +19,7 @@ https://example.com/mio-articolo.md    → Markdown (front matter + contenuto)
 sul blog, restare semplice da verificare, produrre Markdown pulito, non creare
 rischi SEO, restare estendibile via filtri.
 
-## Stato attuale (v0.12.x)
+## Stato attuale (v0.13.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -39,6 +39,9 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   `deleted_post` (salta revisioni/autosave).
 - **Pannello admin** (pagina unica, Settings API): sezioni Generale / Output
   Markdown / llms.txt / Integrazioni / Avanzate; CSS caricato solo nella pagina.
+- **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
+  text domain `system-markdown-alternate` caricato su `init` da `/languages`;
+  template `.pot` + traduzione `it_IT` (`.po`/`.mo`) bundlate.
 - **ACF**: sottotitolo (testo) + TL;DR (WYSIWYG, passa dalla pipeline DOM) come
   preambolo tra H1 e corpo; nomi campo configurabili dal pannello.
 - **Shortcode** `[sma_md_url]` (+ `id="123"`).
@@ -48,9 +51,10 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
 ## Aperti / da fare (verso wordpress.org)
 
-- **i18n**: stringhe del pannello hardcoded (IT/EN miste) → `__()`/`esc_html__()`
-  con text domain `system-markdown-alternate`.
 - **`Contributors:`** reale in `readme.txt` (ora segnaposto `diecieventi`).
+- i18n: rigenerare `.pot`/`.po`/`.mo` quando si aggiungono/cambiano stringhe del
+  pannello (niente `wp-cli`/`gettext` in ambiente: vedi nota sotto). Eventuale
+  copertura i18n di altre stringhe future esposte all'utente.
 - Eventuale **auto-yield** opt-in di `/llms.txt` (per ora solo avviso, niente
   disattivazione automatica).
 - Idea futura: contenuti `/llms.txt` più ricchi (spec Cloudflare / LLM signals).
@@ -134,6 +138,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
     ├── vendor/                         ← NON versionato, solo nello zip
     ├── assets/admin-settings.css       ← stile pannello (caricato solo lì)
+    ├── languages/                      ← .pot + traduzione it_IT (.po/.mo)
     └── src/
         ├── Plugin.php              ← bootstrap, registra hook e dipendenze
         ├── MarkdownController.php  ← intercetta .md + content negotiation, validazione, header, cache, output, alternate link, invalidazione
@@ -206,6 +211,13 @@ Default esclusioni:
 6. **Cache**: chiave `sma_md_{post_id}`, valore con hash di validità
    (`post_modified_gmt|SMA_VERSION|salt`); `/llms.txt` cachato in `sma_llms_txt`.
    Tutto via `Cache` helper (object cache persistente o transient).
+7. **i18n**: sorgente **inglese** nei `__()`/`esc_html__()`; le stringhe con HTML
+   inline (`<code>`, `<strong>`, …) escono via `wp_kses_post()`. Text domain
+   `system-markdown-alternate` caricato su `init` da `/languages`. La traduzione
+   `it_IT` riproduce il testo italiano storico del pannello. **In ambiente non ci
+   sono `gettext`/`wp-cli`**: `.pot`/`.po`/`.mo` si rigenerano con uno script PHP
+   (sorgente unica delle coppie EN→IT, compila il `.mo` a mano). Tenere allineati i
+   `msgid` ai `__()` (un mismatch rompe la traduzione).
 
 ## Spunti dal plugin di riferimento (ProgressPlanner/markdown-alternate)
 
