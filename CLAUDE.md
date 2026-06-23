@@ -93,6 +93,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Git**: si lavora **SEMPRE e SOLO su `main`** (unico sviluppatore; niente feature
   branch, niente PR salvo richiesta esplicita). Commit atomici, `git push -u origin main`.
   L'utente sincronizza il Mac manualmente: nessun automatismo locale.
+- **Sessioni web (Claude Code on the web)**: se l'harness obbliga a sviluppare su un
+  branch tecnico (`claude/*`), a fine lavoro **consolidare su `main`** (fast-forward se
+  la storia è lineare, altrimenti merge) e `git push origin main`. **Permesso permanente**
+  dell'utente: non serve richiederlo ogni volta. Resta il vincolo "solo `main`": il branch
+  tecnico è solo lo staging imposto dall'ambiente.
 
 ## Stack di produzione / ambiente di test
 
