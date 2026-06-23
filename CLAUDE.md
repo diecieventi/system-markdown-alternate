@@ -53,9 +53,9 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 ## Aperti / da fare (verso wordpress.org)
 
 - **`Contributors:`** reale in `readme.txt` (ora segnaposto `diecieventi`).
-- i18n: rigenerare `.pot`/`.po`/`.mo` quando si aggiungono/cambiano stringhe del
-  pannello (niente `wp-cli`/`gettext` in ambiente: vedi nota sotto). Eventuale
-  copertura i18n di altre stringhe future esposte all'utente.
+- i18n: dopo aver aggiunto/cambiato stringhe `__()`, rigenerare con
+  `bash bin/make-i18n.sh` e tradurre le nuove voci nel `.po`. Eventuale copertura
+  i18n di altre stringhe future esposte all'utente.
 - Eventuale **auto-yield** opt-in di `/llms.txt` (per ora solo avviso, niente
   disattivazione automatica).
 - Idea futura: contenuti `/llms.txt` più ricchi (spec Cloudflare / LLM signals).
@@ -212,15 +212,18 @@ Default esclusioni:
 6. **Cache**: chiave `sma_md_{post_id}`, valore con hash di validità
    (`post_modified_gmt|SMA_VERSION|salt`); `/llms.txt` cachato in `sma_llms_txt`.
    Tutto via `Cache` helper (object cache persistente o transient).
-7. **i18n**: sorgente **inglese** nei `__()`/`esc_html__()`; le stringhe con HTML
-   inline (`<code>`, `<strong>`, …) escono via `wp_kses_post()`. Text domain
-   `system-markdown-alternate` caricato su `init` da `/languages`. La traduzione
-   `it_IT` riproduce il testo italiano storico del pannello. **In ambiente non ci
-   sono `gettext`/`wp-cli`**: `.pot`/`.po`/`.mo`/`.l10n.php` si rigenerano con
-   `php bin/make-i18n.php` (sorgente unica delle coppie EN→IT, compila il `.mo` a
-   mano via `pack()` e scrive il `.l10n.php` con `var_export`). WP 6.5+ carica il
-   `.l10n.php` (più veloce, OPcache-friendly), `.mo` resta come fallback per
-   6.0–6.4. Tenere allineati i `msgid` ai `__()` (un mismatch rompe la traduzione).
+7. **i18n**: sorgente **inglese** nei `__()`/`esc_html__()` e nell'header
+   `Description:`; le stringhe con HTML inline (`<code>`, `<strong>`, …) escono via
+   `wp_kses_post()`. Text domain `system-markdown-alternate` caricato su `init` da
+   `/languages`. La **fonte di verità delle traduzioni è il `.po`** (editabile a
+   mano o con Poedit). Rigenerazione **canonica** con `bash bin/make-i18n.sh`:
+   `wp i18n make-pot` (estrae i `msgid` dal codice, niente tabelle da tenere in
+   sync) → `msgmerge` (allinea i `.po`) → `msgfmt` (`.mo`) → `wp i18n make-php`
+   (`.l10n.php`). WP 6.5+ carica il `.l10n.php` (più veloce, OPcache-friendly),
+   `.mo` resta come fallback per 6.0–6.4. I tool (`wp-cli` + `gettext`) **non sono
+   preinstallati** nel container effimero ma si installano in-sessione (vedi
+   l'header di `bin/make-i18n.sh`: `apt-get install -y gettext` + download del
+   `wp-cli.phar`).
 
 ## Spunti dal plugin di riferimento (ProgressPlanner/markdown-alternate)
 

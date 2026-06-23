@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       System Markdown Alternate
  * Plugin URI:        https://github.com/system4pc/system-markdown-alternate
- * Description:       Espone una versione Markdown pulita (leggibile da LLM, agenti e tool tecnici) degli articoli del blog tramite URL con suffisso .md.
+ * Description:       Exposes a clean Markdown version of your posts (readable by LLMs, agents and technical tools) by appending .md to the permalink.
  * Version:           0.13.0
  * Requires at least: 6.0
  * Requires PHP:      7.4

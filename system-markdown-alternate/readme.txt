@@ -112,12 +112,12 @@ the post is edited, when the plugin is updated, or when you save the settings.
 == Changelog ==
 
 = 0.13.0 =
-* Internationalization (i18n): all admin panel strings are now translatable
-  through the `system-markdown-alternate` text domain, with English as the
-  source language. A bundled `it_IT` translation keeps the panel in Italian.
-  The translation template (`.pot`) and the Italian translation (`.po`, `.mo`
-  and a `.l10n.php` preferred by WordPress 6.5+) ship in `/languages`, and the
-  text domain is loaded on `init`.
+* Internationalization (i18n): all admin panel strings (and the plugin header
+  description) are now translatable through the `system-markdown-alternate` text
+  domain, with English as the source language. A bundled `it_IT` translation
+  keeps the UI in Italian. The translation template (`.pot`) and the Italian
+  translation (`.po`, `.mo` and a `.l10n.php` preferred by WordPress 6.5+) ship
+  in `/languages`, and the text domain is loaded on `init`.
 
 = 0.12.1 =
 * Removed the on-demand HTTP "Check /llms.txt now" button and the loopback
