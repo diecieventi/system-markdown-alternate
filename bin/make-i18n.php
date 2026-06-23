@@ -1,9 +1,10 @@
 <?php
 /**
  * Genera i file di traduzione del plugin in system-markdown-alternate/languages/:
- *   - system-markdown-alternate.pot        (template, tutti i msgid)
- *   - system-markdown-alternate-it_IT.po   (traduzione italiana, leggibile)
- *   - system-markdown-alternate-it_IT.mo   (traduzione compilata, caricata da WP)
+ *   - system-markdown-alternate.pot            (template, tutti i msgid)
+ *   - system-markdown-alternate-it_IT.po       (traduzione italiana, leggibile)
+ *   - system-markdown-alternate-it_IT.mo       (compilata, WP 6.0–6.4)
+ *   - system-markdown-alternate-it_IT.l10n.php (compilata PHP, preferita da WP 6.5+)
  *
  * Perché uno script PHP e non wp-cli/xgettext/msgfmt: nell'ambiente di sviluppo
  * remoto quei tool NON sono disponibili. Lo script mantiene un'unica tabella di
@@ -64,7 +65,7 @@ $strings = array(
 	array( 'id' => 'ACF detected. The Subtitle and TL;DR fields are configured in the <strong>Markdown output</strong> section.', 'it' => 'ACF rilevato. I campi Sottotitolo e TL;DR si configurano nella sezione <strong>Output Markdown</strong>.' ),
 	array( 'id' => 'ACF not detected. The Subtitle and TL;DR fields are not available.', 'it' => 'ACF non rilevato. I campi Sottotitolo e TL;DR non sono disponibili.' ),
 	array( 'id' => 'A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin\'s) is ignored.', 'it' => 'Esiste un file fisico <code>llms.txt</code> nella root del sito: il web server lo serve <strong>prima</strong> di WordPress, quindi questo endpoint (e quello di altri plugin) viene ignorato.' ),
-	array( 'id' => 'Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin).', 'it' => 'Plugin SEO attivi che <em>potrebbero</em> gestire <code>/llms.txt</code>: <strong>%s</strong>. Se uno di loro lo genera già, tieni attivo un solo gestore (disattiva questo qui sotto, oppure la funzione llms.txt nell\'altro plugin).' ),
+	array( 'id' => 'Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin).', 'it' => 'Plugin SEO attivi che <em>potrebbero</em> gestire <code>/llms.txt</code>: <strong>%s</strong>. Se uno di loro lo genera già, tieni attivo un solo gestore (disattiva questo qui sotto, oppure la funzione llms.txt nell\'altro plugin).', 'note' => 'translators: %s is a comma-separated list of active SEO plugin names.' ),
 	array( 'id' => 'Possible /llms.txt conflict:', 'it' => 'Possibile conflitto su /llms.txt:' ),
 	array( 'id' => 'Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive.', 'it' => 'Tipi di contenuto esposti come <code>.md</code> e in <code>/llms.txt</code>. Nessuna selezione = plugin inattivo.' ),
 	array( 'id' => 'seconds', 'it' => 'secondi' ),
@@ -111,14 +112,22 @@ function sma_po_header( $version, $lang ) {
 // ── .pot ──────────────────────────────────────────────────────────────────────
 $pot = sma_po_header( $version, '' );
 foreach ( $strings as $s ) {
-	$pot .= "\nmsgid \"" . sma_po_escape( $s['id'] ) . "\"\nmsgstr \"\"\n";
+	$pot .= "\n";
+	if ( ! empty( $s['note'] ) ) {
+		$pot .= '#. ' . $s['note'] . "\n";
+	}
+	$pot .= 'msgid "' . sma_po_escape( $s['id'] ) . "\"\nmsgstr \"\"\n";
 }
 file_put_contents( "$out_dir/$domain.pot", $pot );
 
 // ── it_IT .po ─────────────────────────────────────────────────────────────────
 $po = sma_po_header( $version, 'it_IT' );
 foreach ( $strings as $s ) {
-	$po .= "\nmsgid \"" . sma_po_escape( $s['id'] ) . "\"\nmsgstr \"" . sma_po_escape( $s['it'] ) . "\"\n";
+	$po .= "\n";
+	if ( ! empty( $s['note'] ) ) {
+		$po .= '#. ' . $s['note'] . "\n";
+	}
+	$po .= 'msgid "' . sma_po_escape( $s['id'] ) . "\"\nmsgstr \"" . sma_po_escape( $s['it'] ) . "\"\n";
 }
 file_put_contents( "$out_dir/$domain-it_IT.po", $po );
 
@@ -173,4 +182,37 @@ $mo .= $o_table . $t_table . $ids_blob . $trans_blob;
 
 file_put_contents( "$out_dir/$domain-it_IT.mo", $mo );
 
-printf( "OK: %d stringhe; .mo con %d entry (header incluso) in %s\n", count( $strings ), $n, $out_dir );
+// ── it_IT .l10n.php (formato preferito da WP 6.5+) ────────────────────────────
+// Header in chiavi top-level (minuscole) + 'messages' = mappa msgid → traduzione.
+// Niente entry con msgid vuoto: gli header NON stanno dentro 'messages'.
+$messages = array();
+foreach ( $strings as $s ) {
+	if ( '' !== $s['it'] ) {
+		$messages[ $s['id'] ] = $s['it'];
+	}
+}
+
+$l10n = array(
+	'domain'                    => $domain,
+	'project-id-version'        => "System Markdown Alternate $version",
+	'language'                  => 'it_IT',
+	'plural-forms'              => 'nplurals=2; plural=(n != 1);',
+	'mime-version'              => '1.0',
+	'content-type'              => 'text/plain; charset=UTF-8',
+	'content-transfer-encoding' => '8bit',
+	'x-generator'               => 'bin/make-i18n.php',
+	'messages'                  => $messages,
+);
+
+$php  = "<?php\n";
+$php .= "/* This file is generated by bin/make-i18n.php. Do not edit it manually. */\n";
+$php .= 'return ' . var_export( $l10n, true ) . ";\n";
+file_put_contents( "$out_dir/$domain-it_IT.l10n.php", $php );
+
+printf(
+	"OK: %d stringhe; .mo con %d entry (header incluso), .l10n.php con %d messaggi in %s\n",
+	count( $strings ),
+	$n,
+	count( $messages ),
+	$out_dir
+);

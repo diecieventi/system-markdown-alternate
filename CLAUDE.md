@@ -41,7 +41,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   Markdown / llms.txt / Integrazioni / Avanzate; CSS caricato solo nella pagina.
 - **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
   text domain `system-markdown-alternate` caricato su `init` da `/languages`;
-  template `.pot` + traduzione `it_IT` (`.po`/`.mo`) bundlate.
+  template `.pot` + traduzione `it_IT` (`.po` + `.mo` + `.l10n.php`) bundlate.
+  WP 6.5+ preferisce il `.l10n.php` (più veloce), `.mo` come fallback per 6.0–6.4.
 - **ACF**: sottotitolo (testo) + TL;DR (WYSIWYG, passa dalla pipeline DOM) come
   preambolo tra H1 e corpo; nomi campo configurabili dal pannello.
 - **Shortcode** `[sma_md_url]` (+ `id="123"`).
@@ -138,7 +139,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
     ├── vendor/                         ← NON versionato, solo nello zip
     ├── assets/admin-settings.css       ← stile pannello (caricato solo lì)
-    ├── languages/                      ← .pot + traduzione it_IT (.po/.mo)
+    ├── languages/                      ← .pot + traduzione it_IT (.po/.mo/.l10n.php)
     └── src/
         ├── Plugin.php              ← bootstrap, registra hook e dipendenze
         ├── MarkdownController.php  ← intercetta .md + content negotiation, validazione, header, cache, output, alternate link, invalidazione
@@ -215,9 +216,11 @@ Default esclusioni:
    inline (`<code>`, `<strong>`, …) escono via `wp_kses_post()`. Text domain
    `system-markdown-alternate` caricato su `init` da `/languages`. La traduzione
    `it_IT` riproduce il testo italiano storico del pannello. **In ambiente non ci
-   sono `gettext`/`wp-cli`**: `.pot`/`.po`/`.mo` si rigenerano con uno script PHP
-   (sorgente unica delle coppie EN→IT, compila il `.mo` a mano). Tenere allineati i
-   `msgid` ai `__()` (un mismatch rompe la traduzione).
+   sono `gettext`/`wp-cli`**: `.pot`/`.po`/`.mo`/`.l10n.php` si rigenerano con
+   `php bin/make-i18n.php` (sorgente unica delle coppie EN→IT, compila il `.mo` a
+   mano via `pack()` e scrive il `.l10n.php` con `var_export`). WP 6.5+ carica il
+   `.l10n.php` (più veloce, OPcache-friendly), `.mo` resta come fallback per
+   6.0–6.4. Tenere allineati i `msgid` ai `__()` (un mismatch rompe la traduzione).
 
 ## Spunti dal plugin di riferimento (ProgressPlanner/markdown-alternate)
 

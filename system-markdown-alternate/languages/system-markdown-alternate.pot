@@ -2,8 +2,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: System Markdown Alternate 0.13.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-23 10:07+0000\n"
-"PO-Revision-Date: 2026-06-23 10:07+0000\n"
+"POT-Creation-Date: 2026-06-23 10:15+0000\n"
+"PO-Revision-Date: 2026-06-23 10:15+0000\n"
 "Last-Translator: Diecieventi Digital Marketing\n"
 "Language-Team: \n"
 "Language: \n"
@@ -112,6 +112,7 @@ msgstr ""
 msgid "A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin's) is ignored."
 msgstr ""
 
+#. translators: %s is a comma-separated list of active SEO plugin names.
 msgid "Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin)."
 msgstr ""
 
