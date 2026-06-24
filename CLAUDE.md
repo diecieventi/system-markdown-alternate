@@ -84,7 +84,13 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
 - **Author** del plugin = **"Diecieventi Digital Marketing"**. La ragione sociale
   **"System for PC" non deve MAI comparire** in artefatti (codice, commit, readme).
-  `system4pc` nell'URL/handle GitHub è OK.
+- **Casa GitHub**: l'org **`webdietrolequinte`**
+  (`github.com/webdietrolequinte/system-markdown-alternate`); `Plugin URI`,
+  `composer.json` e `Author URI` (→ `webdietrolequinte.it`) puntano lì. Il vecchio
+  handle `system4pc` è dismesso (resta solo come redirect GitHub).
+- **wordpress.org**: `Contributors:` va riempito con lo username reale **alla
+  pubblicazione** (lo username non è rinominabile; l'account `system4pc` esistente
+  può cambiare solo il Display Name, oppure se ne crea uno nuovo `webdietrolequinte`).
 - Non inserire l'**ID del modello** in commit, readme, codice o altri artefatti.
 - **Versionamento semver `0.x.y`**: minor per nuove feature, patch per fix. A ogni
   release: bump in `system-markdown-alternate.php` (header `Version:` **e**

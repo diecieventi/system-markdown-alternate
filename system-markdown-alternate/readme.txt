@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.13.0
+Stable tag: 0.13.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,6 +110,11 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.13.1 =
+* Repository moved to the Web Dietro le Quinte GitHub organization: updated the
+  Plugin URI and Composer package name accordingly, and added an Author URI.
+  No functional changes.
 
 = 0.13.0 =
 * Internationalization (i18n): all admin panel strings (and the plugin header

@@ -1,12 +1,13 @@
 <?php
 /**
  * Plugin Name:       System Markdown Alternate
- * Plugin URI:        https://github.com/system4pc/system-markdown-alternate
+ * Plugin URI:        https://github.com/webdietrolequinte/system-markdown-alternate
  * Description:       Exposes a clean Markdown version of your posts (readable by LLMs, agents and technical tools) by appending .md to the permalink.
- * Version:           0.13.0
+ * Version:           0.13.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Diecieventi Digital Marketing
+ * Author URI:        https://webdietrolequinte.it
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       system-markdown-alternate
@@ -19,7 +20,7 @@ namespace SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SMA_VERSION', '0.13.0' );
+define( 'SMA_VERSION', '0.13.1' );
 define( 'SMA_PLUGIN_FILE', __FILE__ );
 define( 'SMA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SMA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
