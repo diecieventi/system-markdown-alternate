@@ -90,14 +90,22 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   release: bump in `system-markdown-alternate.php` (header `Version:` **e**
   `SMA_VERSION`), aggiorna `Stable tag` + changelog in `readme.txt`, `bash bin/build.sh`,
   commit, push.
-- **Git**: si lavora **SEMPRE e SOLO su `main`** (unico sviluppatore; niente feature
-  branch, niente PR salvo richiesta esplicita). Commit atomici, `git push -u origin main`.
-  L'utente sincronizza il Mac manualmente: nessun automatismo locale.
-- **Sessioni web (Claude Code on the web)**: se l'harness obbliga a sviluppare su un
-  branch tecnico (`claude/*`), a fine lavoro **consolidare su `main`** (fast-forward se
-  la storia è lineare, altrimenti merge) e `git push origin main`. **Permesso permanente**
-  dell'utente: non serve richiederlo ogni volta. Resta il vincolo "solo `main`": il branch
-  tecnico è solo lo staging imposto dall'ambiente.
+- **Git — regola unica e inderogabile**: l'**unica destinazione del codice è `main`**.
+  Unico sviluppatore, niente feature branch, **MAI** aprire PR (nemmeno su richiesta
+  implicita), **MAI** lasciare il lavoro su un branch tecnico. Commit atomici. L'utente
+  sincronizza il Mac manualmente con un solo `git pull origin main`: nessun altro passaggio,
+  niente "push qui / merge là".
+- **Sessioni web (Claude Code on the web)** — procedura fissa, **permesso permanente**
+  dell'utente (non richiederlo mai): l'harness obbliga a partire su un branch tecnico
+  `claude/*`. Si committa lì normalmente, poi **a fine lavoro si atterra solo su `main`**:
+  1. `git fetch origin main`
+  2. `git checkout main && git merge --ff-only origin/main` (allinea il main locale)
+  3. `git merge --ff-only <branch-tecnico>` per portare i commit su `main`
+     (se il fast-forward non è possibile perché `main` è avanzato, fare `git rebase main`
+     sul branch tecnico e ripetere il ff-merge — la storia resta lineare, **niente merge commit**)
+  4. `git push origin main`
+  Il branch tecnico è **solo lo staging imposto dall'ambiente**: non si pusha, non genera PR,
+  non va mergiato via interfaccia. Si ignora dopo il consolidamento.
 
 ## Stack di produzione / ambiente di test
 
