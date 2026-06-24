@@ -46,8 +46,8 @@ Verso la pubblicazione su wordpress.org:
 
 - **i18n**: stringhe del pannello hardcoded (IT/EN miste) → `__()`/`esc_html__()` con text
   domain `system-markdown-alternate`. (Lavoro più grosso ancora aperto.)
-- **`Contributors:`** reale in `readme.txt` (ora segnaposto `diecieventi` — serve l'username
-  wordpress.org reale).
+- **`Contributors:`** in `readme.txt` impostato su `system4pc` (account wordpress.org di
+  pubblicazione). Fatto.
 - Eventuale **auto-yield opt-in** di `/llms.txt` (per ora solo avviso; vedi sotto).
 - Idea futura: contenuti `/llms.txt` più ricchi (spec Cloudflare / LLM signals).
 - **Test end-to-end** del codice v0.9.0+ su un sito reale (vedi limiti in "Stato attuale").
@@ -176,8 +176,8 @@ Non c'è un task di codice in sospeso assegnato. Il prossimo passo naturale vers
    `ConflictDetector`/sezioni) in `esc_html__()` / `__()` con text domain
    `system-markdown-alternate`, caricare il text domain, generare il `.pot`. È il lavoro più
    grosso rimasto.
-2. Quick win parallelo: sostituire `Contributors: diecieventi` in `readme.txt` con l'username
-   wordpress.org reale.
+2. Fatto: `Contributors:` in `readme.txt` impostato su `system4pc` (account wordpress.org
+   di pubblicazione).
 
 Prima di iniziare la i18n, decidere se l'UI di default resta in italiano (con traduzione EN) o
 viceversa — scelta che condiziona tutte le stringhe.
