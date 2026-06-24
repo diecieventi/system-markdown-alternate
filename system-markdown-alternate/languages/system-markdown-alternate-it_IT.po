@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: System Markdown Alternate 0.13.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/system-markdown-"
 "alternate\n"
-"POT-Creation-Date: 2026-06-23T11:53:46+00:00\n"
+"POT-Creation-Date: 2026-06-24T13:59:17+00:00\n"
 "PO-Revision-Date: 2026-06-23 10:15+0000\n"
 "Last-Translator: Diecieventi Digital Marketing\n"
 "Language-Team: \n"
@@ -21,7 +21,7 @@ msgstr ""
 
 #. Plugin URI of the plugin
 #: system-markdown-alternate.php
-msgid "https://github.com/system4pc/system-markdown-alternate"
+msgid "https://github.com/webdietrolequinte/system-markdown-alternate"
 msgstr ""
 
 #. Description of the plugin
@@ -30,12 +30,17 @@ msgid ""
 "Exposes a clean Markdown version of your posts (readable by LLMs, agents and "
 "technical tools) by appending .md to the permalink."
 msgstr ""
-"Espone una versione Markdown pulita (leggibile da LLM, agenti e tool tecnici) "
-"degli articoli del blog tramite URL con suffisso .md."
+"Espone una versione Markdown pulita (leggibile da LLM, agenti e tool "
+"tecnici) degli articoli del blog tramite URL con suffisso .md."
 
 #. Author of the plugin
 #: system-markdown-alternate.php
 msgid "Diecieventi Digital Marketing"
+msgstr ""
+
+#. Author URI of the plugin
+#: system-markdown-alternate.php
+msgid "https://webdietrolequinte.it"
 msgstr ""
 
 #: src/AdminSettings.php:68 src/AdminSettings.php:69
@@ -295,7 +300,7 @@ msgid ""
 msgstr ""
 "Default: <code>noindex, follow</code>. Lascia vuoto per non inviare l'header."
 
-#: system-markdown-alternate.php:38
+#: system-markdown-alternate.php:39
 msgid ""
 "System Markdown Alternate: missing dependencies. Run \"composer install\" in "
 "the plugin folder, or install the built zip (DIST folder)."
