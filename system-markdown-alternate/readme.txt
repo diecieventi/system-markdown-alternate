@@ -1,5 +1,5 @@
 === System Markdown Alternate ===
-Contributors: diecieventi
+Contributors: system4pc
 Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
