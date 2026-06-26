@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.13.1
+Stable tag: 0.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,7 +27,10 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 
 * **`.md` endpoint** for every supported, published, public post.
 * **Content negotiation**: the same Markdown is returned for `Accept: text/markdown`
-  or `?format=markdown` requests.
+  or `?format=markdown` requests. The `Accept` header is parsed with q-values, so
+  a client that prefers HTML (higher q) still gets HTML.
+* **`Vary: Accept`** on negotiable URLs, so caches and CDNs never mix the HTML and
+  Markdown representations of the same address.
 * **`rel="alternate"` link** in the `<head>` of supported singular content.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag`
   (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
@@ -53,6 +56,8 @@ The output is customizable through filters:
 
 * `sma_markdown_supported_post_types` — post types that expose `.md` (default: none).
 * `sma_markdown_robots_header` — the `X-Robots-Tag` value (`''` = no header).
+* `sma_markdown_strict_406` — return `406` when the client accepts neither HTML nor
+  Markdown (default `true`; `false` always serves the HTML default).
 * `sma_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
 * `sma_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
 * `sma_markdown_source_content` — raw source content before rendering.
@@ -110,6 +115,16 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.14.0 =
+* Content negotiation is now RFC 9110 compliant. The `Accept` header is parsed with
+  q-values: Markdown is served only when explicitly preferred, so clients that prefer
+  HTML (or send a wildcard such as `*/*`) keep getting HTML.
+* Negotiable URLs now send `Vary: Accept`, so caches/CDNs store the HTML and Markdown
+  representations separately instead of poisoning each other.
+* Optional `406 Not Acceptable` when the client accepts neither HTML nor Markdown
+  (new `sma_markdown_strict_406` filter, on by default; real browsers and crawlers are
+  never affected).
 
 = 0.13.1 =
 * Repository moved to the Web Dietro le Quinte GitHub organization: updated the

@@ -19,16 +19,20 @@ https://example.com/mio-articolo.md    → Markdown (front matter + contenuto)
 sul blog, restare semplice da verificare, produrre Markdown pulito, non creare
 rischi SEO, restare estendibile via filtri.
 
-## Stato attuale (v0.13.x)
+## Stato attuale (v0.14.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
 - **Endpoint `.md`** per i post type abilitati (post/page/CPT pubblici), pubblicati,
   pubblici, non protetti da password; **content negotiation** (`Accept: text/markdown`
-  o `?format=markdown`).
+  o `?format=markdown`). L'header `Accept` è **parsato con q-values** (`AcceptNegotiator`):
+  il Markdown si serve solo se preferito esplicitamente (q ≥ HTML); un Accept wildcard
+  o assente resta HTML. URL negoziabili → **`Vary: Accept`**; opzionale **`406`** se il
+  client non accetta né HTML né Markdown (filtro `sma_markdown_strict_406`, default on).
 - **Link `rel="alternate"`** nel `<head>` dei singolari supportati.
 - **Header HTTP**: `Content-Type: text/markdown; charset=utf-8`,
-  `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`.
+  `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
+  `Vary: Accept` (su URL negoziabili).
 - **Conversione pulita**: `render_block()` sui blocchi ripuliti (no related/CTA),
   esclusione blocchi/shortcode/classi, code block fenced, **URL assoluti risolti
   contro il permalink sorgente** (document-relative, `../`, root-relative).
@@ -161,7 +165,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     ├── languages/                      ← .pot + traduzione it_IT (.po/.mo/.l10n.php)
     └── src/
         ├── Plugin.php              ← bootstrap, registra hook e dipendenze
-        ├── MarkdownController.php  ← intercetta .md + content negotiation, validazione, header, cache, output, alternate link, invalidazione
+        ├── MarkdownController.php  ← intercetta .md + content negotiation (Vary/q-values/406), validazione, header, cache, output, alternate link, invalidazione
+        ├── AcceptNegotiator.php    ← parser header Accept con q-values (no deps WP)
         ├── ContentRenderer.php     ← sorgente → HTML pulito (shortcode/blocchi/DOM/URL assoluti); render_fragment()
         ├── BlockCleaner.php        ← parse/pulizia blocchi Gutenberg
         ├── ShortcodeCleaner.php    ← rimozione shortcode esclusi
@@ -194,6 +199,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 ```php
 apply_filters( 'sma_markdown_supported_post_types', array() );             // [] = plugin inattivo finché non si seleziona un tipo
 apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post );   // '' = non inviare header
+apply_filters( 'sma_markdown_strict_406', true );                          // false = niente 406, serve sempre l'HTML di default
 apply_filters( 'sma_markdown_canonical_url', get_permalink( $post ), $post ); // '' = non inviare Link rel=canonical
 apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabilitata
 apply_filters( 'sma_markdown_source_content', $post->post_content, $post );
@@ -221,8 +227,16 @@ Default esclusioni:
    si rileva il suffisso `.md`, si gestiscono query string e trailing slash
    (`/slug.md/` → 301 → `/slug.md`), si ricostruisce il permalink e si usa
    `url_to_postid()`. Approccio senza rewrite rules → niente `flush_rewrite_rules`.
-2. **Content negotiation**: oltre al suffisso `.md`, si serve il Markdown del post
-   già risolto da WP se la richiesta ha `Accept: text/markdown` o `?format=markdown`.
+2. **Content negotiation**: oltre al suffisso `.md`, sul permalink canonico si decide
+   la rappresentazione con `AcceptNegotiator` (RFC 9110). Markdown solo se preferito
+   esplicitamente: `?format=markdown` oppure `text/markdown` con q ≥ a quello effettivo
+   di `text/html` (match esatto > `text/*` > wildcard totale). Un Accept wildcard o
+   assente → HTML (così `Accept: */*` di curl/librerie resta HTML). Ogni contenuto
+   servibile dichiara **`Vary: Accept`** (sia rispondendo Markdown sia lasciando l'HTML
+   a WP), così cache/CDN non mischiano le due rappresentazioni. Se l'Accept non accetta
+   né HTML né Markdown si risponde **`406`** (filtro `sma_markdown_strict_406`, default
+   on; i client reali mandano sempre `text/html` o un wildcard, mai colpiti). Il suffisso
+   `.md` ignora invece l'Accept (l'URL è già la richiesta esplicita di Markdown).
 3. **Esclusione classi**: oltre ad `attrs.className`, passaggio su `DOMDocument`
    sull'HTML renderizzato per togliere elementi annidati con le classi escluse.
 4. **Rendering**: `render_block()` sui blocchi ripuliti (non `the_content` completo),

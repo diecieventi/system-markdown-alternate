@@ -32,8 +32,10 @@ class MarkdownController {
 	 * Hook: template_redirect (priorità 0).
 	 *
 	 * 1. Suffisso .md → risolve il post, valida, serve Markdown.
-	 * 2. Content negotiation (Accept: text/markdown o ?format=markdown) → serve
-	 *    il Markdown del post già risolto da WordPress.
+	 * 2. Content negotiation sul permalink canonico: lo stesso URL può rispondere
+	 *    HTML o Markdown a seconda dell'header `Accept` (con q-values) o di
+	 *    `?format=markdown`. Per ogni contenuto servibile l'URL dichiara
+	 *    `Vary: Accept` così cache e proxy non mischiano le due rappresentazioni.
 	 */
 	public function maybe_render_markdown(): void {
 		// --- Via suffisso .md ---
@@ -49,23 +51,28 @@ class MarkdownController {
 			exit;
 		}
 
-		// --- Via content negotiation ---
-		if ( ! $this->is_negotiation_request() ) {
-			return;
-		}
-
+		// --- Content negotiation sul permalink canonico ---
 		$queried = get_queried_object();
-		if ( ! $queried instanceof \WP_Post ) {
-			return;
+		if ( ! $queried instanceof \WP_Post || ! $this->is_servable( $queried ) ) {
+			return; // Non negoziabile: WP prosegue con il rendering normale.
 		}
 
-		if ( ! $this->is_servable( $queried ) ) {
-			return; // Non servibile: WP prosegue con il rendering normale.
+		// Questo URL varia in base ad Accept: dichiararlo a cache/CDN/proxy,
+		// sia che si risponda Markdown sia che si lasci l'HTML a WordPress.
+		$this->send_vary_header();
+
+		if ( $this->prefers_markdown() ) {
+			$this->send_headers( $queried );
+			echo $this->get_markdown( $queried ); // phpcs:ignore WordPress.Security.EscapeOutput
+			exit;
 		}
 
-		$this->send_headers( $queried );
-		echo $this->get_markdown( $queried ); // phpcs:ignore WordPress.Security.EscapeOutput
-		exit;
+		if ( $this->should_reject_unacceptable() ) {
+			$this->send_not_acceptable();
+			exit;
+		}
+
+		// Default: WordPress serve l'HTML (Vary: Accept già inviato).
 	}
 
 	/**
@@ -163,16 +170,99 @@ class MarkdownController {
 	}
 
 	/**
-	 * Controlla se la richiesta usa content negotiation (Accept header o query param).
+	 * True se il client preferisce esplicitamente il Markdown all'HTML.
+	 *
+	 * Il Markdown viene servito solo quando è richiesto in modo esplicito:
+	 * - `?format=markdown` (override applicativo), oppure
+	 * - `text/markdown` elencato nell'Accept con q ≥ a quello effettivo di
+	 *   `text/html`.
+	 *
+	 * Un Accept solo-wildcard (`text/*` o il wildcard totale) o assente NON
+	 * attiva il Markdown: il default del sito resta l'HTML. Così i client che
+	 * mandano un Accept wildcard (curl, molte librerie HTTP) ricevono l'HTML.
 	 */
-	private function is_negotiation_request(): bool {
-		// ?format=markdown
+	private function prefers_markdown(): bool {
 		if ( isset( $_GET['format'] ) && 'markdown' === $_GET['format'] ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return true;
 		}
-		// Accept: text/markdown
-		$accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
-		return false !== strpos( $accept, 'text/markdown' );
+
+		$accept = $this->accept_header();
+		if ( '' === $accept ) {
+			return false;
+		}
+
+		$md = AcceptNegotiator::explicit_quality( $accept, 'text/markdown' );
+		if ( null === $md || $md <= 0.0 ) {
+			return false;
+		}
+
+		return $md >= AcceptNegotiator::quality( $accept, 'text/html' );
+	}
+
+	/**
+	 * True se l'Accept del client non accetta NESSUNA rappresentazione offerta
+	 * (né HTML né Markdown, nessun wildcard) → candidato a `406 Not Acceptable`.
+	 *
+	 * I client reali (browser, crawler, agenti) mandano sempre `text/html` o un
+	 * wildcard e non vengono mai colpiti. Disattivabile via filtro
+	 * `sma_markdown_strict_406` (RFC 9110: il 406 è opzionale, è lecito servire
+	 * comunque la rappresentazione di default).
+	 */
+	private function should_reject_unacceptable(): bool {
+		/** Filtro: invia 406 quando l'Accept non accetta né HTML né Markdown. */
+		if ( ! apply_filters( 'sma_markdown_strict_406', true ) ) {
+			return false;
+		}
+
+		if ( isset( $_GET['format'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return false;
+		}
+
+		$accept = $this->accept_header();
+		if ( '' === $accept ) {
+			return false; // Nessun Accept = accetta qualsiasi cosa.
+		}
+
+		return AcceptNegotiator::quality( $accept, 'text/html' ) <= 0.0
+			&& AcceptNegotiator::quality( $accept, 'text/markdown' ) <= 0.0;
+	}
+
+	/**
+	 * Header `Accept` della richiesta, normalizzato (stringa vuota se assente).
+	 */
+	private function accept_header(): string {
+		return isset( $_SERVER['HTTP_ACCEPT'] ) ? trim( (string) wp_unslash( $_SERVER['HTTP_ACCEPT'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+	}
+
+	/**
+	 * Aggiunge `Vary: Accept` senza duplicare un Vary già presente che lo includa.
+	 */
+	private function send_vary_header(): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		foreach ( headers_list() as $sent ) {
+			if ( 0 === stripos( $sent, 'vary:' ) && false !== stripos( $sent, 'accept' ) ) {
+				return; // già coperto.
+			}
+		}
+
+		header( 'Vary: Accept', false );
+	}
+
+	/**
+	 * Risposta `406 Not Acceptable` minimale (l'URL offre solo HTML/Markdown).
+	 */
+	private function send_not_acceptable(): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		status_header( 406 );
+		nocache_headers();
+		header( 'Content-Type: text/plain; charset=utf-8' );
+		echo "406 Not Acceptable\n";
 	}
 
 	/**
