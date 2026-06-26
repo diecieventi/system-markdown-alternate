@@ -15,7 +15,9 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 ## Funzionalità
 
 - **Endpoint `.md`** per ogni post pubblicato, pubblico e non protetto dei tipi abilitati.
-- **Content negotiation**: stesso Markdown servito con `Accept: text/markdown` o `?format=markdown`.
+- **Content negotiation** (RFC 9110): stesso Markdown servito con `Accept: text/markdown` o `?format=markdown`. L'header `Accept` è parsato con q-values: il Markdown si serve solo se preferito esplicitamente, così un client che preferisce l'HTML (q più alto) o che manda un wildcard (`*/*`) riceve l'HTML.
+- **`Vary: Accept`** sugli URL negoziabili: cache e CDN non mischiano le rappresentazioni HTML e Markdown dello stesso indirizzo.
+- **`406 Not Acceptable`** opzionale se il client non accetta né HTML né Markdown (filtro `sma_markdown_strict_406`, default attivo; i client reali non sono mai colpiti).
 - **Link `rel="alternate"`** nell'`<head>` dei contenuti supportati.
 - **Header HTTP** corretti: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`), `Link: rel="canonical"` verso l'HTML.
 - **Conversione pulita**: blocchi Gutenberg renderizzati singolarmente (niente related/CTA iniettati), esclusione di blocchi/shortcode/classi CSS, code block fenced, URL assoluti.
