@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       System Markdown Alternate
- * Plugin URI:        https://github.com/webdietrolequinte/system-markdown-alternate
+ * Plugin URI:        https://github.com/diecieventi/system-markdown-alternate
  * Description:       Exposes a clean Markdown version of your posts (readable by LLMs, agents and technical tools) by appending .md to the permalink.
  * Version:           0.14.0
  * Requires at least: 6.0

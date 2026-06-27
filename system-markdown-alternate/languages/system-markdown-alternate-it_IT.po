@@ -21,7 +21,7 @@ msgstr ""
 
 #. Plugin URI of the plugin
 #: system-markdown-alternate.php
-msgid "https://github.com/webdietrolequinte/system-markdown-alternate"
+msgid "https://github.com/diecieventi/system-markdown-alternate"
 msgstr ""
 
 #. Description of the plugin
