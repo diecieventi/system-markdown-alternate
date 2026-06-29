@@ -1,10 +1,10 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: System Markdown Alternate 0.13.0\n"
+"Project-Id-Version: System Markdown Alternate 0.14.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/system-markdown-"
 "alternate\n"
-"POT-Creation-Date: 2026-06-24T13:59:17+00:00\n"
-"PO-Revision-Date: 2026-06-23 10:15+0000\n"
+"POT-Creation-Date: 2026-06-29T11:10:03+00:00\n"
+"PO-Revision-Date: 2026-06-29 11:10+0000\n"
 "Last-Translator: Diecieventi Digital Marketing\n"
 "Language-Team: \n"
 "Language: it_IT\n"
@@ -45,7 +45,7 @@ msgstr ""
 
 #: src/AdminSettings.php:68 src/AdminSettings.php:69
 msgid "Markdown Alternate"
-msgstr ""
+msgstr "Markdown Alternate"
 
 #: src/AdminSettings.php:113
 msgid "General"
@@ -135,7 +135,7 @@ msgstr "sì"
 
 #: src/AdminSettings.php:330
 msgid "no"
-msgstr ""
+msgstr "no"
 
 #: src/AdminSettings.php:332
 msgid "Enabled in the settings:"
@@ -143,7 +143,7 @@ msgstr "Abilitato nelle impostazioni:"
 
 #: src/AdminSettings.php:333
 msgid "URL:"
-msgstr ""
+msgstr "URL:"
 
 #: src/AdminSettings.php:340
 msgid ""
@@ -155,7 +155,7 @@ msgstr ""
 
 #: src/AdminSettings.php:343
 msgid "Shortcode"
-msgstr ""
+msgstr "Shortcode"
 
 #: src/AdminSettings.php:344
 msgid "<code>[sma_md_url]</code> — <code>.md</code> URL of the current post."
@@ -260,7 +260,7 @@ msgstr "Uno per riga. Lascia vuoto per usare i default interni."
 
 #: src/AdminSettings.php:454
 msgid "Default:"
-msgstr ""
+msgstr "Default:"
 
 #: src/AdminSettings.php:460
 msgid ""
