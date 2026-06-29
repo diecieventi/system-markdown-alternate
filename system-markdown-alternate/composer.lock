@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2a6895b5c4ce0334fe8fc0fafa15d25a",
+    "content-hash": "0b35106c03652513939991cd64b5b355",
     "packages": [
         {
             "name": "league/html-to-markdown",
