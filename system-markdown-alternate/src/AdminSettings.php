@@ -312,6 +312,12 @@ class AdminSettings {
 
 	public function render_general_intro(): void {
 		echo '<p class="sma-help">' . esc_html__( 'Main settings. Without at least one selected content type, the plugin stays inactive.', 'system-markdown-alternate' ) . '</p>';
+
+		if ( '' === (string) get_option( 'permalink_structure' ) ) {
+			echo '<div class="sma-status">';
+			echo wp_kses_post( __( 'Your site uses <strong>plain permalinks</strong>: the <code>.md</code> suffix is not available, so Markdown URLs fall back to <code>?format=markdown</code>. For clean <code>.md</code> URLs, choose a pretty permalink structure in Settings → Permalinks.', 'system-markdown-alternate' ) );
+			echo '</div>';
+		}
 	}
 
 	public function render_markdown_intro(): void {

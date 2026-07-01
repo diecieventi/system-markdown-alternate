@@ -53,23 +53,35 @@ class MetadataBuilder {
 
 	/**
 	 * URL della versione Markdown a partire dal permalink (gestendo il trailing slash).
+	 *
+	 * Con i permalink "Plain" (?p=123) il suffisso .md non è applicabile: si
+	 * ripiega su `?format=markdown`, servito dalla content negotiation sullo
+	 * stesso permalink. Idem se il permalink non ha un path utilizzabile.
 	 */
 	public static function markdown_url( \WP_Post $post ): string {
-		$permalink = get_permalink( $post );
-		$parts     = wp_parse_url( $permalink );
+		$permalink = (string) get_permalink( $post );
+
+		if ( '' === (string) get_option( 'permalink_structure' ) ) {
+			return add_query_arg( 'format', 'markdown', $permalink );
+		}
+
+		$parts = wp_parse_url( $permalink );
 
 		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
-			return untrailingslashit( (string) $permalink ) . '.md';
+			return untrailingslashit( $permalink ) . '.md';
+		}
+
+		$path = isset( $parts['path'] ) ? untrailingslashit( $parts['path'] ) : '';
+
+		// Permalink senza path o con query string: il suffisso .md non è
+		// applicabile, la negotiation con ?format=markdown funziona sempre.
+		if ( '' === $path || isset( $parts['query'] ) ) {
+			return add_query_arg( 'format', 'markdown', $permalink );
 		}
 
 		$scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'https';
 		$host   = $parts['host'];
 		$port   = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
-		$path   = isset( $parts['path'] ) ? untrailingslashit( $parts['path'] ) : '';
-
-		if ( '' === $path ) {
-			$path = '/index';
-		}
 
 		return $scheme . '://' . $host . $port . $path . '.md';
 	}
