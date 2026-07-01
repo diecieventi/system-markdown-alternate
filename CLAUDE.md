@@ -19,7 +19,7 @@ https://example.com/mio-articolo.md    → Markdown (front matter + contenuto)
 sul blog, restare semplice da verificare, produrre Markdown pulito, non creare
 rischi SEO, restare estendibile via filtri.
 
-## Stato attuale (v0.14.x)
+## Stato attuale (v0.15.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -36,6 +36,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Conversione pulita**: `render_block()` sui blocchi ripuliti (no related/CTA),
   esclusione blocchi/shortcode/classi, code block fenced, **URL assoluti risolti
   contro il permalink sorgente** (document-relative, `../`, root-relative).
+  I **synced pattern** (`core/block`) vengono espansi nel contenuto referenziato
+  e ripuliti con le stesse regole (guardia sui cicli di riferimenti).
+- **Permalink Plain** (`?p=123`): il suffisso `.md` non è applicabile, quindi
+  `markdown_url()` ripiega su `?format=markdown` (servito dalla negotiation);
+  avviso nel pannello. Eleggibilità dei post centralizzata in `PostSupport`.
 - **`/llms.txt`** (cachato, esclude i contenuti protetti) con toggle on/off.
 - **Cache Redis-aware** (`Cache` helper): object cache persistente se presente,
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
@@ -153,6 +158,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 ├── CLAUDE.md                     ← questo file
 ├── README.md                     ← panoramica repo (GitHub)
 ├── .gitignore
+├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← IL PLUGIN
@@ -163,12 +169,14 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     ├── vendor/                         ← NON versionato, solo nello zip
     ├── assets/admin-settings.css       ← stile pannello (caricato solo lì)
     ├── languages/                      ← .pot + traduzione it_IT (.po/.mo/.l10n.php)
+    ├── tests/run-tests.php             ← test della logica pura (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registra hook e dipendenze
         ├── MarkdownController.php  ← intercetta .md + content negotiation (Vary/q-values/406), validazione, header, cache, output, alternate link, invalidazione
         ├── AcceptNegotiator.php    ← parser header Accept con q-values (no deps WP)
         ├── ContentRenderer.php     ← sorgente → HTML pulito (shortcode/blocchi/DOM/URL assoluti); render_fragment()
-        ├── BlockCleaner.php        ← parse/pulizia blocchi Gutenberg
+        ├── BlockCleaner.php        ← parse/pulizia blocchi Gutenberg (espande i synced pattern)
+        ├── PostSupport.php         ← eleggibilità post (is_servable, tipi supportati)
         ├── ShortcodeCleaner.php    ← rimozione shortcode esclusi
         ├── MetadataBuilder.php     ← front matter YAML; markdown_url() (static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
@@ -192,7 +200,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - Escaping rigoroso dell'output (specie il **front matter YAML**: quotare stringhe,
   escape di `"` e `\`).
 - Tutti i filtri vanno **documentati con docblock**.
-- Dopo modifiche: `php -l` sui file toccati; per la logica pura, test PHP locali.
+- Dopo modifiche: `php -l` sui file toccati e `php system-markdown-alternate/tests/run-tests.php`
+  (test della logica pura, senza WP; la CI li esegue su PHP 7.4 e 8.4).
 
 ## Filtri (contratto pubblico)
 
@@ -213,6 +222,7 @@ apply_filters( 'sma_acf_field_keys', array(), $post );                     // ca
 apply_filters( 'sma_acf_subtitle_key', '', $post );                       // campo ACF sottotitolo ('' = off)
 apply_filters( 'sma_acf_tldr_key', '', $post );                          // campo ACF TL;DR ('' = off)
 apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max post per tipo in /llms.txt
+apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );               // TTL cache /llms.txt (0 = off)
 ```
 
 Default esclusioni:
