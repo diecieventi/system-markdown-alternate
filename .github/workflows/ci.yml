@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 7.4 = minimo supportato dal plugin, 8.4 = ambiente di produzione.
+        php: ['7.4', '8.4']
+    name: PHP ${{ matrix.php }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+
+      - name: Lint PHP
+        run: |
+          find system-markdown-alternate -name '*.php' -not -path '*/vendor/*' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+
+      - name: Run tests
+        run: php system-markdown-alternate/tests/run-tests.php
