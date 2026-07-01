@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.14.0
+Stable tag: 0.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -70,6 +70,7 @@ The output is customizable through filters:
 * `sma_acf_field_keys` — ACF fields appended to the source.
 * `sma_acf_subtitle_key` / `sma_acf_tldr_key` — ACF fields for subtitle/TL;DR.
 * `sma_llms_txt_max_posts` — max posts per type in `/llms.txt`.
+* `sma_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
 
 == Installation ==
 
@@ -115,6 +116,19 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.15.0 =
+* Synced patterns (reusable blocks) are now expanded and cleaned like regular
+  content: excluded blocks and shortcodes inside a pattern no longer leak into
+  the Markdown output.
+* Plain permalinks (`?p=123`) no longer produce broken `.md` URLs: Markdown URLs
+  fall back to `?format=markdown` (served via content negotiation) and the
+  settings page shows a notice.
+* New `sma_llms_txt_cache_ttl` filter for the `/llms.txt` cache TTL
+  (previously shared with `sma_markdown_cache_ttl`, which received a `null`
+  post and could break third-party callbacks).
+* Internal: post eligibility rules centralized in a single helper; local test
+  suite and CI added.
 
 = 0.14.0 =
 * Content negotiation is now RFC 9110 compliant. The `Accept` header is parsed with

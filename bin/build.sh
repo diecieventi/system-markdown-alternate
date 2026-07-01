@@ -27,6 +27,12 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/.git/*" \
 	-x "${PLUGIN_SLUG}/tests/*" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
+	-x "*/tests/*" \
+	-x "*/tests/" \
+	-x "*/.git/*" \
+	-x "*/.git/" \
+	-x "*/.github/*" \
+	-x "*/.github/" \
 	-x "*/.DS_Store"
 
 echo "==> Fatto: ${ZIP_PATH}"
