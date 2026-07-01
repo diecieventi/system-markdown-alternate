@@ -34,7 +34,7 @@ class Plugin {
 		);
 
 		$shortcodes = new ShortcodeCleaner();
-		$renderer   = new ContentRenderer( new BlockCleaner(), $shortcodes );
+		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
 		$converter  = new MarkdownConverter();
 
 		$this->controller = new MarkdownController(
