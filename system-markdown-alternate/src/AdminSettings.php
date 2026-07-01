@@ -225,6 +225,15 @@ class AdminSettings {
 		);
 
 		add_filter(
+			'sma_llms_txt_cache_ttl',
+			function ( $default ) {
+				$v = get_option( 'sma_cache_ttl' );
+				return false !== $v ? (int) $v : $default;
+			},
+			20
+		);
+
+		add_filter(
 			'sma_markdown_excluded_shortcodes',
 			function ( $defaults ) {
 				return $this->option_to_list( 'sma_excluded_shortcodes', $defaults );

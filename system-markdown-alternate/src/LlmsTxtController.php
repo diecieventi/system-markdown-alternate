@@ -60,8 +60,8 @@ class LlmsTxtController {
 			header( 'X-Robots-Tag: noindex, follow' );
 		}
 
-		/** Filtro: TTL cache in secondi. 0 disabilita la cache. */
-		$ttl     = (int) apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, null );
+		/** Filtro: TTL cache di /llms.txt in secondi. 0 disabilita la cache. */
+		$ttl     = (int) apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );
 		$version = md5( SMA_VERSION . '|' . (string) get_option( 'sma_cache_salt', '0' ) );
 
 		if ( $ttl > 0 ) {
