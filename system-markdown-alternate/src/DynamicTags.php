@@ -75,15 +75,7 @@ class DynamicTags {
 
 		$post = get_post( $id );
 
-		if ( ! $post instanceof \WP_Post ) {
-			return '';
-		}
-
-		$types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
-
-		if ( ! in_array( $post->post_type, $types, true )
-			|| 'publish' !== $post->post_status
-			|| post_password_required( $post ) ) {
+		if ( ! $post instanceof \WP_Post || ! PostSupport::is_servable( $post ) ) {
 			return '';
 		}
 

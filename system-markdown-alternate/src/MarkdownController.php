@@ -79,7 +79,7 @@ class MarkdownController {
 	 * Hook: wp_head. Stampa il link alternate solo sui post/CPT supportati pubblici.
 	 */
 	public function print_alternate_link(): void {
-		$types = $this->supported_post_types();
+		$types = PostSupport::supported_post_types();
 
 		// Guard esplicito: is_singular([]) in WP è true per QUALSIASI singular.
 		// Senza tipi selezionati il plugin è inattivo e non deve stampare il link.
@@ -283,38 +283,10 @@ class MarkdownController {
 	// ─── Validazione ──────────────────────────────────────────────────────────
 
 	/**
-	 * Verifica che il post sia servibile come Markdown.
+	 * Verifica che il post sia servibile come Markdown (vedi PostSupport).
 	 */
 	private function is_servable( \WP_Post $post ): bool {
-		if ( ! in_array( $post->post_type, $this->supported_post_types(), true ) ) {
-			return false;
-		}
-
-		if ( 'publish' !== $post->post_status ) {
-			return false;
-		}
-
-		if ( post_password_required( $post ) ) {
-			return false;
-		}
-
-		return true;
-	}
-
-	/**
-	 * Post type supportati (filtrabile).
-	 *
-	 * @return string[]
-	 */
-	private function supported_post_types(): array {
-		static $types = null;
-
-		if ( null === $types ) {
-			/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
-			$types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
-		}
-
-		return $types;
+		return PostSupport::is_servable( $post );
 	}
 
 	/**

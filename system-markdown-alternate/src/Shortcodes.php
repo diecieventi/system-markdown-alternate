@@ -32,7 +32,7 @@ class Shortcodes {
 
 		$post = $this->resolve_post( (int) $atts['id'] );
 
-		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
+		if ( ! $post instanceof \WP_Post || ! PostSupport::is_servable( $post ) ) {
 			return '';
 		}
 
@@ -55,17 +55,5 @@ class Shortcodes {
 
 		$post = get_post();
 		return $post instanceof \WP_Post ? $post : null;
-	}
-
-	/**
-	 * Verifica che il post esponga davvero un .md (tipo supportato, pubblicato,
-	 * non protetto da password).
-	 */
-	private function is_servable( \WP_Post $post ): bool {
-		$types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
-
-		return in_array( $post->post_type, $types, true )
-			&& 'publish' === $post->post_status
-			&& ! post_password_required( $post );
 	}
 }
