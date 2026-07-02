@@ -64,8 +64,6 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - i18n: dopo aver aggiunto/cambiato stringhe `__()`, rigenerare con
   `bash bin/make-i18n.sh` e tradurre le nuove voci nel `.po`. Eventuale copertura
   i18n di altre stringhe future esposte all'utente.
-- Eventuale **auto-yield** opt-in di `/llms.txt` (per ora solo avviso, niente
-  disattivazione automatica).
 - Idea futura: contenuti `/llms.txt` più ricchi (spec Cloudflare / LLM signals).
 
 ## Decisioni di prodotto (durevoli)
@@ -84,6 +82,10 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   SEO attivi via costante/classe + file fisico nella root). Niente lettura di opzioni
   interne di terzi, niente check HTTP loopback (rimosso: inaffidabile dietro WAF).
   È solo un avviso informativo, decide l'utente.
+- **NIENTE auto-yield di `/llms.txt`** (deciso, non riproporre): il plugin non si
+  disattiva MAI da solo, nemmeno come opzione. L'attivazione/disattivazione è sempre
+  e solo una scelta manuale dell'utente dal pannello; se ci sono altri gestori attivi
+  sotto, è responsabilità dell'utente. L'avviso di conflitto resta puramente informativo.
 - **Description** front matter: Rank Math (`rank_math_description`) → scartata solo
   se contiene un placeholder `%variabile%` non risolto → fallback excerpt → testo
   troncato (~200 char). Front matter include `featured_image` (+ `featured_image_alt`).
