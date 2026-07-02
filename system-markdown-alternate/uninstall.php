@@ -22,6 +22,9 @@ $sma_options = array(
 	'sma_acf_subtitle_key',
 	'sma_acf_tldr_key',
 	'sma_llms_txt_enabled',
+	'sma_llms_txt_enriched',
+	'sma_llms_txt_summary',
+	'sma_llms_txt_key_content',
 	'sma_cache_salt',
 	'sma_dynamic_tag_enabled', // opzione legacy (toggle Dynamic Tag rimosso in 0.8.0).
 );

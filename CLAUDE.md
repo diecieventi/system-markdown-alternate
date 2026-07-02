@@ -19,7 +19,7 @@ https://example.com/mio-articolo.md    → Markdown (front matter + contenuto)
 sul blog, restare semplice da verificare, produrre Markdown pulito, non creare
 rischi SEO, restare estendibile via filtri.
 
-## Stato attuale (v0.15.x)
+## Stato attuale (v0.16.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -42,6 +42,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   `markdown_url()` ripiega su `?format=markdown` (servito dalla negotiation);
   avviso nel pannello. Eleggibilità dei post centralizzata in `PostSupport`.
 - **`/llms.txt`** (cachato, esclude i contenuti protetti) con toggle on/off.
+  **Modalità arricchita** opzionale (toggle `sma_llms_txt_enriched`, default off;
+  off = output base identico): sintesi del sito, sezione "Key content" curata
+  (ID/URL dal pannello), description per voce (catena Rank Math → excerpt →
+  troncato), overflow oltre i più recenti in `## Optional` (keyword spec, non
+  tradotta), filtro `sma_llms_txt_footer` come gancio per policy/LLM signals.
 - **Cache Redis-aware** (`Cache` helper): object cache persistente se presente,
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
   `SMA_VERSION`; bump del salt al salvataggio opzioni; pulizia su `save_post`/
@@ -64,7 +69,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - i18n: dopo aver aggiunto/cambiato stringhe `__()`, rigenerare con
   `bash bin/make-i18n.sh` e tradurre le nuove voci nel `.po`. Eventuale copertura
   i18n di altre stringhe future esposte all'utente.
-- Idea futura: contenuti `/llms.txt` più ricchi (spec Cloudflare / LLM signals).
+- Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
+  (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
 
 ## Decisioni di prodotto (durevoli)
 
@@ -225,6 +231,11 @@ apply_filters( 'sma_acf_subtitle_key', '', $post );                       // cam
 apply_filters( 'sma_acf_tldr_key', '', $post );                          // campo ACF TL;DR ('' = off)
 apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max post per tipo in /llms.txt
 apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );               // TTL cache /llms.txt (0 = off)
+apply_filters( 'sma_llms_txt_enriched', false );                         // true = output /llms.txt arricchito
+apply_filters( 'sma_llms_txt_summary', '' );                             // sintesi del sito (solo arricchito)
+apply_filters( 'sma_llms_txt_key_content', array() );                    // contenuti in evidenza: ID o URL (solo arricchito)
+apply_filters( 'sma_llms_txt_main_posts', 25, $post_type );              // post per tipo nella sezione principale (solo arricchito)
+apply_filters( 'sma_llms_txt_footer', '' );                              // blocco libero in coda (solo arricchito)
 ```
 
 Default esclusioni:

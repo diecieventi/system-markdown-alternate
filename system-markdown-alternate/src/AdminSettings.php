@@ -100,6 +100,9 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sma_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
 		register_setting( self::OPTION_GROUP, 'sma_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enriched', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
+		register_setting( self::OPTION_GROUP, 'sma_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 
 		// Opzioni ACF: registrate SOLO se ACF è attivo. Così, quando ACF è spento e
 		// i suoi campi non sono nel form, il salvataggio NON le azzera (options.php
@@ -130,6 +133,9 @@ class AdminSettings {
 		// ── llms.txt ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
 		add_settings_field( 'sma_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_field( 'sma_llms_txt_enriched', __( 'Enriched output', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enriched' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_field( 'sma_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_field( 'sma_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sma_llmstxt' );
 
 		// ── Integrazioni (solo informativa) ──────────────────────────────────────
 		add_settings_section( 'sma_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
@@ -229,6 +235,32 @@ class AdminSettings {
 			function ( $default ) {
 				$v = get_option( 'sma_cache_ttl' );
 				return false !== $v ? (int) $v : $default;
+			},
+			20
+		);
+
+		add_filter(
+			'sma_llms_txt_enriched',
+			function ( $default ) {
+				$v = get_option( 'sma_llms_txt_enriched' );
+				return false !== $v ? '1' === $v : $default;
+			},
+			20
+		);
+
+		add_filter(
+			'sma_llms_txt_summary',
+			function ( $default ) {
+				$v = get_option( 'sma_llms_txt_summary' );
+				return ( false !== $v && '' !== trim( (string) $v ) ) ? (string) $v : $default;
+			},
+			20
+		);
+
+		add_filter(
+			'sma_llms_txt_key_content',
+			function ( $defaults ) {
+				return $this->option_to_list( 'sma_llms_txt_key_content', (array) $defaults );
 			},
 			20
 		);
@@ -489,6 +521,24 @@ class AdminSettings {
 		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
 		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_llms_txt_enriched(): void {
+		$v = get_option( 'sma_llms_txt_enriched', '0' ); // disattivato per default
+		echo '<label><input type="checkbox" name="sma_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_llms_txt_summary(): void {
+		$v = (string) get_option( 'sma_llms_txt_summary', '' );
+		echo '<textarea name="sma_llms_txt_summary" rows="3" class="large-text sma-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sma-help">' . esc_html__( 'One short paragraph describing the site, shown after the tagline. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
+	}
+
+	public function field_llms_txt_key_content(): void {
+		$v = (string) get_option( 'sma_llms_txt_key_content', '' );
+		echo '<textarea name="sma_llms_txt_key_content" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sma-help">' . esc_html__( 'Featured content: one post ID or URL per line. Listed first, before the automatic sections. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_robots_header(): void {

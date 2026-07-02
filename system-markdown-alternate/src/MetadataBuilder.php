@@ -147,8 +147,10 @@ class MetadataBuilder {
 
 	/**
 	 * Description in ordine: Rank Math → excerpt → testo del contenuto troncato.
+	 *
+	 * Pubblica: riusata da LlmsTxtController per le voci dell'indice arricchito.
 	 */
-	private function description( \WP_Post $post ): string {
+	public function description( \WP_Post $post ): string {
 		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );
 
 		// Scarta solo se contiene un placeholder Rank Math non risolto (%var% o

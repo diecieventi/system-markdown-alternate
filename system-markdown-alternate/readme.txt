@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.15.0
+Stable tag: 0.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,7 +38,9 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code
   blocks become fenced blocks, URLs are made absolute.
 * **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI
-  agents.
+  agents. An optional **enriched mode** (off by default) adds a site summary, a
+  curated "Key content" section, a description for each entry and an `Optional`
+  section for older posts.
 * **Transient cache** with proactive invalidation on post edit, plugin update
   and settings change.
 * **Admin panel** to choose which post types are exposed and to tune cache,
@@ -71,6 +73,12 @@ The output is customizable through filters:
 * `sma_acf_subtitle_key` / `sma_acf_tldr_key` — ACF fields for subtitle/TL;DR.
 * `sma_llms_txt_max_posts` — max posts per type in `/llms.txt`.
 * `sma_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
+* `sma_llms_txt_enriched` — enable the enriched `/llms.txt` output (default `false`).
+* `sma_llms_txt_summary` — site summary paragraph (enriched mode only).
+* `sma_llms_txt_key_content` — featured content, post IDs or URLs (enriched mode only).
+* `sma_llms_txt_main_posts` — posts per type in the main sections before the
+  overflow moves to `Optional` (enriched mode only, default 25).
+* `sma_llms_txt_footer` — free-form block appended at the end (enriched mode only).
 
 == Installation ==
 
@@ -116,6 +124,14 @@ Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
+
+= 0.16.0 =
+* Optional enriched `/llms.txt` output (new toggle, off by default — when off the
+  output is unchanged): site summary paragraph, curated "Key content" section
+  (post IDs or URLs from the settings page), a description for each entry (Rank
+  Math meta → excerpt → trimmed text, same chain as the front matter), overflow
+  beyond the most recent posts moved to an `Optional` section, and a
+  `sma_llms_txt_footer` filter as a hook for future LLM signals.
 
 = 0.15.0 =
 * Synced patterns (reusable blocks) are now expanded and cleaned like regular

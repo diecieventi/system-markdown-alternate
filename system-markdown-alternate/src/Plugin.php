@@ -36,12 +36,9 @@ class Plugin {
 		$shortcodes = new ShortcodeCleaner();
 		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
 		$converter  = new MarkdownConverter();
+		$metadata   = new MetadataBuilder( $shortcodes );
 
-		$this->controller = new MarkdownController(
-			$renderer,
-			$converter,
-			new MetadataBuilder( $shortcodes )
-		);
+		$this->controller = new MarkdownController( $renderer, $converter, $metadata );
 
 		// Priorità 0: intercettiamo le richieste *.md prima del caricamento del template.
 		add_action( 'template_redirect', array( $this->controller, 'maybe_render_markdown' ), 0 );
@@ -54,7 +51,7 @@ class Plugin {
 		add_action( 'deleted_post', array( $this->controller, 'invalidate_cache' ) );
 
 		// Endpoint /llms.txt.
-		$llms = new LlmsTxtController();
+		$llms = new LlmsTxtController( $metadata );
 		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );
 
 		// Integrazione ACF (opt-in tramite filtri sma_acf_field_keys, sma_acf_subtitle_key, sma_acf_tldr_key).
