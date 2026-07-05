@@ -8,14 +8,17 @@ plugin: they live in the `/assets` folder of the WP.org SVN, separate from
 |------|-----|
 | `icon-128x128.png` / `icon-256x256.png` | Icon (plugin grid, search results) |
 | `banner-772x250.png` / `banner-1544x500.png` | Banner at the top of the listing (1x / retina) |
+| `screenshot-1.jpg` … `screenshot-4.jpg` | Screenshots (1200×959); numbering matches the `== Screenshots ==` captions in `readme.txt` |
 
-**Screenshots are still missing** (`screenshot-1.png`, …): they must be captured
-from the plugin's real UI and their numbering must match the captions already
-listed in the `== Screenshots ==` section of `readme.txt`:
+The four screenshots are a top-to-bottom tour of the settings page (General,
+Markdown output, `/llms.txt`, Integrations, Advanced). WP.org matches
+`screenshot-N.{png,jpg}` to caption N in `readme.txt`, so keep the numbering in
+sync if you add or reorder them.
 
-1. `screenshot-1.png` — the settings page (content types, cache, exclusions).
-2. `screenshot-2.png` — a post served as clean Markdown at the `.md` URL.
-3. `screenshot-3.png` — the `/llms.txt` output / enriched mode settings.
+> Optional improvement: a shot of the actual output (a page served as `.md`,
+> and/or the `/llms.txt` response) tends to sell the plugin better than the
+> settings alone — add them as `screenshot-5`/`-6` with matching captions when
+> convenient.
 
 ## How they reach wordpress.org
 

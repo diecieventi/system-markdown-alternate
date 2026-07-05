@@ -125,9 +125,10 @@ the post is edited, when the plugin is updated, or when you save the settings.
 
 == Screenshots ==
 
-1. The settings page: pick the content types to expose, tune the cache and the exclusions.
-2. A post served as clean Markdown: YAML front matter plus the converted body at the `.md` URL.
-3. The `/llms.txt` index of your content, with the optional enriched mode settings.
+1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
+2. Settings — exclusion defaults (blocks and CSS classes) and the ACF availability notice, above the `/llms.txt` section.
+3. Settings — the `/llms.txt` controls: enable the endpoint and, optionally, the enriched output (site summary and curated key content).
+4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
 
