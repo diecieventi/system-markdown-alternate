@@ -1,26 +1,30 @@
-# Assets per la scheda wordpress.org
+# wordpress.org listing assets
 
-Immagini della **pagina del plugin** su wordpress.org. **Non** fanno parte del
-plugin: vivono nella cartella `/assets` dell'SVN di WP.org, separata da `/trunk`
-e `/tags`, quindi **non** vengono incluse nello zip distribuibile.
+Images for the **plugin page** on wordpress.org. They are **not** part of the
+plugin: they live in the `/assets` folder of the WP.org SVN, separate from
+`/trunk` and `/tags`, so they are **not** included in the distributable zip.
 
-| File | Uso |
+| File | Use |
 |------|-----|
-| `icon-128x128.png` / `icon-256x256.png` | Icona (griglia plugin, risultati di ricerca) |
-| `banner-772x250.png` / `banner-1544x500.png` | Banner in cima alla scheda (1x / retina) |
+| `icon-128x128.png` / `icon-256x256.png` | Icon (plugin grid, search results) |
+| `banner-772x250.png` / `banner-1544x500.png` | Banner at the top of the listing (1x / retina) |
 
-Mancano gli **screenshot** (`screenshot-1.png`, …): vanno catturati dalla UI reale
-del plugin (pannello impostazioni, esempio di output `.md`) e descritti nella
-sezione `== Screenshots ==` di `readme.txt`.
+**Screenshots are still missing** (`screenshot-1.png`, …): they must be captured
+from the plugin's real UI and their numbering must match the captions already
+listed in the `== Screenshots ==` section of `readme.txt`:
 
-## Come finiscono su wordpress.org
+1. `screenshot-1.png` — the settings page (content types, cache, exclusions).
+2. `screenshot-2.png` — a post served as clean Markdown at the `.md` URL.
+3. `screenshot-3.png` — the `/llms.txt` output / enriched mode settings.
 
-- **Manuale**: copiare i file in `svn/assets/` e `svn commit`.
-- **Automatico**: l'action `10up/action-wordpress-plugin-asset-update` legge
-  proprio questa cartella `.wordpress-org/` e la sincronizza con `svn/assets`.
+## How they reach wordpress.org
 
-## Rigenerazione
+- **Manual**: copy the files into `svn/assets/` and `svn commit`.
+- **Automated**: the `10up/action-wordpress-plugin-asset-update` action reads
+  this very `.wordpress-org/` folder and syncs it with `svn/assets`.
 
-Icona e banner sono generati programmaticamente (Pillow), palette allineata al
-pannello admin (ink `#1d2327`, blu WP `#2271b1`). Sono un punto di partenza
-pulito, sostituibili con una grafica curata quando vorrai.
+## Regeneration
+
+Icon and banners are generated programmatically (Pillow), palette aligned with
+the admin panel (ink `#1d2327`, WP blue `#2271b1`). They are a clean starting
+point, replaceable with custom artwork whenever desired.

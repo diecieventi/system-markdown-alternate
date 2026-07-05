@@ -123,6 +123,12 @@ link.
 Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
+== Screenshots ==
+
+1. The settings page: pick the content types to expose, tune the cache and the exclusions.
+2. A post served as clean Markdown: YAML front matter plus the converted body at the `.md` URL.
+3. The `/llms.txt` index of your content, with the optional enriched mode settings.
+
 == Changelog ==
 
 = 0.16.0 =
