@@ -34,7 +34,7 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 ```
 .
 ├── README.md                     ← questo file (GitHub)
-├── CLAUDE.md                     ← guida operativa per lo sviluppo
+├── AGENTS.md                     ← guida operativa (agnostica; CLAUDE.md è un symlink)
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
