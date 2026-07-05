@@ -111,6 +111,9 @@ The v1 scope is done and widely exceeded. Implemented:
   i18n coverage of future user-facing strings.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
+- **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
+  UI (before the tabs/cards restyle). Recapture them and update the
+  `== Screenshots ==` captions in `readme.txt` whenever convenient.
 
 ## Product decisions (durable)
 

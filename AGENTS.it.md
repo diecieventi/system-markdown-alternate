@@ -103,6 +103,9 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   i18n di altre stringhe future esposte all'utente.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
+- **`.wordpress-org/screenshot-*.jpg` sono superati**: mostrano il pannello
+  admin pre-0.17.0 (prima del restyling tab/card). Da ricatturare aggiornando
+  anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo.
 
 ## Decisioni di prodotto (durevoli)
 
