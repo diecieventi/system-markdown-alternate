@@ -49,7 +49,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Current state (v0.16.x)
+## Current state (v0.17.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -84,7 +84,15 @@ The v1 scope is done and widely exceeded. Implemented:
   `SMA_VERSION`; salt bump on settings save; cleanup on `save_post`/
   `deleted_post` (skips revisions/autosaves).
 - **Admin panel** (single page, Settings API): General / Markdown output /
-  llms.txt / Integrations / Advanced sections; CSS loaded only on that page.
+  llms.txt / Integrations / Advanced. Restyled UI (presentation only): page
+  header + single Save button, native WP **tabs**, section **cards**, two-column
+  layout with an at-a-glance `/llms.txt` status/conflict aside, built-in defaults
+  in a `<details>` disclosure. `render_page()` iterates the registered Settings
+  API sections (`$wp_settings_sections`) and wraps each in a card+tab-panel;
+  **all fields stay in the single form** (tabs show/hide client-side), so saving,
+  sanitization and nonces are unchanged. Admin-scoped CSS + a tiny dependency-free
+  vanilla-JS enhancement (`assets/admin-settings.js`); usable without JS (all
+  panels visible). Assets loaded only on the settings screen.
 - **i18n**: panel strings in `__()`/`esc_html__()` (**English** source), text
   domain `system-markdown-alternate` loaded on `init` from `/languages`;
   `.pot` template + bundled `it_IT` translation (`.po` + `.mo` + `.l10n.php`).
@@ -225,6 +233,7 @@ running code at the WP level.
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
     ├── vendor/                         ← NOT versioned, zip only
     ├── assets/admin-settings.css       ← panel style (loaded only there)
+    ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
     ├── languages/                      ← .pot + it_IT translation (.po/.mo/.l10n.php)
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/

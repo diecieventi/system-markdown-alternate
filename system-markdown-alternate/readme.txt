@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.16.0
+Stable tag: 0.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -131,6 +131,15 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.17.0 =
+* Admin settings page restyle (presentation only — no change to options, saving,
+  sanitization, security or Markdown output): a page header with a single Save
+  button, native WordPress tabs (General, Markdown output, llms.txt, Integrations,
+  Advanced), section cards, a two-column layout with an at-a-glance `/llms.txt`
+  status/conflict panel, and the built-in exclusion defaults collapsed into a
+  `details` disclosure. Fully responsive, admin-scoped CSS, and a tiny dependency-
+  free vanilla-JS enhancement for the tabs (the page stays usable without JS).
 
 = 0.16.0 =
 * Optional enriched `/llms.txt` output (new toggle, off by default — when off the

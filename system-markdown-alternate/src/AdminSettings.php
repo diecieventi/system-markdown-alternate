@@ -89,6 +89,16 @@ class AdminSettings {
 			array(),
 			SMA_VERSION
 		);
+
+		// Tab client-side (progressive enhancement): vanilla JS, nessuna dipendenza.
+		// Senza JS tutti i pannelli restano visibili e i campi restano nel form.
+		wp_enqueue_script(
+			'sma-admin-settings',
+			SMA_PLUGIN_URL . 'assets/admin-settings.js',
+			array(),
+			SMA_VERSION,
+			true
+		);
 	}
 
 	public function register_settings(): void {
@@ -371,16 +381,30 @@ class AdminSettings {
 
 	public function render_llmstxt_intro(): void {
 		echo '<p class="sma-help">' . wp_kses_post( __( 'The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content.', 'system-markdown-alternate' ) ) . '</p>';
+	}
 
+	/**
+	 * Quick info nell'aside: stato dell'endpoint /llms.txt, URL e conflitti.
+	 * Solo presentazione: usa gli stessi dati già calcolati dal plugin.
+	 */
+	public function render_llmstxt_aside(): void {
 		$enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
 		$url     = home_url( '/llms.txt' );
-		$state   = $enabled ? __( 'yes', 'system-markdown-alternate' ) : __( 'no', 'system-markdown-alternate' );
-		echo '<div class="sma-status">';
-		echo esc_html__( 'Enabled in the settings:', 'system-markdown-alternate' ) . ' <strong>' . esc_html( $state ) . '</strong><br>';
-		echo esc_html__( 'URL:', 'system-markdown-alternate' ) . ' <a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a>';
-		echo '</div>';
+
+		echo '<section class="sma-card sma-aside-card">';
+		echo '<header class="sma-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
+		echo '<div class="sma-card__body">';
+
+		echo '<p class="sma-endpoint-state ' . ( $enabled ? 'is-on' : 'is-off' ) . '">';
+		echo '<span class="sma-dot" aria-hidden="true"></span>';
+		echo esc_html( $enabled ? __( 'Enabled', 'system-markdown-alternate' ) : __( 'Disabled', 'system-markdown-alternate' ) );
+		echo '</p>';
+
+		echo '<p class="sma-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
 
 		$this->render_conflict_warning();
+
+		echo '</div></section>';
 	}
 
 	public function render_integrations_intro(): void {
@@ -498,7 +522,9 @@ class AdminSettings {
 		$v = (string) get_option( $option, '' );
 		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
 		echo '<p class="description sma-help">' . esc_html__( 'One per line. Leave empty to use the built-in defaults.', 'system-markdown-alternate' ) . '</p>';
-		echo '<pre class="sma-defaults">' . esc_html( __( 'Default:', 'system-markdown-alternate' ) . "\n" . implode( "\n", $defaults ) ) . '</pre>';
+		echo '<details class="sma-defaults-toggle"><summary>' . esc_html__( 'View built-in defaults', 'system-markdown-alternate' ) . '</summary>';
+		echo '<pre class="sma-defaults">' . esc_html( implode( "\n", $defaults ) ) . '</pre>';
+		echo '</details>';
 	}
 
 	public function field_acf_subtitle_key(): void {
@@ -552,15 +578,80 @@ class AdminSettings {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+
+		global $wp_settings_sections, $wp_settings_fields;
+		$sections = isset( $wp_settings_sections[ self::PAGE ] ) ? (array) $wp_settings_sections[ self::PAGE ] : array();
 		?>
 		<div class="wrap sma-settings-page">
-			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-			<form method="post" action="options.php">
-				<?php
-				settings_fields( self::OPTION_GROUP );
-				do_settings_sections( self::PAGE );
-				submit_button();
-				?>
+			<form method="post" action="options.php" class="sma-settings-page__form">
+				<?php settings_fields( self::OPTION_GROUP ); ?>
+
+				<header class="sma-settings-page__header">
+					<div class="sma-settings-page__titles">
+						<h1>
+							<?php echo esc_html( get_admin_page_title() ); ?>
+							<span class="sma-version">v<?php echo esc_html( SMA_VERSION ); ?></span>
+						</h1>
+						<p class="sma-settings-page__desc"><?php esc_html_e( 'Serve a clean Markdown version of your content at the .md URL, for LLMs and AI agents.', 'system-markdown-alternate' ); ?></p>
+					</div>
+					<div class="sma-settings-page__actions">
+						<?php submit_button( '', 'primary', 'submit', false ); ?>
+					</div>
+				</header>
+				<hr class="wp-header-end">
+
+				<?php settings_errors(); ?>
+
+				<?php if ( count( $sections ) > 1 ) : ?>
+					<nav class="nav-tab-wrapper sma-tabs" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
+						<?php
+						$i = 0;
+						foreach ( $sections as $sid => $section ) {
+							printf(
+								'<a href="#sma-panel-%1$s" class="nav-tab%2$s" data-tab="%1$s">%3$s</a>',
+								esc_attr( (string) $sid ),
+								0 === $i ? ' nav-tab-active' : '',
+								esc_html( (string) $section['title'] )
+							);
+							++$i;
+						}
+						?>
+					</nav>
+				<?php endif; ?>
+
+				<div class="sma-settings-page__layout">
+					<main class="sma-settings-page__main">
+						<?php
+						$i = 0;
+						foreach ( $sections as $sid => $section ) {
+							$sid = (string) $sid;
+							printf(
+								'<div class="sma-tab-panel%1$s" id="sma-panel-%2$s" data-tab="%2$s" role="tabpanel">',
+								0 === $i ? ' is-active' : '',
+								esc_attr( $sid )
+							);
+							echo '<section class="sma-card">';
+							if ( ! empty( $section['title'] ) ) {
+								echo '<header class="sma-card__header"><h2>' . esc_html( (string) $section['title'] ) . '</h2></header>';
+							}
+							echo '<div class="sma-card__body">';
+							if ( ! empty( $section['callback'] ) ) {
+								call_user_func( $section['callback'], $section );
+							}
+							if ( isset( $wp_settings_fields[ self::PAGE ][ $sid ] ) ) {
+								echo '<table class="form-table" role="presentation">';
+								do_settings_fields( self::PAGE, $sid );
+								echo '</table>';
+							}
+							echo '</div></section></div>';
+							++$i;
+						}
+						?>
+					</main>
+					<aside class="sma-settings-page__aside">
+						<?php $this->render_llmstxt_aside(); ?>
+					</aside>
+				</div>
 			</form>
 		</div>
 		<?php

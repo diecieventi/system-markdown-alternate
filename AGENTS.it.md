@@ -43,7 +43,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Stato attuale (v0.16.x)
+## Stato attuale (v0.17.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -75,8 +75,16 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
   `SMA_VERSION`; bump del salt al salvataggio opzioni; pulizia su `save_post`/
   `deleted_post` (salta revisioni/autosave).
-- **Pannello admin** (pagina unica, Settings API): sezioni Generale / Output
-  Markdown / llms.txt / Integrazioni / Avanzate; CSS caricato solo nella pagina.
+- **Pannello admin** (pagina unica, Settings API): Generale / Output Markdown /
+  llms.txt / Integrazioni / Avanzate. UI restylizzata (solo presentazione): header
+  di pagina + Save unico, **tab** native WP, **card** di sezione, layout a due
+  colonne con aside di stato/conflitti `/llms.txt`, default interni in un
+  `<details>`. `render_page()` itera le sezioni registrate nella Settings API
+  (`$wp_settings_sections`) e avvolge ognuna in card+pannello-tab; **tutti i campi
+  restano nell'unico form** (le tab mostrano/nascondono via JS), quindi
+  salvataggio, sanitizzazione e nonce sono invariati. CSS scopato + piccolo
+  enhancement vanilla-JS senza dipendenze (`assets/admin-settings.js`); usabile
+  anche senza JS (tutti i pannelli visibili). Asset caricati solo nella pagina.
 - **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
   text domain `system-markdown-alternate` caricato su `init` da `/languages`;
   template `.pot` + traduzione `it_IT` (`.po` + `.mo` + `.l10n.php`) bundlate.
@@ -211,6 +219,7 @@ livello WP.
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
     ├── vendor/                         ← NON versionato, solo nello zip
     ├── assets/admin-settings.css       ← stile pannello (caricato solo lì)
+    ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
     ├── languages/                      ← .pot + traduzione it_IT (.po/.mo/.l10n.php)
     ├── tests/run-tests.php             ← test della logica pura (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
