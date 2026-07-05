@@ -1,0 +1,15 @@
+Si puo rimuovere da l readme.md questa sezione?
+----
+Publishing to wordpress.org (SVN)
+On WP.org you deploy, you don't develop: the GitHub repo remains the home of development, SVN is distribution only. What goes into SVN is the content of the system-markdown-alternate/ folder (not the repo root: no README.md, AGENTS.md, bin/, DIST/, .github/), with vendor/ bundled (runtime dependency). The plugin-folder exclusions live in system-markdown-alternate/.distignore (tests/, composer.*).
+
+Manual flow: bash bin/build.sh, then copy the content into svn/trunk and tag it under svn/tags/x.y.z.
+Automated flow (recommended when desired): the 10up/action-wordpress-plugin-deploy GitHub Action on tag/release (runs composer install --no-dev and honors the .distignore). Banner/icon/screenshots live in the SVN /assets folder (not in the plugin) and are updated with 10up/action-wordpress-plugin-asset-update from the repo's .wordpress-org/ folder.
+---
+Quelle misembrano istruzioni interne tra me e te, che non serve pubblicare sulla repo di GitHub no?  Si possono tenere in qualche modo in locale? O non visibili nella repo? Il discorso è che la repo puo essere clonata formata ecc , ok, ma dubito che agli altri interessi poi pubblicare su Wordpress
+
+
+
+Invece qui https://github.com/progressplanner/markdown-alternate
+Vedo che ha messo la sezione Usage, serve anche a noi?
+Mi guardi anche come gestisce lui la cache?
