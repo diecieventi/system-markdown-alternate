@@ -21,6 +21,30 @@ La revisione deve concentrarsi su:
 
 ---
 
+# Prima cosa da fare
+
+## Escaping Markdown in `/llms.txt`
+
+Prima di intervenire su altri punti, sistemare l'output di `/llms.txt`.
+
+In `LlmsTxtController::item_line()` le righe vengono costruite interpolando direttamente titolo, URL e description nella sintassi Markdown:
+
+```text
+- [titolo](url): description
+```
+
+Questo è fragile: un titolo con `]`, `)`, newline o caratteri Markdown, oppure una description con newline/caratteri speciali, può rompere il link o alterare la struttura del file.
+
+Correzione attesa:
+
+- normalizzare titolo e description su una singola riga;
+- escapare almeno `\`, `[`, `]`, `(` e `)` nel link text;
+- rimuovere o normalizzare newline e caratteri di controllo;
+- garantire che ogni post produca una sola riga Markdown valida;
+- aggiungere un test locale per titoli/description con caratteri speciali.
+
+---
+
 # Architettura attesa
 
 L'architettura finale deve rispettare questo schema:
