@@ -27,6 +27,7 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/.git/*" \
 	-x "${PLUGIN_SLUG}/tests/*" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
+	-x "${PLUGIN_SLUG}/.distignore" \
 	-x "*/tests/*" \
 	-x "*/tests/" \
 	-x "*/.git/*" \

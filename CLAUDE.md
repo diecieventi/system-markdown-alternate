@@ -19,6 +19,25 @@ https://example.com/mio-articolo.md    → Markdown (front matter + contenuto)
 sul blog, restare semplice da verificare, produrre Markdown pulito, non creare
 rischi SEO, restare estendibile via filtri.
 
+## Comandi
+
+```bash
+# Test della logica pura (no WP/PHPUnit; la CI li esegue su PHP 7.4 e 8.4)
+php system-markdown-alternate/tests/run-tests.php
+
+# Lint di un file toccato
+php -l system-markdown-alternate/src/<File>.php
+
+# Rigenera le traduzioni dopo aver cambiato stringhe __() (make-pot → msgmerge → msgfmt → make-php)
+bash bin/make-i18n.sh
+
+# Installa le dipendenze Composer in locale (genera vendor/, necessario per far girare il plugin)
+composer install --working-dir=system-markdown-alternate
+
+# Builda lo zip distribuibile con vendor/ bundlato → DIST/system-markdown-alternate.zip
+bash bin/build.sh
+```
+
 ## Stato attuale (v0.16.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
@@ -163,14 +182,17 @@ livello WP.
 .
 ├── CLAUDE.md                     ← questo file
 ├── README.md                     ← panoramica repo (GitHub)
+├── LICENSE                       ← GPL-2.0 (testo completo)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
+├── bin/make-i18n.sh              ← rigenera le traduzioni
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← IL PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (autoloader Composer)
     ├── readme.txt                      ← formato wordpress.org + changelog
     ├── uninstall.php                   ← cleanup opzioni + transient
+    ├── .distignore                     ← esclusioni per il pacchetto WP.org (SVN)
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
     ├── vendor/                         ← NON versionato, solo nello zip
     ├── assets/admin-settings.css       ← stile pannello (caricato solo lì)
@@ -305,6 +327,23 @@ bash bin/build.sh        # → DIST/system-markdown-alternate.zip (con vendor/ b
 
 Lo zip include le dipendenze Composer di produzione, quindi è installabile senza
 Composer sul server. Ambiente di build locale: PHP 8.4, Composer e `zip` (no wp-cli).
+
+### Pubblicazione su wordpress.org (SVN)
+
+Su WP.org si **deploya**, non si sviluppa: il repo GitHub resta la casa dello
+sviluppo, l'SVN è solo distribuzione. Ciò che va nell'SVN è **il contenuto della
+cartella `system-markdown-alternate/`** (non la root del repo: niente `README.md`,
+`CLAUDE.md`, `bin/`, `DIST/`, `.github/`), con **`vendor/` bundlato** (dipendenza
+di runtime). Le esclusioni interne alla cartella plugin sono in
+`system-markdown-alternate/.distignore` (`tests/`, `composer.*`).
+
+- Flusso manuale: `bash bin/build.sh`, poi copiare il contenuto in `svn/trunk` e
+  taggare in `svn/tags/x.y.z`.
+- Flusso automatico (consigliato quando si vuole): GitHub Action
+  `10up/action-wordpress-plugin-deploy` su tag/release (esegue `composer install
+  --no-dev` e rispetta il `.distignore`). Banner/icona/screenshot vivono nella
+  `/assets` dell'SVN (non nel plugin) e si aggiornano con
+  `10up/action-wordpress-plugin-asset-update`.
 
 ## Test (acceptance)
 

@@ -21,7 +21,7 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 - **Link `rel="alternate"`** nell'`<head>` dei contenuti supportati.
 - **Header HTTP** corretti: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`), `Link: rel="canonical"` verso l'HTML.
 - **Conversione pulita**: blocchi Gutenberg renderizzati singolarmente (niente related/CTA iniettati), esclusione di blocchi/shortcode/classi CSS, code block fenced, URL assoluti.
-- **Endpoint `/llms.txt`** (opzionale): indice dei contenuti per LLM e agenti.
+- **Endpoint `/llms.txt`** (opzionale): indice dei contenuti per LLM e agenti. Una **modalità arricchita** opzionale (spenta di default) aggiunge sintesi del sito, sezione "Contenuti chiave" curata, una description per ogni voce e una sezione `Optional` per i post meno recenti.
 - **Cache transient** con invalidazione proattiva (modifica post, aggiornamento plugin, salvataggio impostazioni).
 - **Pannello admin** per scegliere i tipi di contenuto esposti e regolare cache, esclusioni e header. Nessun tipo è esposto finché non lo selezioni.
 - **Shortcode** `[sma_md_url]` per stampare l'URL del `.md`.
@@ -35,12 +35,18 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 .
 ├── README.md                     ← questo file (GitHub)
 ├── CLAUDE.md                     ← guida operativa per lo sviluppo
+├── LICENSE                       ← GPL-2.0
+├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
+├── bin/make-i18n.sh              ← rigenera le traduzioni
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← il plugin
     ├── system-markdown-alternate.php
     ├── readme.txt                ← readme in formato WordPress.org
+    ├── uninstall.php
     ├── composer.json
+    ├── languages/                ← .pot + traduzione it_IT
+    ├── tests/run-tests.php       ← test della logica pura (no WP/PHPUnit)
     └── src/                      ← classi PSR-4 (namespace SystemMarkdownAlternate)
 ```
 
@@ -62,4 +68,4 @@ Ambiente di build: PHP ≥ 7.4, Composer e `zip`.
 
 ## Licenza
 
-GPL-2.0-or-later.
+GPL-2.0-or-later. Testo completo nel file [`LICENSE`](LICENSE).
