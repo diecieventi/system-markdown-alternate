@@ -99,7 +99,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 ## Identità, versioning, workflow
 
 - **Author** del plugin = **"Diecieventi Digital Marketing"**. La ragione sociale
-  **"System for PC" non deve MAI comparire** in artefatti (codice, commit, readme).
+  legacy dell'autore **non deve MAI comparire** in artefatti (codice, commit, readme).
 - **Casa GitHub**: account personale **`diecieventi`**
   (`github.com/diecieventi/system-markdown-alternate`); `Plugin URI` e
   `composer.json` puntano lì. `Author URI` → `webdietrolequinte.it` (dominio del sito,
@@ -130,34 +130,32 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   Il branch tecnico è **solo lo staging imposto dall'ambiente**: non si pusha, non genera PR,
   non va mergiato via interfaccia. Si ignora dopo il consolidamento.
 
-## Stack di produzione / ambiente di test
+## Compatibilità con plugin noti / ambiente di test
 
-- **Blog di produzione** (`webdietrolequinte.it`): GeneratePress/GenerateBlocks 2.x,
-  ACF, Code Block Pro, Lightbox for Gallery & Image Block, LuckyWP TOC, WP Search
-  with Algolia, Rank Math. Dietro **Cloudflare + RunCloud 8G WAF**: il WAF blocca gli
-  User-Agent non-browser (`curl` viene bloccato come "bad bot"; i browser passano).
-  Tenerne conto nei test via HTTP.
-- **Sito di test** via **InstaWP MCP** (`mcp__Instawp_HVF__*`): GeneratePress/
-  GenerateBlocks 2.2.1, ACF, WooCommerce; WP 7.0 / PHP 8.4; **nessun object cache
-  persistente** (Cache usa il fallback transient). La copia di SMA installata può
-  essere **vecchia**: non aggiornarla in automatico.
-- **Limite noto:** non si riesce a installare lo zip completo via MCP (troppo grande,
-  nessun URL pubblico). Per testare: usare `mcp__Instawp_HVF__execute_php` (logica a
-  livello WP) o test PHP locali. Tool utili: `plugin_operations`, `create_content`/
-  `create_term`, `discover_blocks`, `site_logs`.
+Sviluppato e testato contro uno stack basato su **GeneratePress/GenerateBlocks 2.x**,
+**ACF** e **Rank Math**. Nei test via HTTP tenere presente che un **WAF/CDN** può
+bloccare gli User-Agent non-browser (es. `curl` come "bad bot"): usare uno
+User-Agent da browser.
 
-### Impatti dello stack sui default
+**Ambiente di test**: sito di prova con GeneratePress/GenerateBlocks, ACF e
+WooCommerce su WP recente / PHP 8.4, **senza object cache persistente** (Cache usa
+il fallback transient). Lo zip completo non è installabile da remoto: la logica si
+verifica con i **test PHP locali** (`tests/run-tests.php`) o eseguendo codice a
+livello WP.
 
-- **Code Block Pro**: NON convertire l'HTML di syntax highlighting. Si fa strip degli
-  `<span>` preservando la classe `language-*` e si lascia che il converter produca il
-  fenced block (approccio generico, copre qualsiasi highlighter).
-- **LuckyWP TOC**: navigazione → escluso (shortcode `lwptoc`, blocco `luckywp/toc`).
-- **Lightbox for Gallery & Image Block**: solo wrapper sulle immagini; nessuna
-  gestione speciale, basta preservare `alt`.
+### Impatti sui default
+
+- **Syntax highlighter** (es. Code Block Pro): NON convertire l'HTML di highlighting.
+  Si fa strip degli `<span>` preservando la classe `language-*` e si lascia che il
+  converter produca il fenced block (approccio generico, copre qualsiasi highlighter).
+- **Table of Contents** (es. LuckyWP TOC): navigazione → esclusa (shortcode `lwptoc`,
+  blocco `luckywp/toc`).
+- **Lightbox su gallery/immagini**: solo wrapper sulle immagini; nessuna gestione
+  speciale, basta preservare `alt`.
 - **GenerateBlocks**: MAI esclusi in automatico (contengono contenuto reale).
 - **ACF**: implementato (sottotitolo/TL;DR via preambolo). I filtri
   `sma_markdown_source_content` / `sma_acf_field_keys` restano i punti di estensione.
-- **WP Search with Algolia**: irrilevante per l'output.
+- **Motori di ricerca on-site** (es. Algolia): irrilevanti per l'output.
 
 ## Struttura repository
 
@@ -312,12 +310,12 @@ Composer sul server. Ambiente di build locale: PHP 8.4, Composer e `zip` (no wp-
 
 Articoli di test:
 1. Articolo semplice (heading, paragrafi, lista, link) → `.md` ok, header corretti, front matter, link alternate.
-2. Articolo con immagini + codice (Code Block Pro) + blockquote → conversione corretta.
+2. Articolo con immagini + codice (con syntax highlighter) + blockquote → conversione corretta.
 3. Articolo con sezione `md-exclude` → assente nel `.md`.
 4. Articolo con shortcode form (`[contact-form-7 ...]`) e TOC (`[lwptoc]`) → assenti nel `.md`.
 5. Contenuti non ammessi (pagina/CPT non abilitato, bozza, post protetto da password) → **404**.
 
 Verificare sempre: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; nessun contenuto privato/bozza/non-abilitato esposto.
-Nota: i test HTTP dalla riga di comando in produzione possono essere bloccati dal WAF
+Nota: i test HTTP dalla riga di comando possono essere bloccati da un WAF/CDN
 (usare un User-Agent da browser).
