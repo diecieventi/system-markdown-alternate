@@ -88,7 +88,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
   text domain `system-markdown-alternate` caricato su `init` da `/languages`;
   template `.pot` + traduzione `it_IT` (`.po` + `.mo` + `.l10n.php`) bundlate.
-  WP 6.5+ preferisce il `.l10n.php` (più veloce), `.mo` come fallback per 6.0–6.4.
+  WP 6.5+ preferisce il `.l10n.php` (più veloce), `.mo` come fallback per 6.1–6.4.
 - **ACF**: sottotitolo (testo) + TL;DR (WYSIWYG, passa dalla pipeline DOM) come
   preambolo tra H1 e corpo; nomi campo configurabili dal pannello.
 - **Shortcode** `[sma_md_url]` (+ `id="123"`).
@@ -249,7 +249,7 @@ livello WP.
 
 ## Convenzioni di codice
 
-- PHP `>= 7.4`, WP `>= 6.0`. Niente dipendenze runtime oltre a `league/html-to-markdown`.
+- PHP `>= 7.4`, WP `>= 6.1`. Niente dipendenze runtime oltre a `league/html-to-markdown`.
 - Classi piccole e a singola responsabilità.
 - `defined('ABSPATH') || exit;` in cima a ogni file PHP.
 - Escaping rigoroso dell'output (specie il **front matter YAML**: quotare stringhe,
@@ -323,7 +323,7 @@ Default esclusioni:
    `wp i18n make-pot` (estrae i `msgid` dal codice, niente tabelle da tenere in
    sync) → `msgmerge` (allinea i `.po`) → `msgfmt` (`.mo`) → `wp i18n make-php`
    (`.l10n.php`). WP 6.5+ carica il `.l10n.php` (più veloce, OPcache-friendly),
-   `.mo` resta come fallback per 6.0–6.4. I tool (`wp-cli` + `gettext`) **non sono
+   `.mo` resta come fallback per 6.1–6.4. I tool (`wp-cli` + `gettext`) **non sono
    preinstallati** nel container effimero ma si installano in-sessione (vedi
    l'header di `bin/make-i18n.sh`: `apt-get install -y gettext` + download del
    `wp-cli.phar`).

@@ -69,7 +69,7 @@ Ambiente di build: PHP ≥ 7.4, Composer e `zip`.
 
 ## Requisiti
 
-- WordPress ≥ 6.0
+- WordPress ≥ 6.1
 - PHP ≥ 7.4
 
 ## Licenza

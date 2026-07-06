@@ -35,6 +35,9 @@ foreach ( $sma_options as $sma_option ) {
 
 // Transient del plugin (chiave + timeout). Coperti sia il caso DB sia,
 // per sicurezza, eventuali residui anche con object cache attivo.
+// Query diretta deliberata: le chiavi dei transient non sono note singolarmente
+// e nessuna cache è rilevante durante la disinstallazione.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->query(
 	"DELETE FROM {$wpdb->options}
 	 WHERE option_name LIKE '\_transient\_sma\_md\_%'

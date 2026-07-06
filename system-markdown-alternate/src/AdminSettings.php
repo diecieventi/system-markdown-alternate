@@ -482,11 +482,10 @@ class AdminSettings {
 		unset( $all_types['attachment'] ); // Media: sempre escluso.
 
 		foreach ( $all_types as $pt ) {
-			$checked = in_array( $pt->name, $saved, true ) ? ' checked' : '';
 			printf(
 				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sma_supported_post_types[]" value="%s"%s /> %s <code>(%s)</code></label>',
 				esc_attr( $pt->name ),
-				$checked,
+				checked( in_array( $pt->name, $saved, true ), true, false ),
 				esc_html( $pt->labels->singular_name ),
 				esc_html( $pt->name )
 			);

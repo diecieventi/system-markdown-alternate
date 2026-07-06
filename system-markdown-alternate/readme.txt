@@ -1,10 +1,10 @@
 === System Markdown Alternate ===
 Contributors: system4pc
 Tags: markdown, llms.txt, ai, llm, content negotiation
-Requires at least: 6.0
+Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.17.0
+Stable tag: 0.17.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -131,6 +131,13 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.17.1 =
+* Plugin Check compliance (wordpress.org): escape the post-type checkbox state via
+  the core `checked()` helper, and annotate the deliberate direct transient cleanup
+  query in `uninstall.php`. No change to behaviour or Markdown output.
+* Minimum WordPress bumped to 6.1 (the object-cache group flush on uninstall uses
+  `wp_cache_flush_group()`, available since 6.1).
 
 = 0.17.0 =
 * Admin settings page restyle (presentation only — no change to options, saving,
