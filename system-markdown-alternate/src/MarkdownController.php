@@ -46,9 +46,7 @@ class MarkdownController {
 				$this->force_404();
 				return;
 			}
-			$this->send_headers( $post );
-			echo $this->get_markdown( $post ); // phpcs:ignore WordPress.Security.EscapeOutput
-			exit;
+			$this->serve_markdown( $post );
 		}
 
 		// --- Content negotiation sul permalink canonico ---
@@ -62,9 +60,7 @@ class MarkdownController {
 		$this->send_vary_header();
 
 		if ( $this->prefers_markdown() ) {
-			$this->send_headers( $queried );
-			echo $this->get_markdown( $queried ); // phpcs:ignore WordPress.Security.EscapeOutput
-			exit;
+			$this->serve_markdown( $queried );
 		}
 
 		if ( $this->should_reject_unacceptable() ) {
@@ -306,6 +302,132 @@ class MarkdownController {
 	// ─── Cache & output ───────────────────────────────────────────────────────
 
 	/**
+	 * Serve la rappresentazione Markdown di un post e termina la richiesta.
+	 *
+	 * Prima del body gestisce le richieste condizionali (If-None-Match /
+	 * If-Modified-Since): se il client possiede già la versione corrente risponde
+	 * 304 senza body. Altrimenti invia gli header (inclusi ETag e Last-Modified)
+	 * e il Markdown. Usato sia dal ramo con suffisso .md sia dalla content
+	 * negotiation, così la logica di validazione è unica.
+	 */
+	private function serve_markdown( \WP_Post $post ): void {
+		$version = $this->cache_version( $post );
+
+		if ( $this->handle_conditional( $post, $version ) ) {
+			exit; // 304 già inviato, nessun body.
+		}
+
+		$this->send_headers( $post, $version );
+		echo $this->get_markdown( $post ); // phpcs:ignore WordPress.Security.EscapeOutput
+		exit;
+	}
+
+	/**
+	 * Gestisce le richieste condizionali. Restituisce true (e invia il 304) quando
+	 * il client possiede già la versione corrente della risorsa.
+	 *
+	 * Validatori:
+	 * - ETag forte = "{cache_version}" (cambia con edit, aggiornamento plugin o
+	 *   salvataggio impostazioni: stesso hash della cache, quindi un 304 implica
+	 *   sempre che il body sarebbe identico a quello in cache).
+	 * - Last-Modified = post_modified_gmt (RFC 7231).
+	 *
+	 * Priorità a If-None-Match (RFC 9110): se presente decide da solo l'esito
+	 * (match → 304, no match → body completo) e If-Modified-Since viene ignorato.
+	 */
+	private function handle_conditional( \WP_Post $post, string $version ): bool {
+		$etag        = '"' . $version . '"';
+		$modified_ts = $this->last_modified_timestamp( $post );
+
+		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] )
+			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_NONE_MATCH'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: '';
+
+		if ( '' !== $if_none_match ) {
+			if ( self::etag_matches( $if_none_match, $etag ) ) {
+				$this->send_not_modified( $etag, $modified_ts );
+				return true;
+			}
+			return false; // INM presente ma senza match: ha priorità, serve il body completo.
+		}
+
+		$if_modified_since = isset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] )
+			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_MODIFIED_SINCE'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: '';
+
+		if ( '' !== $if_modified_since && $modified_ts > 0 ) {
+			$since = strtotime( $if_modified_since );
+			if ( false !== $since && $modified_ts <= $since ) {
+				$this->send_not_modified( $etag, $modified_ts );
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Verifica se un header If-None-Match combacia con l'ETag della risorsa.
+	 *
+	 * Gestisce il jolly `*`, la lista di ETag separati da virgola e il prefisso
+	 * weak `W/` (rimosso prima del confronto, che resta sul valore quotato).
+	 *
+	 * Pubblica solo per essere testabile in isolamento (logica di stringa pura).
+	 */
+	public static function etag_matches( string $header, string $etag ): bool {
+		$header = trim( $header );
+
+		if ( '*' === $header ) {
+			return true;
+		}
+
+		foreach ( explode( ',', $header ) as $candidate ) {
+			$candidate = trim( $candidate );
+
+			if ( 0 === stripos( $candidate, 'W/' ) ) {
+				$candidate = substr( $candidate, 2 );
+			}
+
+			if ( $candidate === $etag ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Timestamp Unix dell'ultima modifica (da post_modified_gmt), o 0 se non valido.
+	 */
+	private function last_modified_timestamp( \WP_Post $post ): int {
+		$modified = (string) $post->post_modified_gmt;
+
+		if ( '' === $modified || '0000-00-00 00:00:00' === $modified ) {
+			return 0;
+		}
+
+		$ts = strtotime( $modified . ' GMT' );
+
+		return false !== $ts ? $ts : 0;
+	}
+
+	/**
+	 * Invia una risposta 304 Not Modified: solo header di validazione, nessun body.
+	 */
+	private function send_not_modified( string $etag, int $modified_ts ): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		status_header( 304 );
+		header( 'ETag: ' . $etag );
+
+		if ( $modified_ts > 0 ) {
+			header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+		}
+	}
+
+	/**
 	 * Recupera il Markdown dalla cache transient o lo rigenera.
 	 *
 	 * Chiave: `sma_md_{post_id}`. Il valore include un hash di versione
@@ -380,14 +502,23 @@ class MarkdownController {
 
 	/**
 	 * Invia gli header HTTP per la risposta Markdown.
+	 *
+	 * Include sempre ETag e Last-Modified (stessi validatori usati per le
+	 * richieste condizionali) così cache/proxy possono memorizzarli e rivalidare.
 	 */
-	private function send_headers( \WP_Post $post ): void {
+	private function send_headers( \WP_Post $post, string $version ): void {
 		if ( headers_sent() ) {
 			return;
 		}
 
 		status_header( 200 );
 		header( 'Content-Type: text/markdown; charset=utf-8' );
+		header( 'ETag: "' . $version . '"' );
+
+		$modified_ts = $this->last_modified_timestamp( $post );
+		if ( $modified_ts > 0 ) {
+			header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+		}
 
 		/** Filtro: header X-Robots-Tag. Stringa vuota = header non inviato. */
 		$robots = apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post );

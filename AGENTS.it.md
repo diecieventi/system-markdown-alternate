@@ -43,7 +43,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Stato attuale (v0.17.x)
+## Stato attuale (v0.18.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -56,7 +56,13 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Link `rel="alternate"`** nel `<head>` dei singolari supportati.
 - **Header HTTP**: `Content-Type: text/markdown; charset=utf-8`,
   `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
-  `Vary: Accept` (su URL negoziabili).
+  `Vary: Accept` (su URL negoziabili), **`ETag` + `Last-Modified`**.
+- **Richieste condizionali**: la risposta `.md` gestisce `If-None-Match` /
+  `If-Modified-Since` e risponde **`304 Not Modified`** (senza body) quando il client
+  possiede già la versione corrente. Validatore = l'hash di validità della cache già
+  esistente (`post_modified_gmt` + `SMA_VERSION` + salt impostazioni), quindi un `304`
+  implica sempre che il body in cache sarebbe identico; `If-None-Match` ha priorità su
+  `If-Modified-Since` (RFC 9110). Funziona anche con la cache del body disattivata.
 - **Conversione pulita**: `render_block()` sui blocchi ripuliti (no related/CTA),
   esclusione blocchi/shortcode/classi, code block fenced, **URL assoluti risolti
   contro il permalink sorgente** (document-relative, `../`, root-relative).
@@ -314,7 +320,11 @@ Default esclusioni:
 5. **URL assoluti**: risolti contro il permalink del post (non `home_url('/')`).
 6. **Cache**: chiave `sma_md_{post_id}`, valore con hash di validità
    (`post_modified_gmt|SMA_VERSION|salt`); `/llms.txt` cachato in `sma_llms_txt`.
-   Tutto via `Cache` helper (object cache persistente o transient).
+   Tutto via `Cache` helper (object cache persistente o transient). Lo **stesso
+   hash è l'`ETag` forte** della risposta `.md` (`ETag`/`Last-Modified` + `304`
+   condizionale, `If-None-Match` prima di `If-Modified-Since`); deriva da
+   `post_modified`, quindi le richieste condizionali funzionano anche con la cache
+   del body spenta.
 7. **i18n**: sorgente **inglese** nei `__()`/`esc_html__()` e nell'header
    `Description:`; le stringhe con HTML inline (`<code>`, `<strong>`, …) escono via
    `wp_kses_post()`. Text domain `system-markdown-alternate` caricato su `init` da

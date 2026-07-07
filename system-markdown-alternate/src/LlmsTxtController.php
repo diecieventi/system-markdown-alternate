@@ -230,14 +230,49 @@ class LlmsTxtController {
 		if ( $with_description ) {
 			$raw = $this->metadata->description( $post );
 			if ( '' !== $raw ) {
-				$description = ': ' . wp_trim_words( wp_strip_all_tags( $raw ), 30, '…' );
+				$description = ': ' . self::normalize_inline( wp_trim_words( wp_strip_all_tags( $raw ), 30, '…' ) );
 			}
 		} elseif ( has_excerpt( $post ) ) {
 			$raw         = wp_strip_all_tags( get_the_excerpt( $post ) );
-			$description = ': ' . wp_trim_words( $raw, 20, '…' );
+			$description = ': ' . self::normalize_inline( wp_trim_words( $raw, 20, '…' ) );
 		}
 
-		return '- [' . $title . '](' . $md_url . ')' . $description;
+		return '- [' . self::escape_link_text( $title ) . '](' . $md_url . ')' . $description;
+	}
+
+	/**
+	 * Normalizza un testo su una singola riga: newline e caratteri di controllo
+	 * (`\x00-\x1F`, `\x7F`) diventano spazio, gli whitespace multipli vengono
+	 * collassati e la stringa viene ripulita ai bordi.
+	 *
+	 * Garantisce che ogni voce dell'indice occupi una sola riga: senza questo,
+	 * un titolo o una description con newline spezzerebbe la struttura del file.
+	 *
+	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 */
+	public static function normalize_inline( string $text ): string {
+		$text = preg_replace( '/[\x00-\x1F\x7F]+/u', ' ', $text );
+		$text = preg_replace( '/\s+/', ' ', (string) $text );
+
+		return trim( (string) $text );
+	}
+
+	/**
+	 * Prepara un testo per l'uso come *link text* Markdown (`[testo](url)`):
+	 * lo normalizza su una riga singola ed escapa i caratteri che romperebbero
+	 * la sintassi del link (`\`, `[`, `]`, `(`, `)`). Il backslash va escapato
+	 * per primo per non raddoppiare gli escape introdotti dopo.
+	 *
+	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 */
+	public static function escape_link_text( string $text ): string {
+		$text = self::normalize_inline( $text );
+
+		return str_replace(
+			array( '\\', '[', ']', '(', ')' ),
+			array( '\\\\', '\\[', '\\]', '\\(', '\\)' ),
+			$text
+		);
 	}
 
 	/**

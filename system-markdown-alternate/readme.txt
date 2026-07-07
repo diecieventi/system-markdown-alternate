@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.17.1
+Stable tag: 0.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -131,6 +131,17 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.18.0 =
+* Conditional requests on the `.md` endpoint: the Markdown response now sends
+  `ETag` and `Last-Modified`, and honours `If-None-Match` / `If-Modified-Since`,
+  replying `304 Not Modified` (no body) when the client already has the current
+  version. The validator reuses the existing cache-version hash
+  (`post_modified_gmt` + plugin version + settings salt), so a `304` always means
+  the cached body would be identical. Works even with the body cache disabled.
+* `/llms.txt`: escape the link text and normalise each entry onto a single line,
+  so titles or descriptions containing `[`, `]`, `(`, `)`, backslashes, newlines
+  or control characters can no longer break a link or the file structure.
 
 = 0.17.1 =
 * Plugin Check compliance (wordpress.org): escape the post-type checkbox state via

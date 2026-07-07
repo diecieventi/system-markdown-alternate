@@ -49,7 +49,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Current state (v0.17.x)
+## Current state (v0.18.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -63,7 +63,13 @@ The v1 scope is done and widely exceeded. Implemented:
 - **`rel="alternate"` link** in the `<head>` of supported singular content.
 - **HTTP headers**: `Content-Type: text/markdown; charset=utf-8`,
   `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
-  `Vary: Accept` (on negotiable URLs).
+  `Vary: Accept` (on negotiable URLs), **`ETag` + `Last-Modified`**.
+- **Conditional requests**: the `.md` response honours `If-None-Match` /
+  `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
+  already holds the current version. Validator = the existing cache-version hash
+  (`post_modified_gmt` + `SMA_VERSION` + settings salt), so a `304` always means the
+  cached body would be identical; `If-None-Match` takes priority over
+  `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
   against the source permalink** (document-relative, `../`, root-relative).
@@ -331,7 +337,10 @@ Default exclusions:
 6. **Cache**: key `sma_md_{post_id}`, value with a validity hash
    (`post_modified_gmt|SMA_VERSION|salt`); `/llms.txt` cached under
    `sma_llms_txt`. Everything through the `Cache` helper (persistent object
-   cache or transients).
+   cache or transients). The **same hash is the strong `ETag`** of the `.md`
+   response (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
+   `If-Modified-Since`); it derives from `post_modified`, so conditional requests
+   work even when the body cache is off.
 7. **i18n**: **English** source in `__()`/`esc_html__()` and in the
    `Description:` header; strings with inline HTML (`<code>`, `<strong>`, …) go
    through `wp_kses_post()`. Text domain `system-markdown-alternate` loaded on

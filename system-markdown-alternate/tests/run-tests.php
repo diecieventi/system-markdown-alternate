@@ -85,9 +85,13 @@ require __DIR__ . '/../src/AcceptNegotiator.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
+require __DIR__ . '/../src/LlmsTxtController.php';
+require __DIR__ . '/../src/MarkdownController.php';
 
 use SystemMarkdownAlternate\AcceptNegotiator;
 use SystemMarkdownAlternate\BlockCleaner;
+use SystemMarkdownAlternate\LlmsTxtController;
+use SystemMarkdownAlternate\MarkdownController;
 use SystemMarkdownAlternate\MetadataBuilder;
 use SystemMarkdownAlternate\ShortcodeCleaner;
 
@@ -246,6 +250,30 @@ check( 'url: query string → format=markdown', 'https://example.com/?page_id=2&
 // Homepage (path "/") → fallback, niente /index.md.
 $p = new WP_Post( array( 'permalink' => 'https://example.com/' ) );
 check( 'url: homepage → format=markdown', 'https://example.com/?format=markdown', MetadataBuilder::markdown_url( $p ) );
+
+// ─── LlmsTxtController: escaping delle righe ─────────────────────────────────
+
+// escape_link_text: escape dei caratteri che romperebbero [testo](url).
+check( 'llms: link text semplice', 'Ciao mondo', LlmsTxtController::escape_link_text( 'Ciao mondo' ) );
+check( 'llms: parentesi quadre', 'Titolo \\[bozza\\]', LlmsTxtController::escape_link_text( 'Titolo [bozza]' ) );
+check( 'llms: parentesi tonde', 'Guida \\(2024\\)', LlmsTxtController::escape_link_text( 'Guida (2024)' ) );
+check( 'llms: backslash escapato una volta', 'a\\\\b', LlmsTxtController::escape_link_text( 'a\\b' ) );
+check( 'llms: newline → riga singola', 'Riga uno Riga due', LlmsTxtController::escape_link_text( "Riga uno\nRiga due" ) );
+check( 'llms: caratteri di controllo rimossi', 'A B', LlmsTxtController::escape_link_text( "A\t\x00B" ) );
+check( 'llms: whitespace collassato e trimmato', 'X Y', LlmsTxtController::escape_link_text( "  X   Y  " ) );
+
+// normalize_inline: solo riga singola, nessun escape dei bracket (description).
+check( 'llms: description multi-riga → singola', 'Uno due tre', LlmsTxtController::normalize_inline( "Uno\ndue\r\ntre" ) );
+check( 'llms: description bracket intatti', 'vedi [1] e (2)', LlmsTxtController::normalize_inline( 'vedi [1] e (2)' ) );
+
+// ─── MarkdownController::etag_matches ────────────────────────────────────────
+
+check( 'etag: jolly *', true, MarkdownController::etag_matches( '*', '"abc"' ) );
+check( 'etag: match esatto', true, MarkdownController::etag_matches( '"abc"', '"abc"' ) );
+check( 'etag: nessun match', false, MarkdownController::etag_matches( '"xyz"', '"abc"' ) );
+check( 'etag: lista con match', true, MarkdownController::etag_matches( '"xyz", "abc"', '"abc"' ) );
+check( 'etag: prefisso weak W/', true, MarkdownController::etag_matches( 'W/"abc"', '"abc"' ) );
+check( 'etag: header vuoto', false, MarkdownController::etag_matches( '', '"abc"' ) );
 
 // ─── Esito ───────────────────────────────────────────────────────────────────
 
