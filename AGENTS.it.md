@@ -111,7 +111,32 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
 - **`.wordpress-org/screenshot-*.jpg` sono superati**: mostrano il pannello
   admin pre-0.17.0 (prima del restyling tab/card). Da ricatturare aggiornando
-  anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo.
+  anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo (non
+  serve un bump di versione: vivono nella cartella SVN `/assets`, indipendente
+  da `/trunk`).
+
+### Da controllare al prossimo giro (non urgente, parcheggiato qui)
+
+- **Notifica "impostazioni salvate" doppia**: salvando la pagina impostazioni
+  sembra comparire l'avviso admin ("Impostazioni salvate") **due volte**.
+  Riprodurre e, se confermato, trovare e correggere la doppia
+  registrazione/render (probabile `AdminSettings.php` — controllare una doppia
+  chiamata a `settings_errors()` o una doppia registrazione dell'hook).
+- **Filtri non documentati nella documentazione utente**: il plugin espone
+  un'ampia API di filtri (vedi "Filters (public contract)" più sotto) ma né il
+  `readme.txt` (`== Frequently Asked Questions ==`) né `README.md`/`README.it.md`
+  menzionano che esistono dei filtri. Decidere dove segnalarlo agli utenti finali
+  (almeno un rimando all'elenco filtri) e correggere.
+- **Valutare nuove integrazioni**: oltre ad ACF/GenerateBlocks, valutare cos'altro
+  potrebbe meritare un'integrazione dedicata (candidati da definire).
+- **Valutare come arricchire/gestire ulteriormente `/llms.txt`**: oltre alla
+  modalità enriched attuale, valutare cos'altro vale la pena aggiungere
+  (candidati da definire, vedi anche l'idea LLM signals qui sopra).
+- **Possibile log di erogazione del `.md`**: valutare se/come permettere al
+  proprietario del sito di vedere chi (o quante volte) viene servito l'endpoint
+  `.md` — serve un design che rispetti la linea guida wordpress.org "nessun
+  tracking senza consenso" e resti leggero (niente bloat sul DB); potrebbe
+  partire come log di debug opt-in piuttosto che una feature persistente.
 
 ## Decisioni di prodotto (durevoli)
 

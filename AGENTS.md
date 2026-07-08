@@ -119,7 +119,29 @@ The v1 scope is done and widely exceeded. Implemented:
   (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
 - **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
   UI (before the tabs/cards restyle). Recapture them and update the
-  `== Screenshots ==` captions in `readme.txt` whenever convenient.
+  `== Screenshots ==` captions in `readme.txt` whenever convenient (no version
+  bump needed: they live in the SVN `/assets` folder, independent of `/trunk`).
+
+### To check next time (not urgent, parked here)
+
+- **Duplicate "settings saved" notice**: saving the settings page appears to show
+  the admin notice ("Settings saved") **twice**. Reproduce and, if confirmed, find
+  and fix the double registration/render (likely `AdminSettings.php` — check for a
+  duplicate `settings_errors()` call or a double hook registration).
+- **Filters undocumented in user-facing docs**: the plugin exposes an extensive
+  filter API (see "Filters (public contract)" below) but neither `readme.txt`
+  (`== Frequently Asked Questions ==`) nor `README.md`/`README.it.md` mention that
+  filters exist at all. Decide where to surface this for end users (at least a
+  pointer to the filter list) and fix.
+- **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
+  might be worth a dedicated integration (candidates TBD).
+- **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
+  mode, consider what else is worth adding (candidates TBD, see also the LLM
+  signals idea above).
+- **Possible `.md` serving log**: evaluate whether/how to let site owners see who
+  (or how often) the `.md` endpoint is being served — needs a design that respects
+  the "no tracking without consent" wordpress.org guideline and stays lightweight
+  (no DB bloat); could start as an opt-in debug log rather than a persisted feature.
 
 ## Product decisions (durable)
 
