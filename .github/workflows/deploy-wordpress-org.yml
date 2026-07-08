@@ -1,0 +1,56 @@
+name: Deploy to WordPress.org
+
+# NON attivo finché il plugin non è accettato su wordpress.org (nessuno slug
+# SVN assegnato, nessun secret configurato). Trigger: pubblicazione di una
+# Release GitHub (non il semplice push di un tag, per evitare corse
+# accidentali senza credenziali SVN). Una volta accettati:
+#   1. aggiungere i repository secret SVN_USERNAME / SVN_PASSWORD
+#      (Settings → Secrets and variables → Actions);
+#   2. pubblicare una Release GitHub sul tag della versione (es. v0.18.0):
+#      il job gira e sincronizza svn/trunk + crea svn/tags/<versione>.
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    name: Deploy to SVN
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer
+
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --working-dir=system-markdown-alternate
+
+      - name: Stage clean build directory
+        # BUILD_DIR dell'action ignora .distignore: lo stage va fatto a mano,
+        # con le stesse esclusioni di system-markdown-alternate/.distignore.
+        run: |
+          mkdir -p build/system-markdown-alternate
+          rsync -a system-markdown-alternate/ build/system-markdown-alternate/ \
+            --exclude=tests \
+            --exclude=.distignore \
+            --exclude=composer.json \
+            --exclude=composer.lock
+
+      - name: Resolve plugin version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: WordPress Plugin Deploy
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          SLUG: system-markdown-alternate
+          VERSION: ${{ steps.version.outputs.value }}
+          BUILD_DIR: build/system-markdown-alternate
+          ASSETS_DIR: .wordpress-org

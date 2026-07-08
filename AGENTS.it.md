@@ -223,6 +223,7 @@ livello WP.
 ├── LICENSE                       ← GPL-2.0 (testo completo)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
+├── .github/workflows/deploy-wordpress-org.yml  ← deploy SVN (pronto, non attivo: servono i secret SVN + una Release pubblicata)
 ├── .wordpress-org/               ← assets scheda wordpress.org (icona, banner)
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
 ├── bin/make-i18n.sh              ← rigenera le traduzioni
@@ -383,9 +384,21 @@ di runtime). Le esclusioni interne alla cartella plugin sono in
 
 - Flusso manuale: `bash bin/build.sh`, poi copiare il contenuto in `svn/trunk` e
   taggare in `svn/tags/x.y.z`.
-- Flusso automatico (consigliato quando si vuole): GitHub Action
-  `10up/action-wordpress-plugin-deploy` su tag/release (esegue `composer install
-  --no-dev` e rispetta il `.distignore`). Banner/icona/screenshot vivono nella
+- **Flusso automatico** (pronto, non ancora attivo): `.github/workflows/deploy-wordpress-org.yml`
+  esegue `10up/action-wordpress-plugin-deploy`, con trigger sulla
+  **pubblicazione di una Release GitHub** (non sul semplice push di un tag,
+  per evitare un'esecuzione senza credenziali SVN). Siccome `BUILD_DIR` ignora
+  `.distignore`, il workflow stagea prima una copia pulita di
+  `system-markdown-alternate/` (stesse esclusioni del `.distignore`) e la passa
+  all'action. `VERSION` deriva dal nome del tag (`v0.18.0` → `0.18.0`).
+  **Attivazione, una volta accettati su wordpress.org**: aggiungere i secret di
+  repository `SVN_USERNAME` / `SVN_PASSWORD`, poi pubblicare una Release GitHub
+  sul tag della versione.
+- **Tag Git**: annotati, `vX.Y.Z` sul commit che fa il bump di versione (es.
+  `v0.18.0`); aggiunti retroattivamente da `v0.17.1` in poi. Non servono per lo
+  sviluppo locale — solo per le release SVN e per fissare una versione precisa
+  su GitHub.
+  Banner/icona/screenshot vivono nella
   `/assets` dell'SVN (non nel plugin) e si aggiornano con
   `10up/action-wordpress-plugin-asset-update` dalla cartella `.wordpress-org/`
   del repo.

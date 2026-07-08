@@ -236,6 +236,7 @@ running code at the WP level.
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
+├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/make-i18n.sh              ← regenerates the translations
@@ -399,9 +400,19 @@ dependency). The plugin-folder exclusions live in
 
 - Manual flow: `bash bin/build.sh`, then copy the content into `svn/trunk` and
   tag it under `svn/tags/x.y.z`.
-- Automated flow (recommended when desired): the
-  `10up/action-wordpress-plugin-deploy` GitHub Action on tag/release (runs
-  `composer install --no-dev` and honors the `.distignore`).
+- **Automated flow** (ready, not yet active): `.github/workflows/deploy-wordpress-org.yml`
+  runs `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
+  Release** (not on a bare tag push, to avoid a run without SVN credentials).
+  Since `BUILD_DIR` ignores `.distignore`, the workflow stages a clean copy of
+  `system-markdown-alternate/` itself (same exclusions as `.distignore`) before
+  handing it to the action. `VERSION` is derived from the tag name (`v0.18.0` →
+  `0.18.0`). **Activation, once accepted on wordpress.org**: add the
+  `SVN_USERNAME` / `SVN_PASSWORD` repository secrets, then publish a GitHub
+  Release on the version tag.
+- **Git tags**: annotated, `vX.Y.Z` on the commit that bumps the version (e.g.
+  `v0.18.0`); retroactively added from `v0.17.1` onward. Not required for local
+  development — only for SVN releases and for pinning a specific version on
+  GitHub.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
