@@ -136,6 +136,13 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Description** front matter: Rank Math (`rank_math_description`) → scartata solo
   se contiene un placeholder `%variabile%` non risolto → fallback excerpt → testo
   troncato (~200 char). Front matter include `featured_image` (+ `featured_image_alt`).
+- **NIENTE `Cache-Control` esplicito sulla risposta `.md`** (deciso, non
+  riproporre): il plugin NON emette `Cache-Control`/`max-age`. Le richieste
+  condizionali (`ETag`/`Last-Modified` → `304`) danno già una rivalidazione
+  efficiente senza mai servire Markdown stantìo. Un `max-age` rischierebbe di
+  entrare in conflitto con i plugin di page-cache/CDN e potrebbe continuare a
+  servire una versione vecchia dopo una modifica; la policy di freshness spetta
+  all'infrastruttura/CDN, non al plugin.
 
 ## Identità, versioning, workflow
 

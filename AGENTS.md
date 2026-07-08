@@ -146,6 +146,12 @@ The v1 scope is done and widely exceeded. Implemented:
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
   (+ `featured_image_alt`).
+- **NO explicit `Cache-Control` on the `.md` response** (decided, do not propose
+  again): the plugin does NOT emit `Cache-Control`/`max-age`. Conditional
+  requests (`ETag`/`Last-Modified` → `304`) already give efficient revalidation
+  without ever serving stale Markdown. A `max-age` would risk conflicting with
+  page-cache/CDN plugins and could keep serving an outdated version after an
+  edit; freshness policy belongs to the infrastructure/CDN, not the plugin.
 
 ## Identity, versioning, workflow
 
