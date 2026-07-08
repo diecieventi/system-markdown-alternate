@@ -1,16 +1,28 @@
 name: Deploy to WordPress.org
 
 # NON attivo finché il plugin non è accettato su wordpress.org (nessuno slug
-# SVN assegnato, nessun secret configurato). Trigger: pubblicazione di una
-# Release GitHub (non il semplice push di un tag, per evitare corse
-# accidentali senza credenziali SVN). Una volta accettati:
+# SVN assegnato, nessun secret configurato). Trigger primario: pubblicazione
+# di una Release GitHub (non il semplice push di un tag, per evitare corse
+# accidentali senza credenziali SVN). È presente anche un trigger manuale
+# (workflow_dispatch) come ripiego, nel caso l'evento `release: published`
+# non scatti da solo (osservato non affidabile per release create come
+# draft-poi-pubblicate: `created_at` e `published_at` distanti nel tempo).
+# Una volta accettati su wordpress.org:
 #   1. aggiungere i repository secret SVN_USERNAME / SVN_PASSWORD
 #      (Settings → Secrets and variables → Actions);
 #   2. pubblicare una Release GitHub sul tag della versione (es. v0.18.0):
-#      il job gira e sincronizza svn/trunk + crea svn/tags/<versione>.
+#      il job gira e sincronizza svn/trunk + crea svn/tags/<versione>;
+#      se non scatta da solo, lanciarlo a mano da Actions → "Deploy to
+#      WordPress.org" → "Run workflow", indicando lo stesso tag.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag da deployare (es. v0.18.0) — richiesto solo per il lancio manuale'
+        required: true
+        type: string
 
 jobs:
   deploy:
@@ -19,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -43,7 +57,13 @@ jobs:
 
       - name: Resolve plugin version from tag
         id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_TAG="${{ inputs.tag }}"
+          else
+            RAW_TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "value=${RAW_TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: WordPress Plugin Deploy
         uses: 10up/action-wordpress-plugin-deploy@stable
