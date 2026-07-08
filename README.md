@@ -31,6 +31,27 @@ content consumable by tools that prefer Markdown over rendered HTML.
   - **Advanced Custom Fields**: subtitle and TL;DR (from ACF fields) as a preamble between the H1 and the body.
   - **GenerateBlocks 2.x**: auto-registered `{{sma_md_url}}` Dynamic Tag, usable in element fields (e.g. a Button URL).
 
+## Usage
+
+After activating the plugin, open **Settings → System Markdown Alternate** and
+enable at least one content type (nothing is exposed until you do). From then on,
+the Markdown version of any published post of that type can be reached in three
+ways:
+
+1. **`.md` suffix** — append `.md` to the permalink:
+   `https://example.com/my-post.md`. This always returns Markdown, regardless of
+   the `Accept` header.
+2. **Content negotiation** — request the normal permalink with an
+   `Accept: text/markdown` header. Markdown is served only when it is preferred
+   over HTML (q-values are honoured); a browser sending `text/html` or a wildcard
+   still gets HTML.
+3. **Query parameter** — append `?format=markdown` to the permalink, for clients
+   that cannot send custom headers (and for posts with plain permalinks, where
+   the `.md` suffix does not apply).
+
+The optional content index for LLMs and agents lives at
+`https://example.com/llms.txt` (enable it from the same settings page).
+
 ## Repository structure
 
 ```
