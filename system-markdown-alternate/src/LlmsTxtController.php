@@ -17,6 +17,11 @@ defined( 'ABSPATH' ) || exit;
  *   catena del front matter) e sposta l'overflow in una sezione `Optional`
  *   (parola chiave della spec llms.txt, non tradotta). A toggle spento l'output
  *   resta identico alla modalità base.
+ *
+ * Opzione trasversale (`sma_llms_txt_lastmod`, default off): aggiunge a ogni
+ * voce la data di ultima modifica come `(updated: YYYY-MM-DD)` nelle note dopo
+ * i `:`, così i crawler individuano i contenuti cambiati senza rifare il fetch
+ * di ogni URL. Vale sia in modalità base sia arricchita.
  */
 class LlmsTxtController {
 
@@ -112,6 +117,9 @@ class LlmsTxtController {
 		/** Filtro: abilita l'output arricchito (sintesi, contenuti in evidenza, description, Optional). */
 		$enriched = (bool) apply_filters( 'sma_llms_txt_enriched', false );
 
+		/** Filtro: aggiunge la data di ultima modifica `(updated: YYYY-MM-DD)` a ogni voce. */
+		$with_lastmod = (bool) apply_filters( 'sma_llms_txt_lastmod', false );
+
 		$lines   = array();
 		$lines[] = '# ' . get_bloginfo( 'name' );
 
@@ -129,7 +137,7 @@ class LlmsTxtController {
 				$lines[] = preg_replace( '/\s+/', ' ', $summary );
 			}
 
-			$key_items = $this->key_content_items();
+			$key_items = $this->key_content_items( $with_lastmod );
 			if ( ! empty( $key_items ) ) {
 				$lines[] = '';
 				$lines[] = '## ' . __( 'Key content', 'system-markdown-alternate' );
@@ -179,11 +187,11 @@ class LlmsTxtController {
 
 			foreach ( array_values( $posts ) as $i => $post ) {
 				if ( $enriched && $i >= $main_limit ) {
-					$optional[ $label ][] = $this->item_line( $post, false );
+					$optional[ $label ][] = $this->item_line( $post, false, $with_lastmod );
 					continue;
 				}
 
-				$lines[] = $this->item_line( $post, $enriched );
+				$lines[] = $this->item_line( $post, $enriched, $with_lastmod );
 			}
 		}
 
@@ -220,8 +228,10 @@ class LlmsTxtController {
 	 * @param bool $with_description In modalità arricchita usa la catena description
 	 *                               del front matter (Rank Math → excerpt → troncato);
 	 *                               altrimenti il solo excerpt manuale (comportamento base).
+	 * @param bool $with_lastmod     Aggiunge `(updated: YYYY-MM-DD)` nelle note dopo i `:`
+	 *                               (dopo la description se presente, altrimenti come unica nota).
 	 */
-	private function item_line( \WP_Post $post, bool $with_description ): string {
+	private function item_line( \WP_Post $post, bool $with_description, bool $with_lastmod = false ): string {
 		$md_url = MetadataBuilder::markdown_url( $post );
 		$title  = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
 
@@ -237,7 +247,31 @@ class LlmsTxtController {
 			$description = ': ' . self::normalize_inline( wp_trim_words( $raw, 20, '…' ) );
 		}
 
+		if ( $with_lastmod ) {
+			$suffix = self::lastmod_suffix( (string) $post->post_modified_gmt );
+			if ( '' !== $suffix ) {
+				$description .= ( '' === $description ? ': ' : ' ' ) . $suffix;
+			}
+		}
+
 		return '- [' . self::escape_link_text( $title ) . '](' . $md_url . ')' . $description;
+	}
+
+	/**
+	 * Suffisso data di ultima modifica per una voce dell'indice:
+	 * `(updated: YYYY-MM-DD)`, data ISO 8601 estratta da `post_modified_gmt`.
+	 * L'etichetta inglese `updated:` non si traduce (stessa convenzione della
+	 * parola chiave `Optional` della spec llms.txt). Ritorna '' per date vuote,
+	 * azzerate (`0000-00-00 …`) o non riconoscibili.
+	 *
+	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 */
+	public static function lastmod_suffix( string $post_modified_gmt ): string {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}/', $post_modified_gmt, $m ) || '0000-00-00' === $m[0] ) {
+			return '';
+		}
+
+		return '(updated: ' . $m[0] . ')';
 	}
 
 	/**
@@ -279,9 +313,11 @@ class LlmsTxtController {
 	 * Righe della sezione "Key content": risolve le voci configurate (ID numerico
 	 * o URL, una per riga), tiene solo i post servibili, deduplica per ID.
 	 *
+	 * @param bool $with_lastmod Aggiunge la data di ultima modifica a ogni voce.
+	 *
 	 * @return string[]
 	 */
-	private function key_content_items(): array {
+	private function key_content_items( bool $with_lastmod = false ): array {
 		/** Filtro: contenuti in evidenza per /llms.txt (ID numerici o URL). */
 		$entries = (array) apply_filters( 'sma_llms_txt_key_content', array() );
 
@@ -305,7 +341,7 @@ class LlmsTxtController {
 			}
 
 			$seen[ $post_id ] = true;
-			$items[]          = $this->item_line( $post, true );
+			$items[]          = $this->item_line( $post, true, $with_lastmod );
 		}
 
 		return $items;

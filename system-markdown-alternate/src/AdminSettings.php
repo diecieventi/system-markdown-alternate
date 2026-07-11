@@ -111,6 +111,7 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sma_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enriched', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sma_llms_txt_lastmod', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 		register_setting( self::OPTION_GROUP, 'sma_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( self::OPTION_GROUP, 'sma_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 
@@ -144,6 +145,7 @@ class AdminSettings {
 		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
 		add_settings_field( 'sma_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
 		add_settings_field( 'sma_llms_txt_enriched', __( 'Enriched output', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enriched' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_field( 'sma_llms_txt_lastmod', __( 'Last modified dates', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_lastmod' ), self::PAGE, 'sma_llmstxt' );
 		add_settings_field( 'sma_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sma_llmstxt' );
 		add_settings_field( 'sma_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sma_llmstxt' );
 
@@ -253,6 +255,15 @@ class AdminSettings {
 			'sma_llms_txt_enriched',
 			function ( $default ) {
 				$v = get_option( 'sma_llms_txt_enriched' );
+				return false !== $v ? '1' === $v : $default;
+			},
+			20
+		);
+
+		add_filter(
+			'sma_llms_txt_lastmod',
+			function ( $default ) {
+				$v = get_option( 'sma_llms_txt_lastmod' );
 				return false !== $v ? '1' === $v : $default;
 			},
 			20
@@ -552,6 +563,12 @@ class AdminSettings {
 		$v = get_option( 'sma_llms_txt_enriched', '0' ); // disattivato per default
 		echo '<label><input type="checkbox" name="sma_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_llms_txt_lastmod(): void {
+		$v = get_option( 'sma_llms_txt_lastmod', '0' ); // disattivato per default
+		echo '<label><input type="checkbox" name="sma_llms_txt_lastmod" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Append the last modified date to each entry', 'system-markdown-alternate' ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Adds <code>(updated: YYYY-MM-DD)</code> after every entry, so crawlers can spot changed content without re-fetching each URL. Works with both the basic and the enriched output.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_summary(): void {

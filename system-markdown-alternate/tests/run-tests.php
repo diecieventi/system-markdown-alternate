@@ -266,6 +266,13 @@ check( 'llms: whitespace collassato e trimmato', 'X Y', LlmsTxtController::escap
 check( 'llms: description multi-riga → singola', 'Uno due tre', LlmsTxtController::normalize_inline( "Uno\ndue\r\ntre" ) );
 check( 'llms: description bracket intatti', 'vedi [1] e (2)', LlmsTxtController::normalize_inline( 'vedi [1] e (2)' ) );
 
+// lastmod_suffix: suffisso `(updated: YYYY-MM-DD)` per le voci dell'indice.
+check( 'llms: lastmod data valida', '(updated: 2026-07-01)', LlmsTxtController::lastmod_suffix( '2026-07-01 08:30:00' ) );
+check( 'llms: lastmod solo data', '(updated: 2024-12-31)', LlmsTxtController::lastmod_suffix( '2024-12-31' ) );
+check( 'llms: lastmod data vuota', '', LlmsTxtController::lastmod_suffix( '' ) );
+check( 'llms: lastmod data azzerata', '', LlmsTxtController::lastmod_suffix( '0000-00-00 00:00:00' ) );
+check( 'llms: lastmod stringa non valida', '', LlmsTxtController::lastmod_suffix( 'non-una-data' ) );
+
 // ─── MarkdownController::etag_matches ────────────────────────────────────────
 
 check( 'etag: jolly *', true, MarkdownController::etag_matches( '*', '"abc"' ) );

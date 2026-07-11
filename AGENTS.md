@@ -49,7 +49,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Current state (v0.18.x)
+## Current state (v0.19.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -84,7 +84,12 @@ The v1 scope is done and widely exceeded. Implemented:
   (IDs/URLs from the settings page), per-entry description (Rank Math → excerpt →
   trimmed chain), overflow beyond the most recent posts under `## Optional`
   (spec keyword, not translated), `sma_llms_txt_footer` filter as a hook for
-  policy/LLM signals.
+  policy/LLM signals. Optional **last modified dates** (`sma_llms_txt_lastmod`
+  toggle, default off; off = output unchanged): appends `(updated: YYYY-MM-DD)`
+  to every entry (base and enriched, Key content and Optional included) — ISO
+  date from `post_modified_gmt`, English `updated:` label never translated
+  (same convention as the `Optional` spec keyword), placed in the free-text
+  notes after the `:` so it stays llms.txt-spec-compatible.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
   `SMA_VERSION`; salt bump on settings save; cleanup on `save_post`/
@@ -117,36 +122,7 @@ The v1 scope is done and widely exceeded. Implemented:
   i18n coverage of future user-facing strings.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
-- **`lastmod` in `/llms.txt`** (decided; plan below): append the last-modified
-  date to every entry, so LLM crawlers can fetch incrementally instead of
-  revalidating every single `.md` URL (the conditional `304` remains the
-  per-URL mechanism). Scope: **`/llms.txt` only** — no XML sitemap and no
-  separate index endpoint (see "Product decisions"). Decided format: **opt-in
-  checkbox** (option `sma_llms_txt_lastmod`, default off → output unchanged,
-  both base and enriched); suffix ` (updated: YYYY-MM-DD)` in the free-text
-  notes after the `:` — ISO 8601 date from `post_modified_gmt`, English label
-  `updated:` never translated (same convention as the `Optional` spec keyword);
-  entries without a description get `: (updated: YYYY-MM-DD)` as their only
-  note. Spec-compatible: llms.txt defines the notes as free text.
-  Implementation plan (target **0.19.0**):
-  1. `AdminSettings.php`: `register_setting` `sma_llms_txt_lastmod`
-     (`sanitize_checkbox`) + `add_settings_field` in `sma_llmstxt` right after
-     "Enriched output" + option→filter bridge in `hook_filters()` (same
-     pattern as `sma_llms_txt_enriched`). Cache safety is free: saving any
-     `sma_*` option bumps the salt and the llms.txt cache version hashes it.
-  2. `LlmsTxtController`: documented filter
-     `apply_filters( 'sma_llms_txt_lastmod', false )` read once in `build()`;
-     new `public static lastmod_suffix( string $post_modified_gmt ): string`
-     (returns `(updated: YYYY-MM-DD)`, or `''` on empty/zeroed dates; public
-     static to be testable in isolation, like `normalize_inline()`);
-     `item_line()`/`key_content_items()` take the flag — the suffix applies
-     to **all** entries (per-type sections, Key content, Optional overflow).
-  3. Tests for `lastmod_suffix()` in `tests/run-tests.php`; `php -l`.
-  4. i18n (`bash bin/make-i18n.sh` + translate the new strings in the it_IT
-     `.po`); add the filter to "Filters (public contract)" and to the
-     `readme.txt` filter list; docs (this file + translations, `README*.md`,
-     `readme.txt` changelog); version bump; `bin/build.sh`; commit; push.
-- **`.md` hit counter** (decided; plan below — implement after `lastmod`):
+- **`.md` hit counter** (decided; plan below — next planned minor):
   count how many times the `.md` endpoint is served, split **bot vs human**,
   and nothing else. Privacy by design (see "Product decisions"): aggregate
   daily counters only → anonymous data, outside the GDPR scope (no consent,
@@ -401,6 +377,7 @@ apply_filters( 'sma_acf_tldr_key', '', $post );                          // ACF 
 apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max posts per type in /llms.txt
 apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );               // /llms.txt cache TTL (0 = off)
 apply_filters( 'sma_llms_txt_enriched', false );                         // true = enriched /llms.txt output
+apply_filters( 'sma_llms_txt_lastmod', false );                          // true = append (updated: YYYY-MM-DD) to each entry
 apply_filters( 'sma_llms_txt_summary', '' );                             // site summary (enriched only)
 apply_filters( 'sma_llms_txt_key_content', array() );                    // featured content: IDs or URLs (enriched only)
 apply_filters( 'sma_llms_txt_main_posts', 25, $post_type );              // posts per type in the main section (enriched only)

@@ -23,6 +23,7 @@ $sma_options = array(
 	'sma_acf_tldr_key',
 	'sma_llms_txt_enabled',
 	'sma_llms_txt_enriched',
+	'sma_llms_txt_lastmod',
 	'sma_llms_txt_summary',
 	'sma_llms_txt_key_content',
 	'sma_cache_salt',

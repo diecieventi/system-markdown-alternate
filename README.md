@@ -23,7 +23,7 @@ content consumable by tools that prefer Markdown over rendered HTML.
 - **`rel="alternate"` link** in the `<head>` of supported content.
 - **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`), `Link: rel="canonical"` back to the HTML.
 - **Clean conversion**: Gutenberg blocks rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes removed, fenced code blocks, absolute URLs.
-- **`/llms.txt` endpoint** (optional): an index of your content for LLMs and agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts.
+- **`/llms.txt` endpoint** (optional): an index of your content for LLMs and agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
 - **Transient cache** with proactive invalidation (post edit, plugin update, settings save).
 - **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
 - **Shortcode** `[sma_md_url]` to print the `.md` URL anywhere.

@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: System Markdown Alternate 0.17.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/system-markdown-"
 "alternate\n"
-"POT-Creation-Date: 2026-07-05T16:13:39+00:00\n"
+"POT-Creation-Date: 2026-07-11T07:52:17+00:00\n"
 "PO-Revision-Date: 2026-07-05 16:20+0000\n"
 "Last-Translator: Diecieventi Digital Marketing\n"
 "Language-Team: \n"
@@ -47,71 +47,75 @@ msgstr ""
 msgid "Markdown Alternate"
 msgstr "Markdown Alternate"
 
-#: src/AdminSettings.php:126
+#: src/AdminSettings.php:127
 msgid "General"
 msgstr "Generale"
 
-#: src/AdminSettings.php:127
+#: src/AdminSettings.php:128
 msgid "Enabled content types"
 msgstr "Tipi di contenuto abilitati"
 
-#: src/AdminSettings.php:128
+#: src/AdminSettings.php:129
 msgid "Cache TTL (seconds)"
 msgstr "Cache TTL (secondi)"
 
-#: src/AdminSettings.php:131
+#: src/AdminSettings.php:132
 msgid "Markdown output"
 msgstr "Output Markdown"
 
-#: src/AdminSettings.php:132
+#: src/AdminSettings.php:133
 msgid "Excluded shortcodes"
 msgstr "Shortcode esclusi"
 
-#: src/AdminSettings.php:133
+#: src/AdminSettings.php:134
 msgid "Excluded blocks"
 msgstr "Blocchi esclusi"
 
-#: src/AdminSettings.php:134
+#: src/AdminSettings.php:135
 msgid "Excluded CSS classes"
 msgstr "Classi CSS escluse"
 
-#: src/AdminSettings.php:137
+#: src/AdminSettings.php:138
 msgid "ACF subtitle field"
 msgstr "Campo ACF sottotitolo"
 
-#: src/AdminSettings.php:138
+#: src/AdminSettings.php:139
 msgid "ACF TL;DR field"
 msgstr "Campo ACF TL;DR"
 
-#: src/AdminSettings.php:140
+#: src/AdminSettings.php:141
 msgid "ACF fields"
 msgstr "Campi ACF"
 
-#: src/AdminSettings.php:145
+#: src/AdminSettings.php:146
 msgid "Enable /llms.txt"
 msgstr "Abilita /llms.txt"
 
-#: src/AdminSettings.php:146
+#: src/AdminSettings.php:147
 msgid "Enriched output"
 msgstr "Output arricchito"
 
-#: src/AdminSettings.php:147
+#: src/AdminSettings.php:148
+msgid "Last modified dates"
+msgstr "Date di ultima modifica"
+
+#: src/AdminSettings.php:149
 msgid "Site summary"
 msgstr "Sintesi del sito"
 
-#: src/AdminSettings.php:148 src/LlmsTxtController.php:135
+#: src/AdminSettings.php:150 src/LlmsTxtController.php:143
 msgid "Key content"
 msgstr "Contenuti chiave"
 
-#: src/AdminSettings.php:151
+#: src/AdminSettings.php:153
 msgid "Integrations"
 msgstr "Integrazioni"
 
-#: src/AdminSettings.php:154
+#: src/AdminSettings.php:156
 msgid "Advanced"
 msgstr "Avanzate"
 
-#: src/AdminSettings.php:365
+#: src/AdminSettings.php:376
 msgid ""
 "Main settings. Without at least one selected content type, the plugin stays "
 "inactive."
@@ -119,7 +123,7 @@ msgstr ""
 "Impostazioni principali. Senza almeno un tipo di contenuto selezionato, il "
 "plugin resta inattivo."
 
-#: src/AdminSettings.php:369
+#: src/AdminSettings.php:380
 msgid ""
 "Your site uses <strong>plain permalinks</strong>: the <code>.md</code> "
 "suffix is not available, so Markdown URLs fall back to <code>?"
@@ -131,7 +135,7 @@ msgstr ""
 "format=markdown</code>. Per URL <code>.md</code> puliti, scegli una "
 "struttura di permalink leggibile in Impostazioni → Permalink."
 
-#: src/AdminSettings.php:375
+#: src/AdminSettings.php:386
 msgid ""
 "Controls what goes into or stays out of the <code>.md</code> file. For "
 "exclusions: one entry per line, leave empty to use the built-in defaults."
@@ -139,11 +143,11 @@ msgstr ""
 "Decide cosa entra o resta fuori dal file <code>.md</code>. Per le "
 "esclusioni: una voce per riga, lascia vuoto per usare i default interni."
 
-#: src/AdminSettings.php:379
+#: src/AdminSettings.php:390
 msgid "Settings for advanced users."
 msgstr "Impostazioni per utenti esperti."
 
-#: src/AdminSettings.php:383
+#: src/AdminSettings.php:394
 msgid ""
 "The <code>/llms.txt</code> file exposes selected site resources in a format "
 "readable by LLMs and AI agents. It currently lists the enabled Markdown "
@@ -153,19 +157,19 @@ msgstr ""
 "formato leggibile da LLM e agenti AI. Attualmente elenca i contenuti "
 "Markdown abilitati."
 
-#: src/AdminSettings.php:395
+#: src/AdminSettings.php:406
 msgid "llms.txt status"
 msgstr "Stato llms.txt"
 
-#: src/AdminSettings.php:400
+#: src/AdminSettings.php:411
 msgid "Enabled"
 msgstr "Abilitato"
 
-#: src/AdminSettings.php:400
+#: src/AdminSettings.php:411
 msgid "Disabled"
 msgstr "Disabilitato"
 
-#: src/AdminSettings.php:411
+#: src/AdminSettings.php:422
 msgid ""
 "Informational section: how to use the <code>.md</code> URL in content and "
 "templates."
@@ -173,16 +177,16 @@ msgstr ""
 "Sezione informativa: come usare l'URL del <code>.md</code> nei contenuti e "
 "nei template."
 
-#: src/AdminSettings.php:414
+#: src/AdminSettings.php:425
 msgid "Shortcode"
 msgstr "Shortcode"
 
-#: src/AdminSettings.php:415
+#: src/AdminSettings.php:426
 msgid "<code>[sma_md_url]</code> — <code>.md</code> URL of the current post."
 msgstr ""
 "<code>[sma_md_url]</code> — URL del <code>.md</code> del post corrente."
 
-#: src/AdminSettings.php:416
+#: src/AdminSettings.php:427
 msgid ""
 "<code>[sma_md_url id=\"123\"]</code> — <code>.md</code> URL of a specific "
 "post."
@@ -190,7 +194,7 @@ msgstr ""
 "<code>[sma_md_url id=\"123\"]</code> — URL del <code>.md</code> di un post "
 "specifico."
 
-#: src/AdminSettings.php:417
+#: src/AdminSettings.php:428
 msgid ""
 "Returns empty if the post does not expose a .md (type not enabled, draft, or "
 "password-protected)."
@@ -198,11 +202,11 @@ msgstr ""
 "Restituisce vuoto se il post non espone un .md (tipo non abilitato, bozza o "
 "protetto da password)."
 
-#: src/AdminSettings.php:423
+#: src/AdminSettings.php:434
 msgid "GenerateBlocks detected. The dynamic tag is available automatically."
 msgstr "GenerateBlocks rilevato. Il dynamic tag è disponibile automaticamente."
 
-#: src/AdminSettings.php:425
+#: src/AdminSettings.php:436
 msgid ""
 "Insert <code>{{sma_md_url}}</code> in GenerateBlocks/GeneratePress fields "
 "that accept a dynamic tag, e.g. a button URL. If the post has no <code>.md</"
@@ -214,11 +218,11 @@ msgstr ""
 "ha un <code>.md</code>, il tag si risolve a vuoto e l'elemento viene "
 "nascosto (required to render)."
 
-#: src/AdminSettings.php:427
+#: src/AdminSettings.php:438
 msgid "GenerateBlocks not detected. The dynamic tag is not available."
 msgstr "GenerateBlocks non rilevato. Il dynamic tag non è disponibile."
 
-#: src/AdminSettings.php:434
+#: src/AdminSettings.php:445
 msgid ""
 "ACF detected. The Subtitle and TL;DR fields are configured in the "
 "<strong>Markdown output</strong> section."
@@ -226,11 +230,11 @@ msgstr ""
 "ACF rilevato. I campi Sottotitolo e TL;DR si configurano nella sezione "
 "<strong>Output Markdown</strong>."
 
-#: src/AdminSettings.php:435
+#: src/AdminSettings.php:446
 msgid "ACF not detected. The Subtitle and TL;DR fields are not available."
 msgstr "ACF non rilevato. I campi Sottotitolo e TL;DR non sono disponibili."
 
-#: src/AdminSettings.php:450
+#: src/AdminSettings.php:461
 msgid ""
 "A physical <code>llms.txt</code> file exists in the site root: the web "
 "server serves it <strong>before</strong> WordPress, so this endpoint (and "
@@ -241,7 +245,7 @@ msgstr ""
 "(e quello di altri plugin) viene ignorato."
 
 #. translators: %s is a comma-separated list of active SEO plugin names.
-#: src/AdminSettings.php:457
+#: src/AdminSettings.php:468
 #, php-format
 msgid ""
 "Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: "
@@ -254,11 +258,11 @@ msgstr ""
 "gestore (disattiva questo qui sotto, oppure la funzione llms.txt nell'altro "
 "plugin)."
 
-#: src/AdminSettings.php:463
+#: src/AdminSettings.php:474
 msgid "Possible /llms.txt conflict:"
 msgstr "Possibile conflitto su /llms.txt:"
 
-#: src/AdminSettings.php:494
+#: src/AdminSettings.php:504
 msgid ""
 "Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No "
 "selection = plugin inactive."
@@ -266,23 +270,23 @@ msgstr ""
 "Tipi di contenuto esposti come <code>.md</code> e in <code>/llms.txt</code>. "
 "Nessuna selezione = plugin inattivo."
 
-#: src/AdminSettings.php:500
+#: src/AdminSettings.php:510
 msgid "seconds"
 msgstr "secondi"
 
-#: src/AdminSettings.php:501
+#: src/AdminSettings.php:511
 msgid "0 = cache disabled. Default: 86400 (24 hours)."
 msgstr "0 = cache disabilitata. Default: 86400 (24 ore)."
 
-#: src/AdminSettings.php:524
+#: src/AdminSettings.php:534
 msgid "One per line. Leave empty to use the built-in defaults."
 msgstr "Uno per riga. Lascia vuoto per usare i default interni."
 
-#: src/AdminSettings.php:525
+#: src/AdminSettings.php:535
 msgid "View built-in defaults"
 msgstr "Mostra i default interni"
 
-#: src/AdminSettings.php:533
+#: src/AdminSettings.php:543
 msgid ""
 "ACF field name for the subtitle (type: text). Inserted in italics right "
 "after the H1 title."
@@ -290,7 +294,7 @@ msgstr ""
 "Nome del campo ACF per il sottotitolo (tipo: testo). Inserito in corsivo "
 "subito dopo il titolo H1."
 
-#: src/AdminSettings.php:539
+#: src/AdminSettings.php:549
 msgid ""
 "ACF field name for the TL;DR (type: WYSIWYG editor). Inserted as a "
 "<code>**TL;DR**</code> section with <code>---</code> separators."
@@ -298,7 +302,7 @@ msgstr ""
 "Nome del campo ACF per il TL;DR (tipo: editor WYSIWYG). Inserito come "
 "sezione <code>**TL;DR**</code> con separatori <code>---</code>."
 
-#: src/AdminSettings.php:543
+#: src/AdminSettings.php:553
 msgid ""
 "ACF not detected: the Subtitle and TL;DR fields will appear here when ACF is "
 "active. Any previously saved settings are preserved."
@@ -306,19 +310,19 @@ msgstr ""
 "ACF non rilevato: i campi Sottotitolo e TL;DR appariranno qui quando ACF "
 "sarà attivo. Le eventuali impostazioni già salvate restano conservate."
 
-#: src/AdminSettings.php:548
+#: src/AdminSettings.php:558
 msgid "Enable the <code>/llms.txt</code> endpoint"
 msgstr "Abilita l'endpoint <code>/llms.txt</code>"
 
-#: src/AdminSettings.php:549
+#: src/AdminSettings.php:559
 msgid "Disable if another plugin already handles <code>/llms.txt</code>."
 msgstr "Disattiva se un altro plugin gestisce già <code>/llms.txt</code>."
 
-#: src/AdminSettings.php:554
+#: src/AdminSettings.php:564
 msgid "Enable the enriched output"
 msgstr "Abilita l'output arricchito"
 
-#: src/AdminSettings.php:555
+#: src/AdminSettings.php:565
 msgid ""
 "Adds the site summary, the key content section, a description for each entry "
 "(Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the "
@@ -330,7 +334,21 @@ msgstr ""
 "sposta l'eccedenza oltre i post più recenti in una sezione <code>Optional</"
 "code>. Spento = solo l'indice base."
 
-#: src/AdminSettings.php:561
+#: src/AdminSettings.php:570
+msgid "Append the last modified date to each entry"
+msgstr "Aggiungi la data di ultima modifica a ogni voce"
+
+#: src/AdminSettings.php:571
+msgid ""
+"Adds <code>(updated: YYYY-MM-DD)</code> after every entry, so crawlers can "
+"spot changed content without re-fetching each URL. Works with both the basic "
+"and the enriched output."
+msgstr ""
+"Aggiunge <code>(updated: YYYY-MM-DD)</code> dopo ogni voce, così i crawler "
+"individuano i contenuti cambiati senza rifare il fetch di ogni URL. Vale sia "
+"per l'output base sia per quello arricchito."
+
+#: src/AdminSettings.php:577
 msgid ""
 "One short paragraph describing the site, shown after the tagline. Used only "
 "when the enriched output is enabled."
@@ -338,7 +356,7 @@ msgstr ""
 "Un breve paragrafo che descrive il sito, mostrato dopo il motto. Usato solo "
 "con l'output arricchito abilitato."
 
-#: src/AdminSettings.php:567
+#: src/AdminSettings.php:583
 msgid ""
 "Featured content: one post ID or URL per line. Listed first, before the "
 "automatic sections. Used only when the enriched output is enabled."
@@ -347,13 +365,13 @@ msgstr ""
 "prima delle sezioni automatiche. Usati solo con l'output arricchito "
 "abilitato."
 
-#: src/AdminSettings.php:574
+#: src/AdminSettings.php:590
 msgid ""
 "Default: <code>noindex, follow</code>. Leave empty to not send the header."
 msgstr ""
 "Default: <code>noindex, follow</code>. Lascia vuoto per non inviare l'header."
 
-#: src/AdminSettings.php:595
+#: src/AdminSettings.php:611
 msgid ""
 "Serve a clean Markdown version of your content at the .md URL, for LLMs and "
 "AI agents."
@@ -361,7 +379,7 @@ msgstr ""
 "Serve una versione Markdown pulita dei contenuti all'URL .md, per LLM e "
 "agenti AI."
 
-#: src/AdminSettings.php:606
+#: src/AdminSettings.php:622
 msgid "Settings sections"
 msgstr "Sezioni delle impostazioni"
 

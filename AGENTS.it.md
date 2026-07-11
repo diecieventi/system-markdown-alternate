@@ -43,7 +43,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Stato attuale (v0.18.x)
+## Stato attuale (v0.19.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -77,6 +77,12 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   (ID/URL dal pannello), description per voce (catena Rank Math → excerpt →
   troncato), overflow oltre i più recenti in `## Optional` (keyword spec, non
   tradotta), filtro `sma_llms_txt_footer` come gancio per policy/LLM signals.
+  **Date di ultima modifica** opzionali (toggle `sma_llms_txt_lastmod`, default
+  off; off = output invariato): aggiunge `(updated: YYYY-MM-DD)` a ogni voce
+  (base e arricchita, incluse Key content e Optional) — data ISO da
+  `post_modified_gmt`, etichetta inglese `updated:` mai tradotta (stessa
+  convenzione della keyword `Optional` della spec), collocata nelle note in
+  testo libero dopo i `:` per restare compatibile con la spec llms.txt.
 - **Cache Redis-aware** (`Cache` helper): object cache persistente se presente,
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
   `SMA_VERSION`; bump del salt al salvataggio opzioni; pulizia su `save_post`/
@@ -109,40 +115,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   i18n di altre stringhe future esposte all'utente.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
-- **`lastmod` in `/llms.txt`** (deciso; piano sotto): aggiungere la data di
-  ultima modifica a ogni voce, così i crawler LLM possono fare fetch
-  incrementale invece di rivalidare ogni singolo URL `.md` (il `304`
-  condizionale resta il meccanismo per-URL). Perimetro: **solo `/llms.txt`** —
-  niente sitemap XML e niente endpoint indice separato (vedi "Decisioni di
-  prodotto"). Formato deciso: **checkbox opt-in** (opzione
-  `sma_llms_txt_lastmod`, default spento → output invariato, sia base sia
-  enriched); suffisso ` (updated: YYYY-MM-DD)` nella parte testuale libera
-  dopo i `:` — data ISO 8601 da `post_modified_gmt`, etichetta inglese
-  `updated:` mai tradotta (stessa convenzione della keyword `Optional` della
-  spec); le voci senza description ricevono `: (updated: YYYY-MM-DD)` come
-  unica nota. Compatibile con la spec: llms.txt definisce le note come testo
-  libero. Piano di implementazione (target **0.19.0**):
-  1. `AdminSettings.php`: `register_setting` `sma_llms_txt_lastmod`
-     (`sanitize_checkbox`) + `add_settings_field` in `sma_llmstxt` subito dopo
-     "Enriched output" + ponte opzione→filtro in `hook_filters()` (stesso
-     pattern di `sma_llms_txt_enriched`). La cache è già al sicuro: salvare
-     una qualsiasi opzione `sma_*` bumpa il salt e la versione della cache di
-     llms.txt lo include nell'hash.
-  2. `LlmsTxtController`: filtro documentato
-     `apply_filters( 'sma_llms_txt_lastmod', false )` letto una volta in
-     `build()`; nuovo `public static lastmod_suffix( string
-     $post_modified_gmt ): string` (ritorna `(updated: YYYY-MM-DD)`, o `''`
-     con date vuote/azzerate; public static per essere testabile in
-     isolamento, come `normalize_inline()`); `item_line()`/
-     `key_content_items()` ricevono il flag — il suffisso si applica a
-     **tutte** le voci (sezioni per tipo, Key content, overflow Optional).
-  3. Test per `lastmod_suffix()` in `tests/run-tests.php`; `php -l`.
-  4. i18n (`bash bin/make-i18n.sh` + tradurre le nuove stringhe nel `.po`
-     it_IT); aggiungere il filtro a "Filters (public contract)" e all'elenco
-     filtri del `readme.txt`; docs (questo file + traduzioni, `README*.md`,
-     changelog `readme.txt`); bump di versione; `bin/build.sh`; commit; push.
-- **Contatore accessi `.md`** (deciso; piano sotto — da implementare dopo il
-  `lastmod`): contare quante volte viene servito l'endpoint `.md`, diviso
+- **Contatore accessi `.md`** (deciso; piano sotto — prossima minor
+  pianificata): contare quante volte viene servito l'endpoint `.md`, diviso
   **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
   prodotto"): solo contatori giornalieri aggregati → dato anonimo, fuori dal
   perimetro GDPR (niente consenso, niente banner) e dentro la linea guida
@@ -397,6 +371,7 @@ apply_filters( 'sma_acf_tldr_key', '', $post );                          // camp
 apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max post per tipo in /llms.txt
 apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );               // TTL cache /llms.txt (0 = off)
 apply_filters( 'sma_llms_txt_enriched', false );                         // true = output /llms.txt arricchito
+apply_filters( 'sma_llms_txt_lastmod', false );                          // true = aggiunge (updated: YYYY-MM-DD) a ogni voce
 apply_filters( 'sma_llms_txt_summary', '' );                             // sintesi del sito (solo arricchito)
 apply_filters( 'sma_llms_txt_key_content', array() );                    // contenuti in evidenza: ID o URL (solo arricchito)
 apply_filters( 'sma_llms_txt_main_posts', 25, $post_type );              // post per tipo nella sezione principale (solo arricchito)

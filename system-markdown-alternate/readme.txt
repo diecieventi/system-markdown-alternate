@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.18.0
+Stable tag: 0.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -40,7 +40,9 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI
   agents. An optional **enriched mode** (off by default) adds a site summary, a
   curated "Key content" section, a description for each entry and an `Optional`
-  section for older posts.
+  section for older posts. Another optional toggle appends the **last modified
+  date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed
+  content without re-fetching each URL.
 * **Transient cache** with proactive invalidation on post edit, plugin update
   and settings change.
 * **Admin panel** to choose which post types are exposed and to tune cache,
@@ -74,6 +76,8 @@ The output is customizable through filters:
 * `sma_llms_txt_max_posts` — max posts per type in `/llms.txt`.
 * `sma_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
 * `sma_llms_txt_enriched` — enable the enriched `/llms.txt` output (default `false`).
+* `sma_llms_txt_lastmod` — append `(updated: YYYY-MM-DD)` to every `/llms.txt`
+  entry (default `false`).
 * `sma_llms_txt_summary` — site summary paragraph (enriched mode only).
 * `sma_llms_txt_key_content` — featured content, post IDs or URLs (enriched mode only).
 * `sma_llms_txt_main_posts` — posts per type in the main sections before the
@@ -131,6 +135,14 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.19.0 =
+* `/llms.txt`: new optional **last modified dates** toggle (off by default —
+  when off the output is unchanged). When enabled, every entry gets an
+  `(updated: YYYY-MM-DD)` note (ISO date, taken from the post's last
+  modification), in both the basic and the enriched output, so LLM crawlers can
+  spot changed content without re-fetching each `.md` URL. New
+  `sma_llms_txt_lastmod` filter.
 
 = 0.18.0 =
 * Conditional requests on the `.md` endpoint: the Markdown response now sends
