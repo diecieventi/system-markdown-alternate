@@ -28,7 +28,6 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/tests/*" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
 	-x "${PLUGIN_SLUG}/.distignore" \
-	-x "${PLUGIN_SLUG}/composer.json" \
 	-x "${PLUGIN_SLUG}/composer.lock" \
 	-x "*/tests/*" \
 	-x "*/tests/" \

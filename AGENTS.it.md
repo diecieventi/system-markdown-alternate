@@ -451,7 +451,9 @@ sviluppo, l'SVN è solo distribuzione. Ciò che va nell'SVN è **il contenuto de
 cartella `system-markdown-alternate/`** (non la root del repo: niente `README.md`,
 `AGENTS.md`, `bin/`, `DIST/`, `.github/`), con **`vendor/` bundlato** (dipendenza
 di runtime). Le esclusioni interne alla cartella plugin sono in
-`system-markdown-alternate/.distignore` (`tests/`, `composer.*`).
+`system-markdown-alternate/.distignore` (`tests/`, `composer.lock`). Il pacchetto
+di produzione mantiene intenzionalmente `composer.json` insieme a `vendor/`,
+come richiesto da WordPress.org Plugin Check per verificare le dipendenze.
 
 - Flusso manuale: `bash bin/build.sh`, poi copiare il contenuto in `svn/trunk` e
   taggare in `svn/tags/x.y.z`.

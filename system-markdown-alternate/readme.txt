@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.20.1
+Stable tag: 0.20.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,6 +135,11 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.20.2 =
+* Packaging fix: keep `composer.json` alongside the bundled `vendor/` directory
+  so WordPress.org Plugin Check can review the production dependencies. Tests
+  and `composer.lock` remain excluded from the distributable package.
 
 = 0.20.1 =
 * Removed duplicate Settings API success notices from the plugin settings page;

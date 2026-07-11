@@ -7,5 +7,4 @@
 
 /tests
 /.distignore
-composer.json
 composer.lock

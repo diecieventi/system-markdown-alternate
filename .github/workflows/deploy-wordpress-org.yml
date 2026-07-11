@@ -52,7 +52,6 @@ jobs:
           rsync -a system-markdown-alternate/ build/system-markdown-alternate/ \
             --exclude=tests \
             --exclude=.distignore \
-            --exclude=composer.json \
             --exclude=composer.lock
 
       - name: Resolve plugin version from tag
