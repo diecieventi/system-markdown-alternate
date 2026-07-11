@@ -109,16 +109,70 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   i18n di altre stringhe future esposte all'utente.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
-- **`lastmod` in `/llms.txt`** (approvato, da implementare): aggiungere la data
-  di ultima modifica accanto a ogni voce, così i crawler LLM possono fare fetch
+- **`lastmod` in `/llms.txt`** (deciso; piano sotto): aggiungere la data di
+  ultima modifica a ogni voce, così i crawler LLM possono fare fetch
   incrementale invece di rivalidare ogni singolo URL `.md` (il `304`
-  condizionale resta il meccanismo per-URL). Perimetro deciso: **solo
-  `/llms.txt`** — niente sitemap XML e niente endpoint indice separato (vedi
-  "Decisioni di prodotto"). Dettagli da definire in fase di implementazione:
-  data nella parte testuale libera della voce (`- [titolo](url): …`) per
-  restare compatibili con la spec llms.txt, e decidere il posizionamento
-  base-vs-enriched rispettando la regola "enriched spento = output base
-  invariato".
+  condizionale resta il meccanismo per-URL). Perimetro: **solo `/llms.txt`** —
+  niente sitemap XML e niente endpoint indice separato (vedi "Decisioni di
+  prodotto"). Formato deciso: **checkbox opt-in** (opzione
+  `sma_llms_txt_lastmod`, default spento → output invariato, sia base sia
+  enriched); suffisso ` (updated: YYYY-MM-DD)` nella parte testuale libera
+  dopo i `:` — data ISO 8601 da `post_modified_gmt`, etichetta inglese
+  `updated:` mai tradotta (stessa convenzione della keyword `Optional` della
+  spec); le voci senza description ricevono `: (updated: YYYY-MM-DD)` come
+  unica nota. Compatibile con la spec: llms.txt definisce le note come testo
+  libero. Piano di implementazione (target **0.19.0**):
+  1. `AdminSettings.php`: `register_setting` `sma_llms_txt_lastmod`
+     (`sanitize_checkbox`) + `add_settings_field` in `sma_llmstxt` subito dopo
+     "Enriched output" + ponte opzione→filtro in `hook_filters()` (stesso
+     pattern di `sma_llms_txt_enriched`). La cache è già al sicuro: salvare
+     una qualsiasi opzione `sma_*` bumpa il salt e la versione della cache di
+     llms.txt lo include nell'hash.
+  2. `LlmsTxtController`: filtro documentato
+     `apply_filters( 'sma_llms_txt_lastmod', false )` letto una volta in
+     `build()`; nuovo `public static lastmod_suffix( string
+     $post_modified_gmt ): string` (ritorna `(updated: YYYY-MM-DD)`, o `''`
+     con date vuote/azzerate; public static per essere testabile in
+     isolamento, come `normalize_inline()`); `item_line()`/
+     `key_content_items()` ricevono il flag — il suffisso si applica a
+     **tutte** le voci (sezioni per tipo, Key content, overflow Optional).
+  3. Test per `lastmod_suffix()` in `tests/run-tests.php`; `php -l`.
+  4. i18n (`bash bin/make-i18n.sh` + tradurre le nuove stringhe nel `.po`
+     it_IT); aggiungere il filtro a "Filters (public contract)" e all'elenco
+     filtri del `readme.txt`; docs (questo file + traduzioni, `README*.md`,
+     changelog `readme.txt`); bump di versione; `bin/build.sh`; commit; push.
+- **Contatore accessi `.md`** (deciso; piano sotto — da implementare dopo il
+  `lastmod`): contare quante volte viene servito l'endpoint `.md`, diviso
+  **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
+  prodotto"): solo contatori giornalieri aggregati → dato anonimo, fuori dal
+  perimetro GDPR (niente consenso, niente banner) e dentro la linea guida
+  wordpress.org "nessun tracking senza consenso". **Checkbox opt-in, default
+  spento.** Limite accettato: una page cache/CDN che serve il `.md` senza
+  arrivare a PHP fa sottocontare — è un indicatore, non analytics. Piano di
+  implementazione (minor dedicata dopo la 0.19.0):
+  1. Nuova `src/HitCounter.php` (responsabilità singola): `record( ?string
+     $ua )` classifica la richiesta via `public static is_bot( ?string $ua ):
+     bool` (UA vuoto ⇒ bot; lista token case-insensitive: bot, crawl, spider,
+     curl, wget, python, java, http, headless, gpt, claude, perplexity, …;
+     filtro documentato `sma_md_hits_bot_patterns`) e incrementa il bucket di
+     oggi nell'opzione `sma_md_hits` (autoload off, forma `[ 'YYYY-MM-DD' =>
+     [ 'bot' => n, 'human' => n ] ]`), potando i bucket più vecchi di 90
+     giorni (filtro documentato `sma_md_hits_retention_days`). L'UA viene
+     letto solo per classificare, mai salvato. Il read-modify-write può
+     perdere un incremento sotto forte concorrenza: accettato (indicatore).
+  2. `MarkdownController::serve_markdown()`: con `sma_md_hits_enabled`
+     attivo, `record()` su ogni risposta servita — `200` **e** `304` (un
+     accesso è un accesso) — sia per il suffisso `.md` sia per il permalink
+     negoziato.
+  3. `AdminSettings.php`: checkbox "Count `.md` requests" (sezione Advanced)
+     + totali in sola lettura nella pagina impostazioni (oggi / ultimi 7 /
+     ultimi 30 giorni, bot vs umano) con l'avvertenza page-cache nella
+     descrizione.
+  4. `uninstall.php`: aggiungere `sma_md_hits` + `sma_md_hits_enabled`
+     all'elenco.
+  5. Test per `is_bot()` e per la logica di pruning; `php -l`.
+  6. i18n, elenco filtri, docs + traduzioni, changelog `readme.txt`, bump di
+     versione, build, commit, push.
 - **`.wordpress-org/screenshot-*.jpg` sono superati**: mostrano il pannello
   admin pre-0.17.0 (prima del restyling tab/card). Da ricatturare aggiornando
   anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo (non
@@ -142,11 +196,9 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Valutare come arricchire/gestire ulteriormente `/llms.txt`**: oltre alla
   modalità enriched attuale, valutare cos'altro vale la pena aggiungere
   (candidati da definire, vedi anche l'idea LLM signals qui sopra).
-- **Possibile log di erogazione del `.md`**: valutare se/come permettere al
-  proprietario del sito di vedere chi (o quante volte) viene servito l'endpoint
-  `.md` — serve un design che rispetti la linea guida wordpress.org "nessun
-  tracking senza consenso" e resti leggero (niente bloat sul DB); potrebbe
-  partire come log di debug opt-in piuttosto che una feature persistente.
+- ~~Possibile log di erogazione del `.md`~~ → valutato e promosso a
+  **contatore accessi `.md`** pianificato (vedi "Aperti / da fare" qui sopra
+  e la decisione count-only in "Decisioni di prodotto").
 
 ## Decisioni di prodotto (durevoli)
 
@@ -187,6 +239,14 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   (LLM/agenti) è già coperta dal link `rel="alternate"` e da `/llms.txt`. I
   segnali di freshness vanno dentro `/llms.txt` stesso (vedi la voce `lastmod`
   in "Aperti / da fare"): niente endpoint indice separato.
+- **Il contatore accessi `.md` è count-only** (deciso): quando è attivo salva
+  SOLO contatori giornalieri aggregati divisi bot/umano. MAI salvare indirizzi
+  IP, stringhe user-agent grezze, timestamp più fini del giorno o qualsiasi
+  identificativo per visitatore; lo user-agent viene letto dalla richiesta
+  solo per classificare bot vs umano e subito scartato. Nessuna chiamata
+  esterna, nessun cookie. Così il dato salvato resta anonimo (fuori dal
+  perimetro GDPR, nessun consenso necessario) e dentro la linea guida
+  wordpress.org "nessun tracking senza consenso".
 
 ## Identità, versioning, workflow
 

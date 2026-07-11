@@ -117,15 +117,63 @@ The v1 scope is done and widely exceeded. Implemented:
   i18n coverage of future user-facing strings.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
-- **`lastmod` in `/llms.txt`** (approved, to implement): add the last-modified
-  date next to each entry, so LLM crawlers can fetch incrementally instead of
+- **`lastmod` in `/llms.txt`** (decided; plan below): append the last-modified
+  date to every entry, so LLM crawlers can fetch incrementally instead of
   revalidating every single `.md` URL (the conditional `304` remains the
-  per-URL mechanism). Scope decided: **`/llms.txt` only** — no XML sitemap and
-  no separate index endpoint (see "Product decisions"). Details to define at
-  implementation time: date placed in the free-text part of the entry
-  (`- [title](url): …`) to stay llms.txt-spec-compatible, and decide the
-  base-vs-enriched placement respecting the "enriched off = base output
-  unchanged" rule.
+  per-URL mechanism). Scope: **`/llms.txt` only** — no XML sitemap and no
+  separate index endpoint (see "Product decisions"). Decided format: **opt-in
+  checkbox** (option `sma_llms_txt_lastmod`, default off → output unchanged,
+  both base and enriched); suffix ` (updated: YYYY-MM-DD)` in the free-text
+  notes after the `:` — ISO 8601 date from `post_modified_gmt`, English label
+  `updated:` never translated (same convention as the `Optional` spec keyword);
+  entries without a description get `: (updated: YYYY-MM-DD)` as their only
+  note. Spec-compatible: llms.txt defines the notes as free text.
+  Implementation plan (target **0.19.0**):
+  1. `AdminSettings.php`: `register_setting` `sma_llms_txt_lastmod`
+     (`sanitize_checkbox`) + `add_settings_field` in `sma_llmstxt` right after
+     "Enriched output" + option→filter bridge in `hook_filters()` (same
+     pattern as `sma_llms_txt_enriched`). Cache safety is free: saving any
+     `sma_*` option bumps the salt and the llms.txt cache version hashes it.
+  2. `LlmsTxtController`: documented filter
+     `apply_filters( 'sma_llms_txt_lastmod', false )` read once in `build()`;
+     new `public static lastmod_suffix( string $post_modified_gmt ): string`
+     (returns `(updated: YYYY-MM-DD)`, or `''` on empty/zeroed dates; public
+     static to be testable in isolation, like `normalize_inline()`);
+     `item_line()`/`key_content_items()` take the flag — the suffix applies
+     to **all** entries (per-type sections, Key content, Optional overflow).
+  3. Tests for `lastmod_suffix()` in `tests/run-tests.php`; `php -l`.
+  4. i18n (`bash bin/make-i18n.sh` + translate the new strings in the it_IT
+     `.po`); add the filter to "Filters (public contract)" and to the
+     `readme.txt` filter list; docs (this file + translations, `README*.md`,
+     `readme.txt` changelog); version bump; `bin/build.sh`; commit; push.
+- **`.md` hit counter** (decided; plan below — implement after `lastmod`):
+  count how many times the `.md` endpoint is served, split **bot vs human**,
+  and nothing else. Privacy by design (see "Product decisions"): aggregate
+  daily counters only → anonymous data, outside the GDPR scope (no consent,
+  no banner) and within the wordpress.org "no tracking without consent"
+  guideline. **Opt-in checkbox, default off.** Accepted limit: a page
+  cache/CDN serving `.md` without reaching PHP undercounts — it is an
+  indicator, not analytics. Implementation plan (own minor after 0.19.0):
+  1. New `src/HitCounter.php` (single responsibility): `record( ?string $ua )`
+     classifies the request via `public static is_bot( ?string $ua ): bool`
+     (empty UA ⇒ bot; case-insensitive token list: bot, crawl, spider, curl,
+     wget, python, java, http, headless, gpt, claude, perplexity, …;
+     documented filter `sma_md_hits_bot_patterns`) and increments today's
+     bucket in option `sma_md_hits` (autoload off, shape
+     `[ 'YYYY-MM-DD' => [ 'bot' => n, 'human' => n ] ]`), pruning buckets
+     older than 90 days (documented filter `sma_md_hits_retention_days`).
+     The UA is read only to classify, never stored. The read-modify-write
+     may lose an increment under heavy concurrency: accepted (indicator).
+  2. `MarkdownController::serve_markdown()`: when `sma_md_hits_enabled` is
+     on, `record()` every served response — `200` **and** `304` (an access
+     is an access) — for both the `.md` suffix and the negotiated permalink.
+  3. `AdminSettings.php`: "Count `.md` requests" checkbox (Advanced section)
+     + read-only totals on the settings page (today / last 7 / last 30 days,
+     bot vs human) with the page-cache caveat in the description.
+  4. `uninstall.php`: add `sma_md_hits` + `sma_md_hits_enabled` to the list.
+  5. Tests for `is_bot()` and the pruning logic; `php -l`.
+  6. i18n, filters list, docs + translations, `readme.txt` changelog,
+     version bump, build, commit, push.
 - **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
   UI (before the tabs/cards restyle). Recapture them and update the
   `== Screenshots ==` captions in `readme.txt` whenever convenient (no version
@@ -147,10 +195,9 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
   mode, consider what else is worth adding (candidates TBD, see also the LLM
   signals idea above).
-- **Possible `.md` serving log**: evaluate whether/how to let site owners see who
-  (or how often) the `.md` endpoint is being served — needs a design that respects
-  the "no tracking without consent" wordpress.org guideline and stays lightweight
-  (no DB bloat); could start as an opt-in debug log rather than a persisted feature.
+- ~~Possible `.md` serving log~~ → evaluated and promoted to the planned
+  **`.md` hit counter** (see "Open / to do" above and the count-only decision
+  in "Product decisions").
 
 ## Product decisions (durable)
 
@@ -192,6 +239,13 @@ The v1 scope is done and widely exceeded. Implemented:
   covered by the `rel="alternate"` link and by `/llms.txt`. Freshness signals
   go into `/llms.txt` itself (see the `lastmod` item in "Open / to do"): no
   separate machine-index endpoint either.
+- **`.md` hit counter is count-only** (decided): when enabled it stores ONLY
+  aggregate daily counters split bot/human. NEVER store IP addresses, raw
+  user-agent strings, timestamps finer than the day, or any per-visitor
+  identifier; the user-agent is read from the request only to classify
+  bot vs human and is immediately discarded. No external calls, no cookies.
+  This keeps the stored data anonymous (GDPR out of scope, no consent needed)
+  and within the wordpress.org "no tracking without consent" guideline.
 
 ## Identity, versioning, workflow
 
