@@ -1,11 +1,11 @@
 /**
- * System Markdown Alternate — tab della pagina impostazioni.
+ * System Markdown Alternate — settings page tabs.
  *
- * Progressive enhancement: senza questo script tutti i pannelli restano
- * visibili (impilati) e la pagina è pienamente utilizzabile; i campi sono
- * sempre nel form, quindi il salvataggio non cambia. Vanilla JS, nessuna
- * dipendenza. Nasconde i pannelli inattivi solo dopo aver aggiunto la classe
- * `sysmda-js-tabs` (vedi CSS), così il no-JS non nasconde nulla.
+ * Progressive enhancement: without this script every panel remains visible
+ * (stacked) and the page is fully usable. Fields always remain in the form, so
+ * saving behavior does not change. Dependency-free vanilla JS. Inactive panels
+ * are hidden only after adding the `sysmda-js-tabs` class (see CSS), so the
+ * no-JS experience hides nothing.
  */
 ( function () {
 	'use strict';
@@ -59,7 +59,7 @@
 		} );
 	} );
 
-	// Stato iniziale: hash dell'URL > sessionStorage > primo tab.
+	// Initial state: URL hash > sessionStorage > first tab.
 	var initial = '';
 	var hash = ( window.location.hash || '' ).replace( '#sysmda-panel-', '' );
 	if ( hash && hasPanel( hash ) ) {

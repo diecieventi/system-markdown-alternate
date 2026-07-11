@@ -8,22 +8,22 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Integrazione ACF: aggiunge il contenuto di campi specifici al sorgente Markdown.
+ * ACF integration: adds specific field content to the Markdown source.
  *
- * Opt-in tramite il filtro `sysmda_acf_field_keys`:
+ * Opt in through the `sysmda_acf_field_keys` filter:
  *
  *   add_filter( 'sysmda_acf_field_keys', function( $keys, $post ) {
  *       return array( 'my_text_field', 'my_wysiwyg_field' );
  *   }, 10, 2 );
  *
- * I valori vengono accodati al post_content prima della conversione, quindi
- * attraversano l'intera pipeline (pulizia blocchi, DOM, URL assoluti).
- * Supporta campi text e wysiwyg; campi complessi (repeater, gallery) vanno
- * gestiti tramite filtro personalizzato su `sysmda_markdown_source_content`.
+ * Values are appended to post_content before conversion, so they pass through
+ * the full pipeline (block cleaning, DOM processing, absolute URLs). Text and
+ * WYSIWYG fields are supported; complex fields (repeater, gallery) should be
+ * handled with a custom `sysmda_markdown_source_content` filter.
  *
- * Per sottotitolo e TL;DR, configurare `sysmda_acf_subtitle_key` e
- * `sysmda_acf_tldr_key` (tramite admin panel o filtro): vengono inseriti
- * tra il titolo H1 e il corpo dell'articolo.
+ * Configure `sysmda_acf_subtitle_key` and `sysmda_acf_tldr_key` (through the
+ * admin panel or a filter) for subtitle and TL;DR content inserted between the
+ * H1 title and article body.
  */
 class AcfIntegration {
 
@@ -39,13 +39,13 @@ class AcfIntegration {
 	}
 
 	/**
-	 * Aggiunge il contenuto dei campi ACF configurati in coda al sorgente.
+	 * Appends configured ACF field content to the source.
 	 *
-	 * Hook: sysmda_markdown_source_content (priorità 20).
+	 * Hook: sysmda_markdown_source_content (priority 20).
 	 *
-	 * @param string   $content Contenuto sorgente corrente.
-	 * @param \WP_Post $post    Post di riferimento.
-	 * @return string Contenuto con i campi ACF accodati.
+	 * @param string   $content Current source content.
+	 * @param \WP_Post $post    Reference post.
+	 * @return string Content with appended ACF fields.
 	 */
 	public function append_fields( string $content, \WP_Post $post ): string {
 		if ( ! function_exists( 'get_field' ) ) {
@@ -53,10 +53,10 @@ class AcfIntegration {
 		}
 
 		/**
-		 * Filtro: chiavi dei campi ACF da includere nel Markdown.
+		 * Filters ACF field keys included in Markdown.
 		 *
-		 * @param string[]  $keys Chiavi dei campi (default: nessuno).
-		 * @param \WP_Post  $post Post di riferimento.
+		 * @param string[] $keys Field keys (default: none).
+		 * @param \WP_Post $post Reference post.
 		 */
 		$keys = (array) apply_filters( 'sysmda_acf_field_keys', array(), $post );
 
@@ -84,13 +84,13 @@ class AcfIntegration {
 	}
 
 	/**
-	 * Inserisce sottotitolo e TL;DR nel preambolo Markdown (tra # Titolo e corpo).
+	 * Inserts the subtitle and TL;DR in the Markdown preamble (between title and body).
 	 *
-	 * Hook: sysmda_markdown_preamble (priorità 20).
+	 * Hook: sysmda_markdown_preamble (priority 20).
 	 *
-	 * @param string   $preamble Preambolo corrente.
-	 * @param \WP_Post $post     Post di riferimento.
-	 * @return string Preambolo con sottotitolo e/o TL;DR.
+	 * @param string   $preamble Current preamble.
+	 * @param \WP_Post $post     Reference post.
+	 * @return string Preamble with subtitle and/or TL;DR.
 	 */
 	public function build_preamble( string $preamble, \WP_Post $post ): string {
 		if ( ! function_exists( 'get_field' ) ) {
@@ -98,14 +98,14 @@ class AcfIntegration {
 		}
 
 		/**
-		 * Filtro: nome/chiave del campo ACF per il sottotitolo (testo).
-		 * Stringa vuota = disabilitato.
+		 * Filters the ACF field name/key for the subtitle (text).
+		 * An empty string disables it.
 		 */
 		$subtitle_key = (string) apply_filters( 'sysmda_acf_subtitle_key', '', $post );
 
 		/**
-		 * Filtro: nome/chiave del campo ACF per il TL;DR (WYSIWYG).
-		 * Stringa vuota = disabilitato.
+		 * Filters the ACF field name/key for the TL;DR (WYSIWYG).
+		 * An empty string disables it.
 		 */
 		$tldr_key = (string) apply_filters( 'sysmda_acf_tldr_key', '', $post );
 
@@ -121,7 +121,7 @@ class AcfIntegration {
 		if ( '' !== $tldr_key ) {
 			$tldr_html = trim( (string) get_field( $tldr_key, $post->ID ) );
 			if ( '' !== $tldr_html ) {
-				// Passa dalla stessa pipeline del corpo (esclusioni, code, URL assoluti).
+				// Use the same pipeline as the body (exclusions, code, absolute URLs).
 				$tldr_html = $this->renderer->render_fragment( $tldr_html, $post );
 				$tldr_md   = trim( $this->converter->convert( $tldr_html ) );
 				if ( '' !== $tldr_md ) {

@@ -104,7 +104,7 @@ The v1 scope is done and widely exceeded. Implemented:
   panels visible). Assets loaded only on the settings screen.
 - **i18n**: panel strings in `__()`/`esc_html__()` (**English** source), text
   domain `system-markdown-alternate` (= plugin slug). **No bundled translations
-  and no `load_plugin_textdomain()`**: language packs come from
+  and no manual translation loader**: language packs come from
   translate.wordpress.org and WP loads them automatically (≥ 4.6).
 - **ACF**: subtitle (text) + TL;DR (WYSIWYG, goes through the DOM pipeline) as a
   preamble between the H1 and the body; field names configurable from the panel.
@@ -155,10 +155,6 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ### To check next time (not urgent, parked here)
 
-- **Duplicate "settings saved" notice**: saving the settings page appears to show
-  the admin notice ("Settings saved") **twice**. Reproduce and, if confirmed, find
-  and fix the double registration/render (likely `AdminSettings.php` — check for a
-  duplicate `settings_errors()` call or a double hook registration).
 - **Filters undocumented in user-facing docs**: the plugin exposes an extensive
   filter API (see "Filters (public contract)" below) but neither `readme.txt`
   (`== Frequently Asked Questions ==`) nor `README.md`/`README.it.md` mention that
@@ -416,14 +412,16 @@ Default exclusions:
    response (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
    work even when the body cache is off.
-7. **i18n**: **English** source in `__()`/`esc_html__()` and in the
-   `Description:` header; strings with inline HTML (`<code>`, `<strong>`, …) go
-   through `wp_kses_post()`. Text domain `system-markdown-alternate` (= plugin
-   slug, required by wordpress.org). **No translation files in the repo and no
-   `load_plugin_textdomain()`** (removed on the reviewers' advice): since WP 4.6
-   the language packs built by translate.wordpress.org are loaded automatically.
-   Translations are managed there once the plugin is live (see "Open / to do").
-   Installs from the GitHub zip are English-only by design.
+7. **i18n**: **English** is the source language for runtime strings, code
+   comments, DocBlocks, tests, build tooling and workflow messages. The only
+   intentional Italian repository documents are `AGENTS.it.md` and
+   `README.it.md`. Strings with inline HTML (`<code>`, `<strong>`, …) go through
+   `wp_kses_post()`. Text domain `system-markdown-alternate` (= plugin slug,
+   required by wordpress.org). **No translation catalogs or manual translation
+   loader belong in the plugin or repository**: WordPress automatically loads
+   the language packs built by translate.wordpress.org. Translations are managed
+   there once the plugin is live (see "Open / to do"). Installs from the GitHub
+   zip are English-only by design until an official language pack is available.
 
 ## Notes from the reference plugin (ProgressPlanner/markdown-alternate)
 

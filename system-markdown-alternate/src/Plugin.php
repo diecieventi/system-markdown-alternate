@@ -8,7 +8,7 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Bootstrap del plugin: costruisce le dipendenze e registra gli hook WordPress.
+ * Plugin bootstrap: builds dependencies and registers WordPress hooks.
  */
 class Plugin {
 
@@ -18,12 +18,9 @@ class Plugin {
 	private $controller;
 
 	/**
-	 * Costruisce il grafo delle dipendenze e aggancia gli hook.
+	 * Builds the dependency graph and attaches hooks.
 	 */
 	public function boot(): void {
-		// Traduzioni: nessun load_plugin_textdomain() — la distribuzione è via
-		// wordpress.org, che consegna i language pack da translate.wordpress.org
-		// e li carica automaticamente (WP >= 4.6).
 		$shortcodes = new ShortcodeCleaner();
 		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
 		$converter  = new MarkdownConverter();
@@ -31,13 +28,13 @@ class Plugin {
 
 		$this->controller = new MarkdownController( $renderer, $converter, $metadata );
 
-		// Priorità 0: intercettiamo le richieste *.md prima del caricamento del template.
+		// Priority 0: intercept *.md requests before the template loads.
 		add_action( 'template_redirect', array( $this->controller, 'maybe_render_markdown' ), 0 );
 
-		// Link alternate nel <head> dei post/CPT supportati.
+		// Alternate link in the <head> of supported posts/CPTs.
 		add_action( 'wp_head', array( $this->controller, 'print_alternate_link' ) );
 
-		// Invalida la cache Markdown quando un post viene salvato o eliminato.
+		// Invalidate the Markdown cache when a post is saved or deleted.
 		add_action( 'save_post', array( $this->controller, 'invalidate_cache' ) );
 		add_action( 'deleted_post', array( $this->controller, 'invalidate_cache' ) );
 
@@ -45,20 +42,20 @@ class Plugin {
 		$llms = new LlmsTxtController( $metadata );
 		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );
 
-		// Integrazione ACF (opt-in tramite filtri sysmda_acf_field_keys, sysmda_acf_subtitle_key, sysmda_acf_tldr_key).
+		// ACF integration (opt-in through sysmda_acf_field_keys, sysmda_acf_subtitle_key, and sysmda_acf_tldr_key filters).
 		$acf = new AcfIntegration( $converter, $renderer );
 		add_filter( 'sysmda_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
 		add_filter( 'sysmda_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
 
-		// Shortcode [sysmda_md_url] per l'URL dinamico del .md.
+		// [sysmda_md_url] shortcode for the dynamic .md URL.
 		( new Shortcodes() )->register();
 
-		// Dynamic Tag GenerateBlocks {{sysmda_md_url}} (auto-attivo se GB 2.x è presente).
+		// GenerateBlocks {{sysmda_md_url}} dynamic tag (automatically active with GB 2.x).
 		( new DynamicTags() )->register();
 
-		// AdminSettings: registra i filtri su tutti i contesti (front-end incluso),
-		// il pannello admin viene agganciato da admin_menu/admin_init che sparano
-		// solo nell'admin da soli — nessun gate is_admin() necessario.
+		// AdminSettings registers filters in every context (including the front end).
+		// The admin panel is attached through admin_menu/admin_init, which fire only
+		// in the admin area, so no is_admin() guard is needed.
 		( new AdminSettings() )->boot();
 	}
 }

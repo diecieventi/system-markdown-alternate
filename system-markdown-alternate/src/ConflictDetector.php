@@ -8,19 +8,18 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Rileva possibili conflitti sull'endpoint /llms.txt usando solo segnali
- * locali e stabili (nessuna richiesta di rete, nessuna lettura di opzioni
- * interne di terzi):
- * - plugin SEO noti ATTIVI che potrebbero generare /llms.txt;
- * - un file fisico llms.txt nella root.
+ * Detects possible /llms.txt endpoint conflicts using only stable local signals
+ * (no network requests and no reads of third-party internal options):
+ * - known ACTIVE SEO plugins that might generate /llms.txt;
+ * - a physical llms.txt file in the root directory.
  *
- * Pensato per il pannello admin (informativo): avvisa, poi decide l'utente.
+ * Intended as an informational admin notice: it warns and lets the user decide.
  */
 class ConflictDetector {
 
 	/**
-	 * Plugin SEO noti che POSSONO gestire /llms.txt, con il rispettivo check di
-	 * "attivo" (costante/classe definita quando il plugin è caricato).
+	 * Known SEO plugins that MAY handle /llms.txt, with their corresponding
+	 * "active" check (constant/class defined when the plugin is loaded).
 	 *
 	 * @return array<string,bool>
 	 */
@@ -34,7 +33,7 @@ class ConflictDetector {
 	}
 
 	/**
-	 * Nomi dei plugin SEO attivi che potrebbero gestire /llms.txt.
+	 * Names of active SEO plugins that might handle /llms.txt.
 	 *
 	 * @return string[]
 	 */
@@ -43,8 +42,8 @@ class ConflictDetector {
 	}
 
 	/**
-	 * File fisico llms.txt nella root: il web server lo serve PRIMA di WordPress,
-	 * quindi qualsiasi endpoint PHP (il nostro o di altri plugin) viene ignorato.
+	 * A physical llms.txt file in the root is served BEFORE WordPress by the web
+	 * server, so every PHP endpoint (ours or another plugin's) is ignored.
 	 */
 	public function physical_file_exists(): bool {
 		return file_exists( trailingslashit( ABSPATH ) . 'llms.txt' );

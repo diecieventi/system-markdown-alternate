@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Build dello zip distribuibile di "System Markdown Alternate" in DIST/.
-# Installa le dipendenze Composer di produzione e le include nello zip,
-# così non serve Composer sul server di produzione / sito di test.
+# Builds the distributable "System Markdown Alternate" zip in DIST/.
+# Installs production Composer dependencies and includes them in the zip, so
+# Composer is not needed on the production server or test site.
 #
-# Uso:  bash bin/build.sh
+# Usage: bash bin/build.sh
 #
 set -euo pipefail
 
@@ -14,20 +14,22 @@ PLUGIN_DIR="${ROOT_DIR}/${PLUGIN_SLUG}"
 DIST_DIR="${ROOT_DIR}/DIST"
 ZIP_PATH="${DIST_DIR}/${PLUGIN_SLUG}.zip"
 
-echo "==> Installazione dipendenze Composer (--no-dev)…"
+echo "==> Installing Composer dependencies (--no-dev)…"
 composer install --no-dev --optimize-autoloader --working-dir="${PLUGIN_DIR}"
 
-echo "==> Preparazione DIST/…"
+echo "==> Preparing DIST/…"
 mkdir -p "${DIST_DIR}"
 rm -f "${ZIP_PATH}"
 
-echo "==> Creazione zip…"
+echo "==> Creating zip…"
 cd "${ROOT_DIR}"
 zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/.git/*" \
 	-x "${PLUGIN_SLUG}/tests/*" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
 	-x "${PLUGIN_SLUG}/.distignore" \
+	-x "${PLUGIN_SLUG}/composer.json" \
+	-x "${PLUGIN_SLUG}/composer.lock" \
 	-x "*/tests/*" \
 	-x "*/tests/" \
 	-x "*/.git/*" \
@@ -36,4 +38,4 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "*/.github/" \
 	-x "*/.DS_Store"
 
-echo "==> Fatto: ${ZIP_PATH}"
+echo "==> Done: ${ZIP_PATH}"

@@ -8,39 +8,38 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Dynamic Tag per GenerateBlocks 2.x: espone {{sysmda_md_url}} negli elementi
- * GenerateBlocks/GeneratePress (es. campo URL di un Button).
+ * GenerateBlocks 2.x dynamic tag: exposes {{sysmda_md_url}} in
+ * GenerateBlocks/GeneratePress elements (for example, a Button URL field).
  *
- * Si auto-registra quando GenerateBlocks 2.x è presente (come l'integrazione
- * ACF si attiva con ACF). Tenere il tag SEMPRE registrato è una scelta voluta:
- * se il post non è servibile il callback restituisce '' e il "required to render"
- * di GenerateBlocks nasconde l'elemento, evitando di lasciare {{sysmda_md_url}}
- * letterale nell'href (cosa che accadrebbe se il tag non fosse registrato).
+ * It registers itself when GenerateBlocks 2.x is present (like the ACF
+ * integration activates with ACF). Keeping the tag registered is intentional:
+ * when the post is not servable, the callback returns '' and GenerateBlocks'
+ * "required to render" hides the element. This avoids leaving a literal
+ * {{sysmda_md_url}} in href when the tag cannot be resolved.
  *
- * API verificata sul sorgente di GenerateBlocks 2.2.1:
- * - registrazione: new GenerateBlocks_Register_Dynamic_Tag([...]) su `init`
- * - risoluzione post: GenerateBlocks_Dynamic_Tags::get_id($options,'post',$instance)
+ * API verified against GenerateBlocks 2.2.1 source:
+ * - registration: new GenerateBlocks_Register_Dynamic_Tag([...]) on `init`
+ * - post resolution: GenerateBlocks_Dynamic_Tags::get_id($options,'post',$instance)
  */
 class DynamicTags {
 
 	const TAG = 'sysmda_md_url';
 
 	/**
-	 * Aggancia la registrazione del tag su `init`. La presenza di GenerateBlocks
-	 * viene verificata in register_tag() (la classe potrebbe non essere ancora
-	 * caricata al momento del boot).
+	 * Attaches tag registration to `init`. register_tag() checks for GenerateBlocks
+	 * because its class might not be loaded during boot.
 	 */
 	public function register(): void {
-		// GenerateBlocks registra i propri tag su `init`; ci agganciamo dopo (prio 20).
+		// GenerateBlocks registers its tags on `init`; attach after it (priority 20).
 		add_action( 'init', array( $this, 'register_tag' ), 20 );
 	}
 
 	/**
-	 * Registra il tag presso GenerateBlocks, se la classe è disponibile.
+	 * Registers the tag with GenerateBlocks when its class is available.
 	 */
 	public function register_tag(): void {
 		if ( ! class_exists( 'GenerateBlocks_Register_Dynamic_Tag' ) ) {
-			return; // GenerateBlocks assente o versione senza Dynamic Tags.
+			return; // GenerateBlocks is absent or the installed version lacks Dynamic Tags.
 		}
 
 		new \GenerateBlocks_Register_Dynamic_Tag(
@@ -55,12 +54,12 @@ class DynamicTags {
 	}
 
 	/**
-	 * Callback del tag: restituisce l'URL del .md del post risolto.
+	 * Tag callback: returns the resolved post's .md URL.
 	 *
-	 * @param array  $options  Opzioni del tag (parsate da GenerateBlocks).
-	 * @param array  $block    Dati del blocco.
-	 * @param object $instance Istanza del blocco.
-	 * @return string URL del .md, o '' se non servibile.
+	 * @param array  $options  Tag options (parsed by GenerateBlocks).
+	 * @param array  $block    Block data.
+	 * @param object $instance Block instance.
+	 * @return string .md URL, or '' when not servable.
 	 */
 	public static function get_md_url( $options, $block, $instance ): string {
 		if ( ! class_exists( 'GenerateBlocks_Dynamic_Tags' ) ) {

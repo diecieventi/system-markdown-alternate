@@ -1,9 +1,9 @@
-# File esclusi dal pacchetto wordpress.org (SVN).
+# Files excluded from the WordPress.org package (SVN).
 #
-# Usato dagli strumenti di deploy (es. 10up/action-wordpress-plugin-deploy) che
-# fanno rsync di questa cartella verso l'SVN escludendo questi pattern. Nota:
-# `vendor/` NON è elencato perché è una dipendenza di runtime e DEVE essere
-# spedito (va bundlato con `composer install --no-dev` prima del deploy).
+# Used by deployment tools (for example 10up/action-wordpress-plugin-deploy)
+# that rsync this directory to SVN while excluding these patterns. Note:
+# `vendor/` is intentionally omitted because it is a runtime dependency and
+# MUST be shipped (bundle it with `composer install --no-dev` before deployment).
 
 /tests
 /.distignore

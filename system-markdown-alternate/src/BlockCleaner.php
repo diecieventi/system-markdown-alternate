@@ -8,28 +8,28 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Pulizia ricorsiva dei blocchi Gutenberg prima del rendering.
+ * Recursively cleans Gutenberg blocks before rendering.
  *
- * I blocchi riutilizzabili / synced pattern (`core/block`) vengono espansi nel
- * contenuto del post `wp_block` referenziato e ripuliti con le stesse regole:
- * senza espansione, render_block() renderizzerebbe il contenuto referenziato
- * senza passare da esclusioni di blocchi e shortcode.
+ * Reusable blocks / synced patterns (`core/block`) are expanded into the
+ * referenced `wp_block` post content and cleaned with the same rules. Without
+ * expansion, render_block() would render referenced content without applying
+ * block and shortcode exclusions.
  */
 class BlockCleaner {
 
-	/** Classi CSS che marcano un blocco da escludere. */
+	/** CSS classes that mark a block for exclusion. */
 	const EXCLUDED_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
 	/** @var ShortcodeCleaner */
 	private $shortcodes;
 
-	/** @var string[] Nomi blocco esclusi, risolti una volta per clean(). */
+	/** @var string[] Excluded block names, resolved once per clean() call. */
 	private $excluded_names = array();
 
-	/** @var string[] Classi escluse, risolte una volta per clean(). */
+	/** @var string[] Excluded classes, resolved once per clean() call. */
 	private $excluded_classes = array();
 
-	/** @var array<int,bool> Ref già espansi nella catena corrente (guardia anti-ricorsione). */
+	/** @var array<int,bool> References already expanded in the current chain (recursion guard). */
 	private $expanding_refs = array();
 
 	public function __construct( ShortcodeCleaner $shortcodes ) {
@@ -37,14 +37,14 @@ class BlockCleaner {
 	}
 
 	/**
-	 * @param array $blocks Output di parse_blocks().
-	 * @return array Blocchi ripuliti (con innerBlocks/innerContent riallineati).
+	 * @param array $blocks Output from parse_blocks().
+	 * @return array Clean blocks (with realigned innerBlocks/innerContent).
 	 */
 	public function clean( array $blocks ): array {
-		// Risolviamo le liste filtrabili una sola volta: is_excluded() viene
-		// chiamato per ogni blocco (anche annidato) e i filtri non vanno rilanciati N volte.
+		// Resolve filterable lists once: is_excluded() runs for every block,
+		// including nested blocks, and filters should not run repeatedly.
 		$this->excluded_names   = $this->excluded_block_names();
-		/** Filtro: classi CSS i cui blocchi vengono esclusi dall'output Markdown. */
+		/** Filters CSS classes whose blocks are excluded from Markdown output. */
 		$this->excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 		$this->expanding_refs   = array();
 
@@ -52,7 +52,7 @@ class BlockCleaner {
 	}
 
 	/**
-	 * Pulisce una lista di blocchi appiattendo le eventuali espansioni.
+	 * Cleans a list of blocks and flattens any expansions.
 	 *
 	 * @return array
 	 */
@@ -69,18 +69,18 @@ class BlockCleaner {
 	}
 
 	/**
-	 * Pulisce un singolo blocco. Restituisce 0..n blocchi: lista vuota se va
-	 * rimosso, più di uno se un `core/block` viene espanso nel suo contenuto.
+	 * Cleans one block. Returns 0..n blocks: an empty list when removed, or more
+	 * than one when a `core/block` is expanded into its content.
 	 *
-	 * Quando rimuove un innerBlock riallinea innerContent (i placeholder null devono
-	 * restare in corrispondenza 1:1 con gli innerBlocks per un render_block() corretto).
+	 * When removing an innerBlock, realigns innerContent (null placeholders must
+	 * remain 1:1 with innerBlocks for render_block() to work correctly).
 	 *
-	 * @return array Lista di blocchi ripuliti.
+	 * @return array List of clean blocks.
 	 */
 	private function clean_block( array $block ): array {
 		$name = isset( $block['blockName'] ) ? $block['blockName'] : null;
 
-		// I "freeform" (blockName null) sono HTML libero tra i blocchi: si conservano.
+		// Freeform blocks (null blockName) are raw HTML between blocks: preserve them.
 		if ( null !== $name && $this->is_excluded( $block ) ) {
 			return array();
 		}
@@ -101,7 +101,7 @@ class BlockCleaner {
 					continue;
 				}
 
-				// null = segnaposto per il prossimo innerBlock.
+				// null is a placeholder for the next innerBlock.
 				$inner = isset( $block['innerBlocks'][ $index ] ) ? $block['innerBlocks'][ $index ] : null;
 				++$index;
 
@@ -109,7 +109,7 @@ class BlockCleaner {
 					continue;
 				}
 
-				// Un'espansione dentro un wrapper produce N blocchi → N segnaposto.
+				// An expansion inside a wrapper produces N blocks → N placeholders.
 				foreach ( $this->clean_block( $inner ) as $cleaned_inner ) {
 					$new_inner_blocks[]  = $cleaned_inner;
 					$new_inner_content[] = null;
@@ -124,16 +124,16 @@ class BlockCleaner {
 	}
 
 	/**
-	 * Espande un `core/block` nel contenuto del post `wp_block` referenziato,
-	 * applicando strip degli shortcode esclusi e pulizia ricorsiva.
+	 * Expands a `core/block` into the referenced `wp_block` post content, strips
+	 * excluded shortcodes, and cleans it recursively.
 	 *
-	 * @return array Blocchi del pattern ripuliti (vuoto se non espandibile).
+	 * @return array Clean pattern blocks (empty when expansion is not possible).
 	 */
 	private function expand_reusable( array $block ): array {
 		$ref = isset( $block['attrs']['ref'] ) ? (int) $block['attrs']['ref'] : 0;
 
 		if ( $ref <= 0 || isset( $this->expanding_refs[ $ref ] ) ) {
-			return array(); // Ref mancante o ciclo di riferimenti: si scarta.
+			return array(); // Missing reference or reference cycle: discard it.
 		}
 
 		$reusable = get_post( $ref );
@@ -154,7 +154,7 @@ class BlockCleaner {
 	}
 
 	/**
-	 * Un blocco è escluso se ha un blockName nella lista oppure una classe esclusa negli attrs.
+	 * A block is excluded when its blockName is listed or attrs contain an excluded class.
 	 */
 	private function is_excluded( array $block ): bool {
 		$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
@@ -178,7 +178,7 @@ class BlockCleaner {
 	}
 
 	/**
-	 * Lista (filtrabile) dei blockName da escludere.
+	 * Filterable list of blockName values to exclude.
 	 *
 	 * @return string[]
 	 */
@@ -188,10 +188,10 @@ class BlockCleaner {
 			'contact-form-7/contact-form-selector',
 			'wpforms/form-selector',
 			'mailerlite/form',
-			'luckywp/toc', // LuckyWP TOC: navigazione, non contenuto.
+			'luckywp/toc', // LuckyWP TOC: navigation, not content.
 		);
 
-		/** Filtro: nomi dei blocchi da escludere dal Markdown. */
+		/** Filters block names excluded from Markdown. */
 		return (array) apply_filters( 'sysmda_markdown_excluded_block_names', $defaults );
 	}
 }

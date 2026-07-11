@@ -8,15 +8,15 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Shortcode [sysmda_md_url]: restituisce l'URL della versione Markdown del post.
+ * [sysmda_md_url] shortcode: returns the URL of the post's Markdown version.
  *
- * L'URL è calcolato al volo dal permalink (nessun dato salvato a DB).
+ * The URL is calculated from the permalink at runtime (no data stored in the database).
  *
- *   [sysmda_md_url]           → URL del .md del post corrente
- *   [sysmda_md_url id="123"]  → URL del .md di un post specifico
+ *   [sysmda_md_url]           → .md URL of the current post
+ *   [sysmda_md_url id="123"]  → .md URL of a specific post
  *
- * Restituisce stringa vuota se il post non è servibile (tipo non supportato,
- * non pubblicato o protetto da password), per non generare link verso un 404.
+ * Returns an empty string when the post is not servable (unsupported type,
+ * unpublished, or password-protected), avoiding links to a 404 response.
  */
 class Shortcodes {
 
@@ -25,7 +25,7 @@ class Shortcodes {
 	}
 
 	/**
-	 * @param array<string,mixed>|string $atts Attributi shortcode.
+	 * @param array<string,mixed>|string $atts Shortcode attributes.
 	 */
 	public function render_url( $atts ): string {
 		$atts = shortcode_atts( array( 'id' => 0 ), $atts, 'sysmda_md_url' );
@@ -40,7 +40,7 @@ class Shortcodes {
 	}
 
 	/**
-	 * Risolve il post: ID esplicito, oggetto interrogato o post nel loop.
+	 * Resolves the post from an explicit ID, the queried object, or the loop.
 	 */
 	private function resolve_post( int $id ): ?\WP_Post {
 		if ( $id > 0 ) {

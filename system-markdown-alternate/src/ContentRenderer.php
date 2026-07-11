@@ -8,11 +8,11 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Produce l'HTML pulito pronto per la conversione in Markdown.
+ * Produces clean HTML ready for Markdown conversion.
  */
 class ContentRenderer {
 
-	/** Classi CSS che marcano contenuti da escludere dal Markdown. */
+	/** CSS classes that mark content for exclusion from Markdown. */
 	const EXCLUDED_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
 	/** @var BlockCleaner */
@@ -27,17 +27,17 @@ class ContentRenderer {
 	}
 
 	/**
-	 * @param \WP_Post $post Post da renderizzare.
-	 * @return string HTML pronto per la conversione.
+	 * @param \WP_Post $post Post to render.
+	 * @return string HTML ready for conversion.
 	 */
 	public function render( \WP_Post $post ): string {
-		/** Filtro: contenuto sorgente (punto di estensione per ACF/contenuti custom in v2). */
+		/** Filters source content (extension point for ACF/custom content). */
 		$content = (string) apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 
-		// 1. Rimuove gli shortcode esclusi dal sorgente grezzo (anche dentro i blocchi).
+		// 1. Remove excluded shortcodes from the raw source (including inside blocks).
 		$content = $this->shortcodes->strip( $content );
 
-		// 2. Parse + pulizia blocchi, quindi render dei soli blocchi rimasti.
+		// 2. Parse and clean blocks, then render only the remaining blocks.
 		if ( has_blocks( $content ) ) {
 			$blocks = $this->blocks->clean( parse_blocks( $content ) );
 
@@ -46,22 +46,22 @@ class ContentRenderer {
 				$html .= render_block( $block );
 			}
 		} else {
-			// Contenuto classico: niente filtro the_content (evita related/CTA iniettati).
+			// Classic content: skip the_content to avoid injected related content/CTAs.
 			$html = wpautop( do_shortcode( $content ) );
 		}
 
-		// 3-5. Passaggio DOM: normalizza code block, rimuove classi escluse, assolutizza URL.
+		// 3-5. DOM pass: normalize code blocks, remove excluded classes, absolutize URLs.
 		$html = $this->process_dom( $html, (string) get_permalink( $post ) );
 
-		/** Filtro: HTML renderizzato e ripulito, prima della conversione. */
+		/** Filters rendered clean HTML before conversion. */
 		return (string) apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 	}
 
 	/**
-	 * Processa un frammento HTML (es. campo WYSIWYG ACF) con la stessa pipeline
-	 * del corpo classico: rimozione shortcode esclusi, shortcode/wpautop, e
-	 * passaggio DOM (esclusioni per classe, normalizzazione code, URL assoluti
-	 * risolti rispetto al permalink del post).
+	 * Processes an HTML fragment (for example an ACF WYSIWYG field) through the
+	 * same pipeline as classic content: excluded shortcode removal,
+	 * shortcode/wpautop processing, and a DOM pass (class exclusions, code
+	 * normalization, and absolute URLs resolved against the post permalink).
 	 */
 	public function render_fragment( string $html, \WP_Post $post ): string {
 		$html = $this->shortcodes->strip( $html );
@@ -71,9 +71,9 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Passaggio unico su DOM: code block, classi escluse, URL assoluti.
+	 * Single DOM pass for code blocks, excluded classes, and absolute URLs.
 	 *
-	 * @param string $base URL di base (permalink del post) per risolvere i relativi.
+	 * @param string $base Base URL (post permalink) for resolving relative URLs.
 	 */
 	private function process_dom( string $html, string $base ): string {
 		if ( '' === trim( $html ) ) {
@@ -108,12 +108,12 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Rimuove dal DOM gli elementi con una delle classi escluse (anche annidati).
+	 * Removes DOM elements carrying an excluded class (including nested elements).
 	 */
 	private function remove_excluded_nodes( \DOMDocument $dom ): void {
 		$xpath = new \DOMXPath( $dom );
 
-		/** Filtro: classi CSS i cui elementi vengono rimossi dall'output Markdown. */
+		/** Filters CSS classes whose elements are removed from Markdown output. */
 		$excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 
 		foreach ( $excluded_classes as $class ) {
@@ -131,8 +131,8 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Trasforma i <figure> in <p>: la libreria li tratta così come blocchi a sé,
-	 * garantendo la separazione (riga vuota) attorno a immagini e didascalie.
+	 * Replaces <figure> with <p>, which the library treats as standalone blocks,
+	 * ensuring blank-line separation around images and captions.
 	 */
 	private function unwrap_figures( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'figure' ) ) as $figure ) {
@@ -150,9 +150,9 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Normalizza i blocchi di codice: rimuove gli <span> di syntax highlighting
-	 * preservando il testo e impostando la classe `language-*` sul <code>, così la
-	 * libreria produce un fenced code block. Copre Code Block Pro e qualunque highlighter.
+	 * Normalizes code blocks: removes syntax-highlighting <span> elements while
+	 * preserving text and setting the `language-*` class on <code>, so the library
+	 * produces a fenced code block. Covers Code Block Pro and other highlighters.
 	 */
 	private function normalize_code_blocks( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'pre' ) ) as $pre ) {
@@ -173,8 +173,8 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Cerca il linguaggio del codice tra classi (`language-*`, `lang-*`, `brush:`) e
-	 * attributi dati (`data-language`, `data-lang`) di <pre> e discendenti.
+	 * Detects the code language from classes (`language-*`, `lang-*`, `brush:`)
+	 * and data attributes (`data-language`, `data-lang`) on <pre> or descendants.
 	 */
 	private function detect_code_language( \DOMElement $pre ): string {
 		$elements = array_merge( array( $pre ), iterator_to_array( $pre->getElementsByTagName( '*' ) ) );
@@ -199,8 +199,8 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Converte gli href dei link e i src delle immagini in URL assoluti,
-	 * risolvendo i relativi rispetto al permalink del post ($base).
+	 * Converts link href and image src values to absolute URLs, resolving
+	 * relative values against the post permalink ($base).
 	 */
 	private function absolutize_urls( \DOMDocument $dom, string $base ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'a' ) ) as $a ) {
@@ -219,10 +219,10 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Rende assoluto un URL risolvendolo rispetto a $base (il permalink sorgente):
-	 * - assoluti / protocol-relative / schemi speciali → invariati;
-	 * - root-relative (/x) → contro l'origine (scheme://host);
-	 * - document-relative (x, ../x) → contro la directory del permalink.
+	 * Makes a URL absolute by resolving it against $base (the source permalink):
+	 * - absolute / protocol-relative / special schemes → unchanged;
+	 * - root-relative (/x) → against the origin (scheme://host);
+	 * - document-relative (x, ../x) → against the permalink directory.
 	 */
 	private function absolutize( string $url, string $base ): string {
 		$url = trim( $url );
@@ -231,12 +231,12 @@ class ContentRenderer {
 			return $url;
 		}
 
-		// Già assoluto o protocol-relative.
+		// Already absolute or protocol-relative.
 		if ( preg_match( '#^(https?:)?//#i', $url ) ) {
 			return $url;
 		}
 
-		// Schemi/áncore da non toccare.
+		// Schemes/anchors that must remain unchanged.
 		foreach ( array( 'data:', 'mailto:', 'tel:', '#' ) as $prefix ) {
 			if ( 0 === strpos( $url, $prefix ) ) {
 				return $url;
@@ -246,19 +246,19 @@ class ContentRenderer {
 		$parts = wp_parse_url( $base );
 
 		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
-			// Base non interpretabile: fallback all'origine del sito.
+			// Unparseable base: fall back to the site origin.
 			return home_url( '/' . ltrim( $url, '/' ) );
 		}
 
 		$port   = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
 		$origin = $parts['scheme'] . '://' . $parts['host'] . $port;
 
-		// Root-relative: contro l'origine.
+		// Root-relative: resolve against the origin.
 		if ( '/' === $url[0] ) {
 			return $origin . $this->resolve_dot_segments( $url );
 		}
 
-		// Document-relative: contro la directory del permalink.
+		// Document-relative: resolve against the permalink directory.
 		$base_path = isset( $parts['path'] ) ? $parts['path'] : '/';
 		$dir       = ( '/' === substr( $base_path, -1 ) )
 			? $base_path
@@ -268,7 +268,7 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Normalizza i segmenti "." e ".." di un path, preservando lo slash iniziale.
+	 * Normalizes "." and ".." path segments while preserving the leading slash.
 	 */
 	private function resolve_dot_segments( string $path ): string {
 		$out = array();

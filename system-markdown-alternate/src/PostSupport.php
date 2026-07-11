@@ -8,15 +8,15 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Regole di eleggibilità condivise: quali post espongono la versione Markdown.
+ * Shared eligibility rules for posts that expose a Markdown version.
  *
- * Punto unico di verità per endpoint .md, content negotiation, link alternate,
+ * Single source of truth for the .md endpoint, content negotiation, alternate link,
  * shortcode [sysmda_md_url] e dynamic tag {{sysmda_md_url}}.
  */
 class PostSupport {
 
 	/**
-	 * Post type supportati (filtrabile). Lista vuota = plugin inattivo.
+	 * Supported post types (filterable). An empty list means the plugin is inactive.
 	 *
 	 * @return string[]
 	 */
@@ -24,7 +24,7 @@ class PostSupport {
 		static $types = null;
 
 		if ( null === $types ) {
-			/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
+			/** Filters post types that expose the .md endpoint and alternate link. */
 			$types = (array) apply_filters( 'sysmda_markdown_supported_post_types', array() );
 		}
 
@@ -32,8 +32,8 @@ class PostSupport {
 	}
 
 	/**
-	 * True se il post espone davvero un .md: tipo supportato, pubblicato,
-	 * non protetto da password.
+	 * Whether the post exposes a .md representation: supported type, published,
+	 * and not password-protected.
 	 */
 	public static function is_servable( \WP_Post $post ): bool {
 		return in_array( $post->post_type, self::supported_post_types(), true )

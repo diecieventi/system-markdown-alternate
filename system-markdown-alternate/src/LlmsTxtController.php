@@ -8,24 +8,24 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Serve l'endpoint /llms.txt: indice dei contenuti Markdown del sito.
+ * Serves the /llms.txt endpoint: an index of the site's Markdown content.
  *
- * Due modalità:
- * - base (default): nome sito, tagline, elenco per post type (excerpt manuale).
- * - arricchita (toggle `sysmda_llms_txt_enriched`): aggiunge una sintesi del sito,
- *   una sezione di contenuti in evidenza, la description per ogni voce (stessa
- *   catena del front matter) e sposta l'overflow in una sezione `Optional`
- *   (parola chiave della spec llms.txt, non tradotta). A toggle spento l'output
- *   resta identico alla modalità base.
+ * Two modes:
+ * - basic (default): site name, tagline, and a list for each post type (manual excerpt).
+ * - enriched (`sysmda_llms_txt_enriched` toggle): adds a site summary, a key
+ *   content section, a description for each entry (using the same front matter
+ *   fallback chain), and moves overflow into an `Optional` section (an
+ *   untranslated llms.txt specification keyword). When the toggle is off, the
+ *   output remains identical to basic mode.
  *
- * Opzione trasversale (`sysmda_llms_txt_lastmod`, default off): aggiunge a ogni
- * voce la data di ultima modifica come `(updated: YYYY-MM-DD)` nelle note dopo
- * i `:`, così i crawler individuano i contenuti cambiati senza rifare il fetch
- * di ogni URL. Vale sia in modalità base sia arricchita.
+ * Cross-cutting option (`sysmda_llms_txt_lastmod`, off by default): adds each
+ * entry's last-modified date as `(updated: YYYY-MM-DD)` in the notes after the
+ * `:`, allowing crawlers to identify changed content without fetching every
+ * URL again. Applies to both basic and enriched modes.
  */
 class LlmsTxtController {
 
-	/** Chiave di cache dell'output /llms.txt. */
+	/** Cache key for the /llms.txt output. */
 	const CACHE_KEY = 'sysmda_llms_txt';
 
 	/** @var MetadataBuilder */
@@ -36,9 +36,9 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Hook: template_redirect (priorità 0).
+	 * Hook: template_redirect (priority 0).
 	 *
-	 * Intercetta /llms.txt e serve il file di testo; per qualsiasi altro path esce subito.
+	 * Intercepts /llms.txt and serves the text file; returns immediately for any other path.
 	 */
 	public function maybe_render_llms_txt(): void {
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
@@ -51,16 +51,16 @@ class LlmsTxtController {
 		$home_path = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
 		$expected  = $home_path . '/llms.txt';
 
-		// Check URI per primo (string op economica) prima di leggere le opzioni.
+		// Check the URI first (an inexpensive string operation) before reading options.
 		if ( $path !== $expected && $path !== $expected . '/' ) {
 			return;
 		}
 
 		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '1' ) ) {
-			return; // Disabilitato dal pannello admin.
+			return; // Disabled in the admin panel.
 		}
 
-		// Trailing slash: /llms.txt/ → 301 verso /llms.txt.
+		// Trailing slash: redirect /llms.txt/ to /llms.txt with a 301.
 		if ( $path === $expected . '/' ) {
 			wp_safe_redirect( home_url( '/llms.txt' ), 301 );
 			exit;
@@ -71,7 +71,7 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Stampa l'output /llms.txt, servendolo dalla cache se disponibile.
+	 * Prints the /llms.txt output, serving it from cache when available.
 	 */
 	private function render(): void {
 		if ( ! headers_sent() ) {
@@ -80,7 +80,7 @@ class LlmsTxtController {
 			header( 'X-Robots-Tag: noindex, follow' );
 		}
 
-		/** Filtro: TTL cache di /llms.txt in secondi. 0 disabilita la cache. */
+		/** Filter: /llms.txt cache TTL in seconds. 0 disables caching. */
 		$ttl     = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
 		$version = md5( SYSMDA_VERSION . '|' . (string) get_option( 'sysmda_cache_salt', '0' ) );
 
@@ -109,15 +109,15 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Genera il contenuto /llms.txt.
+	 * Builds the /llms.txt content.
 	 */
 	private function build(): string {
 		$post_types = PostSupport::supported_post_types();
 
-		/** Filtro: abilita l'output arricchito (sintesi, contenuti in evidenza, description, Optional). */
+		/** Filter: enables enriched output (summary, key content, descriptions, Optional). */
 		$enriched = (bool) apply_filters( 'sysmda_llms_txt_enriched', false );
 
-		/** Filtro: aggiunge la data di ultima modifica `(updated: YYYY-MM-DD)` a ogni voce. */
+		/** Filter: adds the last-modified date `(updated: YYYY-MM-DD)` to each entry. */
 		$with_lastmod = (bool) apply_filters( 'sysmda_llms_txt_lastmod', false );
 
 		$lines   = array();
@@ -130,7 +130,7 @@ class LlmsTxtController {
 		}
 
 		if ( $enriched ) {
-			/** Filtro: paragrafo di sintesi del sito, dopo la tagline ('' = nessuno). */
+			/** Filter: site summary paragraph after the tagline ('' = none). */
 			$summary = trim( wp_strip_all_tags( (string) apply_filters( 'sysmda_llms_txt_summary', '' ) ) );
 			if ( '' !== $summary ) {
 				$lines[] = '';
@@ -148,18 +148,18 @@ class LlmsTxtController {
 			}
 		}
 
-		$optional = array(); // label → righe overflow (solo modalità arricchita).
+		$optional = array(); // Label => overflow lines (enriched mode only).
 
 		foreach ( $post_types as $post_type ) {
 			$obj   = get_post_type_object( $post_type );
 			$label = $obj ? $obj->labels->name : $post_type;
 
-			/** Filtro: numero massimo di post per tipo nell'indice llms.txt. */
+			/** Filter: maximum number of posts per type in the llms.txt index. */
 			$limit = (int) apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );
 
 			/**
-			 * Filtro: in modalità arricchita, numero di post per tipo nella sezione
-			 * principale; l'eccedenza (fino al max) finisce sotto `## Optional`.
+			 * Filter: in enriched mode, the number of posts per type in the main
+			 * section; overflow (up to the maximum) goes under `## Optional`.
 			 */
 			$main_limit = $enriched ? (int) apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type ) : $limit;
 
@@ -167,13 +167,13 @@ class LlmsTxtController {
 				array(
 					'post_type'              => $post_type,
 					'post_status'            => 'publish',
-					'has_password'           => false, // Esclude i contenuti protetti (come l'endpoint .md).
+					'has_password'           => false, // Excludes protected content (like the .md endpoint).
 					'posts_per_page'         => $limit,
 					'orderby'                => 'date',
 					'order'                  => 'DESC',
 					'no_found_rows'          => true,
-					'update_post_meta_cache' => $enriched, // La description arricchita legge i meta.
-					'update_post_term_cache' => false,     // I termini mai.
+					'update_post_meta_cache' => $enriched, // Enriched descriptions read post meta.
+					'update_post_term_cache' => false,     // Terms are never read.
 				)
 			);
 
@@ -196,7 +196,7 @@ class LlmsTxtController {
 		}
 
 		if ( $enriched && ! empty( $optional ) ) {
-			// "Optional" è una parola chiave della spec llms.txt: non si traduce.
+			// "Optional" is an llms.txt specification keyword and is not translated.
 			$lines[] = '';
 			$lines[] = '## Optional';
 
@@ -211,7 +211,7 @@ class LlmsTxtController {
 		}
 
 		if ( $enriched ) {
-			/** Filtro: blocco libero in coda a /llms.txt ('' = nessuno; gancio per policy/LLM signals). */
+			/** Filter: free-form block appended to /llms.txt ('' = none; hook for policy/LLM signals). */
 			$footer = trim( (string) apply_filters( 'sysmda_llms_txt_footer', '' ) );
 			if ( '' !== $footer ) {
 				$lines[] = '';
@@ -223,13 +223,13 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Riga elenco per un post: `- [titolo](url.md)` + description opzionale.
+	 * List entry for a post: `- [title](url.md)` plus an optional description.
 	 *
-	 * @param bool $with_description In modalità arricchita usa la catena description
-	 *                               del front matter (Rank Math → excerpt → troncato);
-	 *                               altrimenti il solo excerpt manuale (comportamento base).
-	 * @param bool $with_lastmod     Aggiunge `(updated: YYYY-MM-DD)` nelle note dopo i `:`
-	 *                               (dopo la description se presente, altrimenti come unica nota).
+	 * @param bool $with_description In enriched mode, uses the front matter description
+	 *                               chain (Rank Math => excerpt => trimmed content);
+	 *                               otherwise uses only the manual excerpt (basic behavior).
+	 * @param bool $with_lastmod     Adds `(updated: YYYY-MM-DD)` to the notes after the `:`
+	 *                               (after the description, if present; otherwise as the only note).
 	 */
 	private function item_line( \WP_Post $post, bool $with_description, bool $with_lastmod = false ): string {
 		$md_url = MetadataBuilder::markdown_url( $post );
@@ -258,13 +258,13 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Suffisso data di ultima modifica per una voce dell'indice:
-	 * `(updated: YYYY-MM-DD)`, data ISO 8601 estratta da `post_modified_gmt`.
-	 * L'etichetta inglese `updated:` non si traduce (stessa convenzione della
-	 * parola chiave `Optional` della spec llms.txt). Ritorna '' per date vuote,
-	 * azzerate (`0000-00-00 …`) o non riconoscibili.
+	 * Last-modified suffix for an index entry: `(updated: YYYY-MM-DD)`, with the
+	 * ISO 8601 date extracted from `post_modified_gmt`. The English `updated:`
+	 * label is not translated (the same convention as the llms.txt specification's
+	 * `Optional` keyword). Returns '' for empty, zero (`0000-00-00 …`), or
+	 * unrecognized dates.
 	 *
-	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 * Public only so it can be tested in isolation (like markdown_url()).
 	 */
 	public static function lastmod_suffix( string $post_modified_gmt ): string {
 		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}/', $post_modified_gmt, $m ) || '0000-00-00' === $m[0] ) {
@@ -275,14 +275,14 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Normalizza un testo su una singola riga: newline e caratteri di controllo
-	 * (`\x00-\x1F`, `\x7F`) diventano spazio, gli whitespace multipli vengono
-	 * collassati e la stringa viene ripulita ai bordi.
+	 * Normalizes text to a single line: newlines and control characters
+	 * (`\x00-\x1F`, `\x7F`) become spaces, repeated whitespace is collapsed,
+	 * and leading and trailing whitespace is removed.
 	 *
-	 * Garantisce che ogni voce dell'indice occupi una sola riga: senza questo,
-	 * un titolo o una description con newline spezzerebbe la struttura del file.
+	 * Ensures every index entry occupies one line; otherwise, a title or
+	 * description containing newlines would break the file structure.
 	 *
-	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 * Public only so it can be tested in isolation (like markdown_url()).
 	 */
 	public static function normalize_inline( string $text ): string {
 		$text = preg_replace( '/[\x00-\x1F\x7F]+/u', ' ', $text );
@@ -292,12 +292,12 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Prepara un testo per l'uso come *link text* Markdown (`[testo](url)`):
-	 * lo normalizza su una riga singola ed escapa i caratteri che romperebbero
-	 * la sintassi del link (`\`, `[`, `]`, `(`, `)`). Il backslash va escapato
-	 * per primo per non raddoppiare gli escape introdotti dopo.
+	 * Prepares text for use as Markdown *link text* (`[text](url)`): normalizes it
+	 * to a single line and escapes characters that would break link syntax
+	 * (`\`, `[`, `]`, `(`, `)`). The backslash must be escaped first to avoid
+	 * doubling the escape sequences introduced afterward.
 	 *
-	 * Pubblica solo per essere testabile in isolamento (come markdown_url()).
+	 * Public only so it can be tested in isolation (like markdown_url()).
 	 */
 	public static function escape_link_text( string $text ): string {
 		$text = self::normalize_inline( $text );
@@ -310,15 +310,15 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Righe della sezione "Key content": risolve le voci configurate (ID numerico
-	 * o URL, una per riga), tiene solo i post servibili, deduplica per ID.
+	 * Lines for the "Key content" section: resolves configured entries (numeric
+	 * IDs or URLs, one per line), keeps only servable posts, and deduplicates by ID.
 	 *
-	 * @param bool $with_lastmod Aggiunge la data di ultima modifica a ogni voce.
+	 * @param bool $with_lastmod Adds the last-modified date to each entry.
 	 *
 	 * @return string[]
 	 */
 	private function key_content_items( bool $with_lastmod = false ): array {
-		/** Filtro: contenuti in evidenza per /llms.txt (ID numerici o URL). */
+		/** Filter: key content for /llms.txt (numeric IDs or URLs). */
 		$entries = (array) apply_filters( 'sysmda_llms_txt_key_content', array() );
 
 		$items = array();

@@ -8,7 +8,7 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Costruisce il front matter YAML del Markdown.
+ * Builds the Markdown YAML front matter.
  */
 class MetadataBuilder {
 
@@ -20,8 +20,8 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * @param \WP_Post $post Post di riferimento.
-	 * @return string Blocco front matter (--- ... ---) con newline finale.
+	 * @param \WP_Post $post Reference post.
+	 * @return string Front matter block (--- ... ---) with a trailing newline.
 	 */
 	public function build_front_matter( \WP_Post $post ): string {
 		$lines = array( '---' );
@@ -52,11 +52,11 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * URL della versione Markdown a partire dal permalink (gestendo il trailing slash).
+	 * Builds the Markdown version URL from the permalink (handling the trailing slash).
 	 *
-	 * Con i permalink "Plain" (?p=123) il suffisso .md non è applicabile: si
-	 * ripiega su `?format=markdown`, servito dalla content negotiation sullo
-	 * stesso permalink. Idem se il permalink non ha un path utilizzabile.
+	 * With "Plain" permalinks (?p=123), the .md suffix cannot be used, so this
+	 * falls back to `?format=markdown`, served through content negotiation on the
+	 * same permalink. The same applies when the permalink has no usable path.
 	 */
 	public static function markdown_url( \WP_Post $post ): string {
 		$permalink = (string) get_permalink( $post );
@@ -73,8 +73,8 @@ class MetadataBuilder {
 
 		$path = isset( $parts['path'] ) ? untrailingslashit( $parts['path'] ) : '';
 
-		// Permalink senza path o con query string: il suffisso .md non è
-		// applicabile, la negotiation con ?format=markdown funziona sempre.
+		// A permalink without a path or with a query string cannot use the .md
+		// suffix; negotiation with ?format=markdown always works.
 		if ( '' === $path || isset( $parts['query'] ) ) {
 			return add_query_arg( 'format', 'markdown', $permalink );
 		}
@@ -87,9 +87,9 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Aggiunge featured_image (+ alt) se presente.
+	 * Adds featured_image (and alt text) when available.
 	 *
-	 * @param string[] $lines Riferimento all'array di righe del front matter.
+	 * @param string[] $lines Reference to the array of front matter lines.
 	 */
 	private function append_featured_image( array &$lines, \WP_Post $post ): void {
 		$thumb_id = get_post_thumbnail_id( $post );
@@ -113,11 +113,11 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Aggiunge una lista YAML di termini, se non vuota.
+	 * Adds a YAML list of terms when it is not empty.
 	 *
-	 * @param string[] $lines Riferimento all'array di righe.
+	 * @param string[] $lines Reference to the array of lines.
 	 * @param string   $key   Chiave YAML (es. "categories").
-	 * @param string[] $terms Nomi dei termini.
+	 * @param string[] $terms Term names.
 	 */
 	private function append_terms( array &$lines, string $key, array $terms ): void {
 		if ( empty( $terms ) ) {
@@ -131,7 +131,7 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Nomi dei termini di una tassonomia per il post.
+	 * Names of a post's terms in a taxonomy.
 	 *
 	 * @return string[]
 	 */
@@ -146,15 +146,15 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Description in ordine: Rank Math → excerpt → testo del contenuto troncato.
+	 * Description fallback order: Rank Math => excerpt => trimmed content text.
 	 *
-	 * Pubblica: riusata da LlmsTxtController per le voci dell'indice arricchito.
+	 * Public because LlmsTxtController reuses it for enriched index entries.
 	 */
 	public function description( \WP_Post $post ): string {
 		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );
 
-		// Scarta solo se contiene un placeholder Rank Math non risolto (%var% o
-		// %var(args)%). Non scartare descrizioni con % "normale" (es. "Sconto 20%").
+		// Discard only when it contains an unresolved Rank Math placeholder (%var%
+		// or %var(args)%). Do not discard descriptions with a normal % (e.g. "20% off").
 		if ( is_string( $rank_math ) && '' !== $rank_math
 			&& ! preg_match( '/%[a-z0-9_]+(?:\([^)]*\))?%/i', $rank_math ) ) {
 			return $rank_math;
@@ -168,13 +168,14 @@ class MetadataBuilder {
 		}
 
 		$raw = $post->post_content;
-		$raw = $this->shortcodes->strip( $raw );   // Rimuove gli shortcode esclusi (anche se non registrati).
-		$raw = strip_shortcodes( $raw );           // Rimuove gli altri shortcode registrati.
-		$raw = preg_replace( '/<!--.*?-->/s', ' ', $raw ); // Delimitatori di blocco → spazio.
-		$raw = preg_replace( '/<[^>]+>/', ' ', $raw );     // Tag → spazio (evita parole concatenate).
+		$raw = $this->shortcodes->strip( $raw );   // Removes excluded shortcodes (even when they are not registered).
+		$raw = strip_shortcodes( $raw );           // Removes other registered shortcodes.
+		$raw = preg_replace( '/<!--.*?-->/s', ' ', $raw ); // Replaces block delimiters with spaces.
+		$raw = preg_replace( '/<(script|style|iframe)\b[^>]*>.*?<\/\1\s*>/is', ' ', $raw ); // Replaces non-text nodes with spaces.
+		$raw = preg_replace( '/<[^>]+>/', ' ', $raw );     // Replaces tags with spaces to prevent joined words.
 
 		$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( $raw ) ) );
-		$text = preg_replace( '/\s+([.,;:!?…])/u', '$1', $text ); // Niente spazio prima della punteggiatura.
+		$text = preg_replace( '/\s+([.,;:!?…])/u', '$1', $text ); // Removes whitespace before punctuation.
 
 		if ( '' === $text ) {
 			return '';
@@ -184,7 +185,7 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Tronca al confine di parola entro $limit caratteri, aggiungendo un ellissi.
+	 * Truncates at a word boundary within $limit characters and appends an ellipsis.
 	 */
 	private function truncate( string $text, int $limit ): string {
 		if ( mb_strlen( $text ) <= $limit ) {
@@ -202,7 +203,7 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Serializza una stringa come scalare YAML quotato (escape di entità, \ e ").
+	 * Serializes a string as a quoted YAML scalar (escaping entities, \ and ").
 	 */
 	private function scalar( $value ): string {
 		$value = (string) $value;

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.20.0
+Stable tag: 0.20.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -136,6 +136,18 @@ the post is edited, when the plugin is updated, or when you save the settings.
 
 == Changelog ==
 
+= 0.20.1 =
+* Removed duplicate Settings API success notices from the plugin settings page;
+  WordPress now remains the single source that renders these notices.
+* Description fallbacks now remove complete `script`, `style` and `iframe`
+  nodes before extracting text. This prevents embedded code from leaking into
+  `.md` front matter and enriched `/llms.txt` entries.
+* Completed the WordPress.org internationalization readiness audit: runtime
+  strings remain static English with the plugin text domain, while code
+  comments, tests, build tooling and workflow messages are now consistently
+  English. Official translations remain delivered exclusively through
+  translate.wordpress.org language packs.
+
 = 0.20.0 =
 * All internal names now use the distinctive `sysmda_` / `SYSMDA_` prefix and
   the `Diecieventi\SystemMarkdownAlternate` namespace, per the wordpress.org
@@ -144,9 +156,8 @@ the post is edited, when the plugin is updated, or when you save the settings.
   are renamed (`sma_*` → `sysmda_*`, `[sma_md_url]` → `[sysmda_md_url]`,
   `{{sma_md_url}}` → `{{sysmda_md_url}}`); settings must be re-saved after
   updating, since option names changed.
-* Removed `load_plugin_textdomain()` and the bundled translation files:
-  translations are delivered as language packs by translate.wordpress.org
-  (automatic since WP 4.6).
+* Removed bundled translation files and manual translation loading:
+  translations are delivered as language packs by translate.wordpress.org.
 
 = 0.19.0 =
 * `/llms.txt`: new optional **last modified dates** toggle (off by default —

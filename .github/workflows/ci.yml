@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 7.4 = minimo supportato dal plugin, 8.4 = ambiente di produzione.
+        # 7.4 = plugin minimum, 8.4 = production environment.
         php: ['7.4', '8.4']
     name: PHP ${{ matrix.php }}
     steps:

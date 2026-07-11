@@ -1,9 +1,9 @@
 <?php
 /**
- * Disinstallazione di System Markdown Alternate.
+ * Uninstall System Markdown Alternate.
  *
- * Rimuove tutte le opzioni del plugin e i dati in cache (transient).
- * Eseguito da WordPress solo alla cancellazione del plugin.
+ * Removes all plugin options and cached data (transients).
+ * WordPress runs this only when the plugin is deleted.
  *
  * @package Diecieventi\SystemMarkdownAlternate
  */
@@ -27,17 +27,17 @@ $sysmda_options = array(
 	'sysmda_llms_txt_summary',
 	'sysmda_llms_txt_key_content',
 	'sysmda_cache_salt',
-	'sysmda_dynamic_tag_enabled', // opzione legacy (toggle Dynamic Tag rimosso in 0.8.0).
+	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
 );
 
 foreach ( $sysmda_options as $sysmda_option ) {
 	delete_option( $sysmda_option );
 }
 
-// Transient del plugin (chiave + timeout). Coperti sia il caso DB sia,
-// per sicurezza, eventuali residui anche con object cache attivo.
-// Query diretta deliberata: le chiavi dei transient non sono note singolarmente
-// e nessuna cache è rilevante durante la disinstallazione.
+// Plugin transients (key and timeout). Cover both database storage and, as a
+// precaution, any leftovers when an object cache is active.
+// The direct query is deliberate: individual transient keys are unknown and
+// no cache is relevant during uninstall.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->query(
 	"DELETE FROM {$wpdb->options}
@@ -47,7 +47,7 @@ $wpdb->query(
 	    OR option_name LIKE '\_transient\_timeout\_sysmda\_llms\_%'"
 );
 
-// Object cache persistente: svuota il gruppo se l'API è disponibile.
+// Persistent object cache: flush the group when the API is available.
 if ( function_exists( 'wp_cache_flush_group' ) && wp_using_ext_object_cache() ) {
 	wp_cache_flush_group( 'sysmda' );
 }

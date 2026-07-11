@@ -97,7 +97,7 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   anche senza JS (tutti i pannelli visibili). Asset caricati solo nella pagina.
 - **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
   text domain `system-markdown-alternate` (= slug del plugin). **Nessuna
-  traduzione bundlata e nessun `load_plugin_textdomain()`**: i language pack
+  traduzione bundlata e nessun loader manuale**: i language pack
   arrivano da translate.wordpress.org e WP li carica in automatico (≥ 4.6).
 - **ACF**: sottotitolo (testo) + TL;DR (WYSIWYG, passa dalla pipeline DOM) come
   preambolo tra H1 e corpo; nomi campo configurabili dal pannello.
@@ -153,11 +153,6 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
 ### Da controllare al prossimo giro (non urgente, parcheggiato qui)
 
-- **Notifica "impostazioni salvate" doppia**: salvando la pagina impostazioni
-  sembra comparire l'avviso admin ("Impostazioni salvate") **due volte**.
-  Riprodurre e, se confermato, trovare e correggere la doppia
-  registrazione/render (probabile `AdminSettings.php` — controllare una doppia
-  chiamata a `settings_errors()` o una doppia registrazione dell'hook).
 - **Filtri non documentati nella documentazione utente**: il plugin espone
   un'ampia API di filtri (vedi "Filters (public contract)" più sotto) ma né il
   `readme.txt` (`== Frequently Asked Questions ==`) né `README.md`/`README.it.md`
@@ -410,15 +405,17 @@ Default esclusioni:
    condizionale, `If-None-Match` prima di `If-Modified-Since`); deriva da
    `post_modified`, quindi le richieste condizionali funzionano anche con la cache
    del body spenta.
-7. **i18n**: sorgente **inglese** nei `__()`/`esc_html__()` e nell'header
-   `Description:`; le stringhe con HTML inline (`<code>`, `<strong>`, …) escono via
-   `wp_kses_post()`. Text domain `system-markdown-alternate` (= slug del plugin,
-   richiesto da wordpress.org). **Nessun file di traduzione nel repo e nessun
-   `load_plugin_textdomain()`** (rimosso su indicazione dei reviewer): da WP 4.6
-   i language pack generati da translate.wordpress.org vengono caricati in
-   automatico. Le traduzioni si gestiscono lì una volta che il plugin è live
-   (vedi "Aperti / da fare"). Le installazioni dallo zip GitHub restano solo in
-   inglese, per scelta.
+7. **i18n**: l'**inglese** è la lingua sorgente per stringhe runtime, commenti
+   del codice, DocBlock, test, strumenti di build e messaggi dei workflow. Gli
+   unici documenti intenzionalmente italiani nel repository sono `AGENTS.it.md`
+   e `README.it.md`. Le stringhe con HTML inline (`<code>`, `<strong>`, …) escono
+   via `wp_kses_post()`. Text domain `system-markdown-alternate` (= slug del
+   plugin, richiesto da wordpress.org). **Nel plugin e nel repository non devono
+   esserci cataloghi di traduzione né loader manuali**: WordPress carica
+   automaticamente i language pack generati da translate.wordpress.org. Le
+   traduzioni si gestiscono lì una volta che il plugin è live (vedi "Aperti / da
+   fare"). Le installazioni dallo zip GitHub restano in inglese finché non è
+   disponibile un language pack ufficiale.
 
 ## Spunti dal plugin di riferimento (ProgressPlanner/markdown-alternate)
 

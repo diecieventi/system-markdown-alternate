@@ -10,13 +10,13 @@ use League\HTMLToMarkdown\HtmlConverter;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Converte l'HTML pulito in Markdown usando league/html-to-markdown.
+ * Converts clean HTML to Markdown using league/html-to-markdown.
  */
 class MarkdownConverter {
 
 	/**
-	 * @param string $html HTML pronto per la conversione.
-	 * @return string Markdown del corpo (senza front matter).
+	 * @param string $html HTML ready for conversion.
+	 * @return string Body Markdown (without front matter).
 	 */
 	public function convert( string $html ): string {
 		$html = trim( $html );
@@ -38,7 +38,7 @@ class MarkdownConverter {
 
 			$markdown = $converter->convert( $html );
 		} catch ( \Throwable $e ) {
-			// Fallback robusto: estrazione testo semplice invece di rompere la risposta.
+			// Robust fallback: extract plain text instead of breaking the response.
 			$markdown = wp_strip_all_tags( $html );
 		}
 
@@ -46,7 +46,7 @@ class MarkdownConverter {
 	}
 
 	/**
-	 * Pulisce spazi finali e collassa righe vuote multiple.
+	 * Removes trailing whitespace and collapses multiple blank lines.
 	 */
 	private function normalize_whitespace( string $markdown ): string {
 		$markdown = str_replace( "\r\n", "\n", $markdown );

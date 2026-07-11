@@ -1,7 +1,7 @@
 /*
- * System Markdown Alternate — stile pagina impostazioni.
- * Tutto è scopato sotto .sysmda-settings-page: nessun selettore globale su
- * .wrap, .form-table, input, textarea o h2. Palette nativa WordPress.
+ * System Markdown Alternate — settings page styles.
+ * Everything is scoped under .sysmda-settings-page: no global selectors for
+ * .wrap, .form-table, input, textarea, or h2. Native WordPress palette.
  */
 
 .sysmda-settings-page {
@@ -57,15 +57,15 @@
 	margin: 12px 0 20px;
 }
 
-/* Contiene i .nav-tab floattati, così il contenuto successivo non scivola
-   accanto ai float ma parte pulito sotto le tab. */
+/* Contains floated .nav-tab elements so following content starts cleanly below
+   the tabs instead of flowing beside the floats. */
 .sysmda-settings-page .sysmda-tabs::after {
 	content: "";
 	display: block;
 	clear: both;
 }
 
-/* ─── Layout a due colonne ───────────────────────────────────────────────── */
+/* Two-column layout. */
 .sysmda-settings-page__layout {
 	clear: both;
 	display: grid;
@@ -79,7 +79,7 @@
 	top: 46px;
 }
 
-/* Tab client-side: nasconde i pannelli inattivi solo con JS attivo. */
+/* Client-side tabs: hide inactive panels only when JS is active. */
 .sysmda-settings-page.sysmda-js-tabs .sysmda-tab-panel {
 	display: none;
 }
@@ -125,7 +125,7 @@
 	margin-top: 14px;
 }
 
-/* ─── Righe impostazione (form-table nativa rifinita) ────────────────────── */
+/* Settings rows (refined native form-table). */
 .sysmda-settings-page .sysmda-card .form-table {
 	margin: 8px 0 0;
 }
@@ -159,7 +159,7 @@
 	max-width: 760px;
 }
 
-/* Textarea esclusioni / summary: compatte. */
+/* Compact exclusions/summary textareas. */
 .sysmda-settings-page textarea.sysmda-textarea {
 	width: 100%;
 	max-width: 560px;
@@ -198,7 +198,7 @@
 	white-space: pre-wrap;
 }
 
-/* ─── Aside: stato endpoint llms.txt ─────────────────────────────────────── */
+/* Aside: llms.txt endpoint status. */
 .sysmda-settings-page .sysmda-endpoint-state {
 	display: flex;
 	align-items: center;
@@ -230,7 +230,7 @@
 	word-break: break-all;
 }
 
-/* ─── Card informative (sezione Integrazioni) ────────────────────────────── */
+/* Informational cards (Integrations section). */
 .sysmda-settings-page .sysmda-integration-card {
 	max-width: 760px;
 	margin: 12px 0;
@@ -282,7 +282,7 @@
 		padding-right: 16px;
 	}
 
-	/* form-table nativa già impila th/td sotto 782px: nessun override rigido. */
+	/* The native form-table already stacks th/td below 782px: no rigid override. */
 	.sysmda-settings-page .sysmda-card .form-table th {
 		width: auto;
 		padding-bottom: 4px;

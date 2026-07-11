@@ -8,20 +8,20 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Parser dell'header HTTP `Accept` con q-values (RFC 9110 §12.5.1).
+ * Parses the HTTP `Accept` header with q-values (RFC 9110 §12.5.1).
  *
- * Espone la "qualità" (preferenza del client, 0..1) per un tipo MIME concreto,
- * applicando la regola del range più specifico: match esatto, poi wildcard di
- * sottotipo (`text/*`), poi wildcard totale (qualsiasi tipo).
- * È volutamente privo di dipendenze WordPress per restare testabile in isolamento.
+ * Exposes the "quality" (client preference, 0..1) for a concrete MIME type,
+ * applying the most-specific-range rule: exact match, subtype wildcard
+ * (`text/*`), then the full wildcard (any type).
+ * It intentionally has no WordPress dependencies so it remains testable in isolation.
  */
 class AcceptNegotiator {
 
 	/**
-	 * Scompone un header Accept in coppie media-range => q (0..1).
+	 * Splits an Accept header into media-range => q (0..1) pairs.
 	 *
-	 * I duplicati collassano sul q massimo; i range malformati (senza `/`) sono
-	 * ignorati; un `q` non numerico vale 1.0; i valori sono limitati a [0,1].
+	 * Duplicate ranges collapse to their highest q; malformed ranges (without `/`)
+	 * are ignored; a non-numeric `q` is treated as 1.0; values are clamped to [0,1].
 	 *
 	 * @return array<string,float>
 	 */
@@ -64,9 +64,9 @@ class AcceptNegotiator {
 	}
 
 	/**
-	 * Qualità effettiva per un tipo MIME concreto (es. `text/markdown`),
-	 * applicando la regola del range più specifico: match esatto, poi `tipo/*`,
-	 * poi il wildcard totale. Ritorna 0 se il tipo non è accettato.
+	 * Effective quality for a concrete MIME type (for example `text/markdown`),
+	 * applying the most-specific-range rule: exact match, then `type/*`, then
+	 * the full wildcard. Returns 0 when the type is not accepted.
 	 */
 	public static function quality( string $accept, string $type ): float {
 		$type   = strtolower( $type );
@@ -89,8 +89,8 @@ class AcceptNegotiator {
 	}
 
 	/**
-	 * Qualità per un match ESATTO del tipo (nessun fallback su wildcard).
-	 * Ritorna `null` se il tipo non è elencato esplicitamente nell'Accept.
+	 * Quality for an EXACT type match (without wildcard fallback).
+	 * Returns `null` when the type is not explicitly listed in Accept.
 	 */
 	public static function explicit_quality( string $accept, string $type ): ?float {
 		$ranges = self::parse( $accept );

@@ -8,27 +8,27 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Pannello di configurazione in wp-admin (Impostazioni → Markdown Alternate).
+ * Configuration panel in wp-admin (Settings => Markdown Alternate).
  *
- * Pagina unica, Settings API nativa, una option per impostazione. Le sezioni
- * sono raggruppate per ambito (Generale, Output Markdown, llms.txt, Integrazioni,
- * Avanzate) ma restano un solo form: salvando si scrivono tutte le opzioni del
- * gruppo, quindi nessun rischio di perdere impostazioni di altre sezioni.
+ * A single page using the native Settings API, with one option per setting.
+ * Sections are grouped by scope (General, Markdown output, llms.txt,
+ * Integrations, Advanced), but remain in one form: saving writes every option
+ * in the group, so settings from other sections cannot be lost.
  *
- * Le opzioni salvate sovrascrivono i default del codice tramite i filtri
- * `sysmda_markdown_*`. Campo vuoto = si usa il default.
+ * Saved options override code defaults through the `sysmda_markdown_*` filters.
+ * An empty field means the default is used.
  */
 class AdminSettings {
 
 	const PAGE         = 'sysmda-settings';
 	const OPTION_GROUP = 'sysmda_options';
 
-	/** Default di esclusione (solo a scopo visivo nel pannello). */
+	/** Exclusion defaults (displayed in the panel for reference only). */
 	const DEFAULT_SHORTCODES   = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
 	const DEFAULT_BLOCK_NAMES  = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
 	const DEFAULT_CSS_CLASSES  = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
-	/** @var string Hook della pagina settings (per caricare gli asset solo lì). */
+	/** @var string Settings page hook (used to load assets only on that page). */
 	private $hook = '';
 
 	public function boot(): void {
@@ -36,7 +36,7 @@ class AdminSettings {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
-		// Invalida la cache Markdown quando un'opzione del plugin cambia.
+		// Invalidate the Markdown cache when a plugin option changes.
 		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
 		add_action( 'updated_option', array( $this, 'maybe_bump_cache_salt' ) );
 
@@ -44,10 +44,10 @@ class AdminSettings {
 	}
 
 	/**
-	 * Bumpa il salt di cache quando viene salvata un'opzione del plugin, così
-	 * tutto il Markdown in cache viene rigenerato al prossimo accesso.
+	 * Bumps the cache salt when a plugin option is saved, so all cached Markdown
+	 * is regenerated on the next request.
 	 *
-	 * @param string $option Nome dell'opzione appena salvata.
+	 * @param string $option Name of the option that was just saved.
 	 */
 	public function maybe_bump_cache_salt( $option ): void {
 		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sysmda_' ) || 'sysmda_cache_salt' === $option ) {
@@ -56,7 +56,7 @@ class AdminSettings {
 
 		static $bumped = false;
 		if ( $bumped ) {
-			return; // Un solo bump per richiesta, anche se cambiano più opzioni.
+			return; // Only one bump per request, even when multiple options change.
 		}
 		$bumped = true;
 
@@ -74,9 +74,9 @@ class AdminSettings {
 	}
 
 	/**
-	 * Carica il CSS del pannello solo nella nostra pagina settings.
+	 * Loads the panel CSS only on this plugin's settings page.
 	 *
-	 * @param string $hook Hook suffix della pagina admin corrente.
+	 * @param string $hook Hook suffix of the current admin page.
 	 */
 	public function enqueue_assets( $hook ): void {
 		if ( $hook !== $this->hook ) {
@@ -90,8 +90,8 @@ class AdminSettings {
 			SYSMDA_VERSION
 		);
 
-		// Tab client-side (progressive enhancement): vanilla JS, nessuna dipendenza.
-		// Senza JS tutti i pannelli restano visibili e i campi restano nel form.
+		// Client-side tabs (progressive enhancement): vanilla JS, no dependencies.
+		// Without JS, every panel remains visible and all fields remain in the form.
 		wp_enqueue_script(
 			'sysmda-admin-settings',
 			SYSMDA_PLUGIN_URL . 'assets/admin-settings.js',
@@ -115,9 +115,9 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 
-		// Opzioni ACF: registrate SOLO se ACF è attivo. Così, quando ACF è spento e
-		// i suoi campi non sono nel form, il salvataggio NON le azzera (options.php
-		// scrive solo le opzioni registrate nel gruppo).
+		// ACF options are registered ONLY when ACF is active. This prevents saving
+		// the form from clearing them when ACF is inactive and its fields are absent
+		// (options.php writes only options registered in the group).
 		if ( $this->acf_active() ) {
 			register_setting( self::OPTION_GROUP, 'sysmda_acf_subtitle_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 			register_setting( self::OPTION_GROUP, 'sysmda_acf_tldr_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -149,7 +149,7 @@ class AdminSettings {
 		add_settings_field( 'sysmda_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sysmda_llmstxt' );
 		add_settings_field( 'sysmda_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sysmda_llmstxt' );
 
-		// ── Integrazioni (solo informativa) ──────────────────────────────────────
+		// ── Integrations (informational only) ──────────────────────────────────────
 		add_settings_section( 'sysmda_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
 
 		// ── Avanzate ─────────────────────────────────────────────────────────────
@@ -158,14 +158,14 @@ class AdminSettings {
 	}
 
 	/**
-	 * ACF è attivo? (definisce la funzione get_field()).
+	 * Is ACF active (and therefore defining get_field())?
 	 */
 	private function acf_active(): bool {
 		return function_exists( 'get_field' );
 	}
 
 	/**
-	 * GenerateBlocks 2.x (con Dynamic Tags) è attivo?
+	 * Is GenerateBlocks 2.x (with Dynamic Tags) active?
 	 */
 	private function generateblocks_active(): bool {
 		return class_exists( 'GenerateBlocks_Register_Dynamic_Tag' );
@@ -174,7 +174,7 @@ class AdminSettings {
 	// ─── Sanitizzazione ─────────────────────────────────────────────────────────
 
 	/**
-	 * Whitelist dei post type: tiene solo i tipi pubblici registrati (Media escluso).
+	 * Post type allowlist: keeps only registered public types (excluding Media).
 	 *
 	 * @param mixed $value
 	 * @return string[]
@@ -199,8 +199,8 @@ class AdminSettings {
 	}
 
 	/**
-	 * Normalizza una textarea "una voce per riga": trim, niente righe vuote,
-	 * sanitize_text_field, niente duplicati. Mantiene il formato stringa multilinea.
+	 * Normalizes a "one entry per line" textarea: trims entries, removes empty
+	 * lines, applies sanitize_text_field, and deduplicates. Preserves a multiline string.
 	 *
 	 * @param mixed $value
 	 */
@@ -226,10 +226,10 @@ class AdminSettings {
 	}
 
 	/**
-	 * Aggancia le opzioni salvate sui filtri corrispondenti (priorità 20, dopo i default).
+	 * Hooks saved options into the corresponding filters (priority 20, after defaults).
 	 *
-	 * Convenzione: get_option() ritorna false se l'opzione non è mai stata salvata,
-	 * '' se è stata salvata vuota. In entrambi i casi si usano i default del codice.
+	 * Convention: get_option() returns false when the option has never been saved,
+	 * and '' when it was saved empty. Code defaults are used in both cases.
 	 */
 	private function hook_filters(): void {
 		add_filter(
@@ -355,8 +355,8 @@ class AdminSettings {
 	}
 
 	/**
-	 * Converte un'opzione textarea (una voce per riga) in array.
-	 * Se vuota o non impostata ritorna i $defaults.
+	 * Converts a textarea option (one entry per line) to an array.
+	 * Returns $defaults when the option is empty or unset.
 	 *
 	 * @param string[] $defaults
 	 * @return string[]
@@ -396,7 +396,7 @@ class AdminSettings {
 
 	/**
 	 * Quick info nell'aside: stato dell'endpoint /llms.txt, URL e conflitti.
-	 * Solo presentazione: usa gli stessi dati già calcolati dal plugin.
+	 * Presentation only: uses the same data already calculated by the plugin.
 	 */
 	public function render_llmstxt_aside(): void {
 		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
@@ -448,14 +448,14 @@ class AdminSettings {
 	}
 
 	/**
-	 * Avviso se un altro gestore di /llms.txt è attivo (plugin SEO, file fisico)
-	 * o se l'endpoint risponde quando non dovrebbe.
+	 * Warns when another /llms.txt handler is active (SEO plugin or physical file),
+	 * or when the endpoint responds even though it should not.
 	 */
 	private function render_conflict_warning(): void {
 		$detector = new ConflictDetector();
 
-		$alerts = array(); // Conflitti probabili (rosso).
-		$notes  = array(); // Note informative (descrizione).
+		$alerts = array(); // Likely conflicts (red).
+		$notes  = array(); // Informational notes (description).
 
 		if ( $detector->physical_file_exists() ) {
 			$alerts[] = __( 'A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin\'s) is ignored.', 'system-markdown-alternate' );
@@ -486,11 +486,11 @@ class AdminSettings {
 	// ─── Campi ──────────────────────────────────────────────────────────────────
 
 	public function field_post_types(): void {
-		$raw   = get_option( 'sysmda_supported_post_types' ); // false = mai salvato
+		$raw   = get_option( 'sysmda_supported_post_types' ); // false = never saved.
 		$saved = false !== $raw ? (array) $raw : array();
 
 		$all_types = get_post_types( array( 'public' => true ), 'objects' );
-		unset( $all_types['attachment'] ); // Media: sempre escluso.
+		unset( $all_types['attachment'] ); // Media is always excluded.
 
 		foreach ( $all_types as $pt ) {
 			printf(
@@ -524,7 +524,7 @@ class AdminSettings {
 	}
 
 	/**
-	 * Textarea compatta "una per riga" + lista dei default.
+	 * Compact "one per line" textarea plus a list of defaults.
 	 *
 	 * @param string[] $defaults
 	 */
@@ -554,19 +554,19 @@ class AdminSettings {
 	}
 
 	public function field_llms_txt_enabled(): void {
-		$v = get_option( 'sysmda_llms_txt_enabled', '1' ); // abilitato per default
+		$v = get_option( 'sysmda_llms_txt_enabled', '1' ); // Enabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_enriched(): void {
-		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // disattivato per default
+		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // Disabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_lastmod(): void {
-		$v = get_option( 'sysmda_llms_txt_lastmod', '0' ); // disattivato per default
+		$v = get_option( 'sysmda_llms_txt_lastmod', '0' ); // Disabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_lastmod" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Append the last modified date to each entry', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds <code>(updated: YYYY-MM-DD)</code> after every entry, so crawlers can spot changed content without re-fetching each URL. Works with both the basic and the enriched output.', 'system-markdown-alternate' ) ) . '</p>';
 	}
@@ -615,8 +615,6 @@ class AdminSettings {
 					</div>
 				</header>
 				<hr class="wp-header-end">
-
-				<?php settings_errors(); ?>
 
 				<?php if ( count( $sections ) > 1 ) : ?>
 					<nav class="nav-tab-wrapper sysmda-tabs" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
