@@ -13,7 +13,8 @@ changelog.
 > **Translations**: `AGENTS.it.md` and `README.it.md` are the Italian versions of
 > this file and of `README.md`. The English files are the **source of truth**;
 > whenever you change one of them, update its Italian translation **in the same
-> commit** (same rule as the plugin's `.po` files).
+> commit**. The plugin itself is English-only (see the i18n note in
+> "Technical notes": translations come from translate.wordpress.org).
 
 ## What it is
 
@@ -39,9 +40,6 @@ php system-markdown-alternate/tests/run-tests.php
 # Lint a touched file
 php -l system-markdown-alternate/src/<File>.php
 
-# Regenerate translations after changing __() strings (make-pot → msgmerge → msgfmt → make-php)
-bash bin/make-i18n.sh
-
 # Install Composer dependencies locally (creates vendor/, required to run the plugin)
 composer install --working-dir=system-markdown-alternate
 
@@ -49,7 +47,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Current state (v0.19.x)
+## Current state (v0.20.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -59,7 +57,7 @@ The v1 scope is done and widely exceeded. Implemented:
   (`AcceptNegotiator`): Markdown is served only when explicitly preferred
   (q ≥ HTML); a wildcard or missing Accept stays HTML. Negotiable URLs →
   **`Vary: Accept`**; optional **`406`** when the client accepts neither HTML nor
-  Markdown (`sma_markdown_strict_406` filter, default on).
+  Markdown (`sysmda_markdown_strict_406` filter, default on).
 - **`rel="alternate"` link** in the `<head>` of supported singular content.
 - **HTTP headers**: `Content-Type: text/markdown; charset=utf-8`,
   `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
@@ -67,7 +65,7 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Conditional requests**: the `.md` response honours `If-None-Match` /
   `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
   already holds the current version. Validator = the existing cache-version hash
-  (`post_modified_gmt` + `SMA_VERSION` + settings salt), so a `304` always means the
+  (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt), so a `304` always means the
   cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
@@ -79,12 +77,12 @@ The v1 scope is done and widely exceeded. Implemented:
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
 - **`/llms.txt`** (cached, excludes protected content) with an on/off toggle.
-  Optional **enriched mode** (`sma_llms_txt_enriched` toggle, default off;
+  Optional **enriched mode** (`sysmda_llms_txt_enriched` toggle, default off;
   off = base output unchanged): site summary, curated "Key content" section
   (IDs/URLs from the settings page), per-entry description (Rank Math → excerpt →
   trimmed chain), overflow beyond the most recent posts under `## Optional`
-  (spec keyword, not translated), `sma_llms_txt_footer` filter as a hook for
-  policy/LLM signals. Optional **last modified dates** (`sma_llms_txt_lastmod`
+  (spec keyword, not translated), `sysmda_llms_txt_footer` filter as a hook for
+  policy/LLM signals. Optional **last modified dates** (`sysmda_llms_txt_lastmod`
   toggle, default off; off = output unchanged): appends `(updated: YYYY-MM-DD)`
   to every entry (base and enriched, Key content and Optional included) — ISO
   date from `post_modified_gmt`, English `updated:` label never translated
@@ -92,7 +90,7 @@ The v1 scope is done and widely exceeded. Implemented:
   notes after the `:` so it stays llms.txt-spec-compatible.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
-  `SMA_VERSION`; salt bump on settings save; cleanup on `save_post`/
+  `SYSMDA_VERSION`; salt bump on settings save; cleanup on `save_post`/
   `deleted_post` (skips revisions/autosaves).
 - **Admin panel** (single page, Settings API): General / Markdown output /
   llms.txt / Integrations / Advanced. Restyled UI (presentation only): page
@@ -105,23 +103,23 @@ The v1 scope is done and widely exceeded. Implemented:
   vanilla-JS enhancement (`assets/admin-settings.js`); usable without JS (all
   panels visible). Assets loaded only on the settings screen.
 - **i18n**: panel strings in `__()`/`esc_html__()` (**English** source), text
-  domain `system-markdown-alternate` loaded on `init` from `/languages`;
-  `.pot` template + bundled `it_IT` translation (`.po` + `.mo` + `.l10n.php`).
-  WP 6.5+ prefers the `.l10n.php` (faster), `.mo` stays as fallback for 6.1–6.4.
+  domain `system-markdown-alternate` (= plugin slug). **No bundled translations
+  and no `load_plugin_textdomain()`**: language packs come from
+  translate.wordpress.org and WP loads them automatically (≥ 4.6).
 - **ACF**: subtitle (text) + TL;DR (WYSIWYG, goes through the DOM pipeline) as a
   preamble between the H1 and the body; field names configurable from the panel.
-- **Shortcode** `[sma_md_url]` (+ `id="123"`).
-- **GenerateBlocks Dynamic Tag** `{{sma_md_url}}`: self-registers when GB 2.x is
+- **Shortcode** `[sysmda_md_url]` (+ `id="123"`).
+- **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
-- `uninstall.php` (removes `sma_*` options + transients).
+- `uninstall.php` (removes `sysmda_*` options + transients).
 
 ## Open / to do (towards wordpress.org)
 
-- i18n: after adding/changing `__()` strings, regenerate with
-  `bash bin/make-i18n.sh` and translate the new entries in the `.po`. Possible
-  i18n coverage of future user-facing strings.
+- Once live on wordpress.org: translate the strings into Italian on
+  translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
+  gets built — no translation files live in this repo.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
-  (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
+  (Cloudflare & co.) settles — the hook is already in place (`sysmda_llms_txt_footer`).
 - **`.md` hit counter** (decided; plan below — next planned minor):
   count how many times the `.md` endpoint is served, split **bot vs human**,
   and nothing else. Privacy by design (see "Product decisions"): aggregate
@@ -129,26 +127,26 @@ The v1 scope is done and widely exceeded. Implemented:
   no banner) and within the wordpress.org "no tracking without consent"
   guideline. **Opt-in checkbox, default off.** Accepted limit: a page
   cache/CDN serving `.md` without reaching PHP undercounts — it is an
-  indicator, not analytics. Implementation plan (own minor after 0.19.0):
+  indicator, not analytics. Implementation plan (own minor after 0.20.0):
   1. New `src/HitCounter.php` (single responsibility): `record( ?string $ua )`
      classifies the request via `public static is_bot( ?string $ua ): bool`
      (empty UA ⇒ bot; case-insensitive token list: bot, crawl, spider, curl,
      wget, python, java, http, headless, gpt, claude, perplexity, …;
-     documented filter `sma_md_hits_bot_patterns`) and increments today's
-     bucket in option `sma_md_hits` (autoload off, shape
+     documented filter `sysmda_md_hits_bot_patterns`) and increments today's
+     bucket in option `sysmda_md_hits` (autoload off, shape
      `[ 'YYYY-MM-DD' => [ 'bot' => n, 'human' => n ] ]`), pruning buckets
-     older than 90 days (documented filter `sma_md_hits_retention_days`).
+     older than 90 days (documented filter `sysmda_md_hits_retention_days`).
      The UA is read only to classify, never stored. The read-modify-write
      may lose an increment under heavy concurrency: accepted (indicator).
-  2. `MarkdownController::serve_markdown()`: when `sma_md_hits_enabled` is
+  2. `MarkdownController::serve_markdown()`: when `sysmda_md_hits_enabled` is
      on, `record()` every served response — `200` **and** `304` (an access
      is an access) — for both the `.md` suffix and the negotiated permalink.
   3. `AdminSettings.php`: "Count `.md` requests" checkbox (Advanced section)
      + read-only totals on the settings page (today / last 7 / last 30 days,
      bot vs human) with the page-cache caveat in the description.
-  4. `uninstall.php`: add `sma_md_hits` + `sma_md_hits_enabled` to the list.
+  4. `uninstall.php`: add `sysmda_md_hits` + `sysmda_md_hits_enabled` to the list.
   5. Tests for `is_bot()` and the pruning logic; `php -l`.
-  6. i18n, filters list, docs + translations, `readme.txt` changelog,
+  6. Filters list, docs + translations, `readme.txt` changelog,
      version bump, build, commit, push.
 - **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
   UI (before the tabs/cards restyle). Recapture them and update the
@@ -177,7 +175,7 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ## Product decisions (durable)
 
-- `sma_markdown_supported_post_types` defaults to **empty** → the plugin is
+- `sysmda_markdown_supported_post_types` defaults to **empty** → the plugin is
   **inactive** until at least one type is selected in the panel. `attachment` is
   always excluded. **CPTs are supported** (all public types are shown/validated).
 - **ACF** and **GenerateBlocks** panel sections: shown only when the respective
@@ -230,8 +228,7 @@ The v1 scope is done and widely exceeded. Implemented:
 - **GitHub home**: personal account **`diecieventi`**
   (`github.com/diecieventi/system-markdown-alternate`); `Plugin URI` and
   `composer.json` point there. `Author URI` → `webdietrolequinte.it` (the site's
-  domain, unchanged). The old `system4pc` handle is retired (kept only as a
-  GitHub redirect).
+  domain, unchanged).
 - **wordpress.org**: `Contributors:` in `readme.txt` is set to **`system4pc`**
   (the existing account: the username cannot be renamed, only the Display Name
   can change). Publishing from a new `diecieventi` account and updating the field
@@ -239,7 +236,7 @@ The v1 scope is done and widely exceeded. Implemented:
 - Do not put the **model ID** in commits, readme, code or any other artifact.
 - **Semver `0.x.y` versioning**: minor for new features, patch for fixes. On
   every release: bump `system-markdown-alternate.php` (both the `Version:` header
-  **and** `SMA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
+  **and** `SYSMDA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
   `bash bin/build.sh`, commit, push.
 - **Git — single non-negotiable rule**: the **only destination for code is
   `main`**. Single developer, no feature branches, **NEVER** open PRs (not even
@@ -290,7 +287,7 @@ running code at the WP level.
   preserving `alt` is enough.
 - **GenerateBlocks**: NEVER excluded automatically (they contain real content).
 - **ACF**: implemented (subtitle/TL;DR via preamble). The
-  `sma_markdown_source_content` / `sma_acf_field_keys` filters remain the
+  `sysmda_markdown_source_content` / `sysmda_acf_field_keys` filters remain the
   extension points.
 - **On-site search engines** (e.g. Algolia): irrelevant to the output.
 
@@ -309,7 +306,6 @@ running code at the WP level.
 ├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
-├── bin/make-i18n.sh              ← regenerates the translations
 ├── DIST/                         ← distributable zip (versioned)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
@@ -320,7 +316,6 @@ running code at the WP level.
     ├── vendor/                         ← NOT versioned, zip only
     ├── assets/admin-settings.css       ← panel style (loaded only there)
     ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
-    ├── languages/                      ← .pot + it_IT translation (.po/.mo/.l10n.php)
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
@@ -336,13 +331,15 @@ running code at the WP level.
         ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)
         ├── AdminSettings.php       ← settings page (Settings API)
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
-        ├── Shortcodes.php          ← [sma_md_url]
-        ├── DynamicTags.php         ← {{sma_md_url}} (GenerateBlocks 2.x)
+        ├── Shortcodes.php          ← [sysmda_md_url]
+        ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
 ```
 
-- **PHP namespace:** `SystemMarkdownAlternate` (PSR-4 → `src/`).
-- **Constant/hook/option prefix:** `sma_` / `SMA_`.
+- **PHP namespace:** `Diecieventi\SystemMarkdownAlternate` (PSR-4 → `src/`).
+- **Constant/hook/option prefix:** `sysmda_` / `SYSMDA_` (≥ 4 chars and
+  distinctive, per the wordpress.org prefixing guideline; also used with a dash
+  for slugs/handles: `sysmda-settings`, `sysmda-admin-settings`).
 
 ## Code conventions
 
@@ -359,29 +356,29 @@ running code at the WP level.
 ## Filters (public contract)
 
 ```php
-apply_filters( 'sma_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected
-apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header
-apply_filters( 'sma_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
-apply_filters( 'sma_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
-apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
-apply_filters( 'sma_markdown_source_content', $post->post_content, $post );
-apply_filters( 'sma_markdown_rendered_html', $html, $post );
-apply_filters( 'sma_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
-apply_filters( 'sma_markdown_output', $markdown, $post );
-apply_filters( 'sma_markdown_excluded_block_names', $block_names );
-apply_filters( 'sma_markdown_excluded_shortcodes', $shortcodes );
-apply_filters( 'sma_markdown_excluded_classes', $css_classes );
-apply_filters( 'sma_acf_field_keys', array(), $post );                     // ACF fields appended to the source
-apply_filters( 'sma_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
-apply_filters( 'sma_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
-apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );              // max posts per type in /llms.txt
-apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );               // /llms.txt cache TTL (0 = off)
-apply_filters( 'sma_llms_txt_enriched', false );                         // true = enriched /llms.txt output
-apply_filters( 'sma_llms_txt_lastmod', false );                          // true = append (updated: YYYY-MM-DD) to each entry
-apply_filters( 'sma_llms_txt_summary', '' );                             // site summary (enriched only)
-apply_filters( 'sma_llms_txt_key_content', array() );                    // featured content: IDs or URLs (enriched only)
-apply_filters( 'sma_llms_txt_main_posts', 25, $post_type );              // posts per type in the main section (enriched only)
-apply_filters( 'sma_llms_txt_footer', '' );                              // free-form trailing block (enriched only)
+apply_filters( 'sysmda_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected
+apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header
+apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
+apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
+apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
+apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
+apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
+apply_filters( 'sysmda_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
+apply_filters( 'sysmda_markdown_output', $markdown, $post );
+apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
+apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
+apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
+apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
+apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
+apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );              // max posts per type in /llms.txt
+apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );               // /llms.txt cache TTL (0 = off)
+apply_filters( 'sysmda_llms_txt_enriched', false );                         // true = enriched /llms.txt output
+apply_filters( 'sysmda_llms_txt_lastmod', false );                          // true = append (updated: YYYY-MM-DD) to each entry
+apply_filters( 'sysmda_llms_txt_summary', '' );                             // site summary (enriched only)
+apply_filters( 'sysmda_llms_txt_key_content', array() );                    // featured content: IDs or URLs (enriched only)
+apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );              // posts per type in the main section (enriched only)
+apply_filters( 'sysmda_llms_txt_footer', '' );                              // free-form trailing block (enriched only)
 ```
 
 Default exclusions:
@@ -404,7 +401,7 @@ Default exclusions:
    HTML). Every servable content declares **`Vary: Accept`** (both when serving
    Markdown and when leaving the HTML to WP), so caches/CDNs never mix the two
    representations. If the Accept allows neither HTML nor Markdown, respond
-   **`406`** (`sma_markdown_strict_406` filter, default on; real clients always
+   **`406`** (`sysmda_markdown_strict_406` filter, default on; real clients always
    send `text/html` or a wildcard, never hit). The `.md` suffix ignores the
    Accept header instead (the URL itself is the explicit Markdown request).
 3. **Class exclusion**: besides `attrs.className`, a `DOMDocument` pass on the
@@ -412,25 +409,21 @@ Default exclusions:
 4. **Rendering**: `render_block()` on the cleaned blocks (not the full
    `the_content`), to avoid reintroducing injected related/CTA content.
 5. **Absolute URLs**: resolved against the post permalink (not `home_url('/')`).
-6. **Cache**: key `sma_md_{post_id}`, value with a validity hash
-   (`post_modified_gmt|SMA_VERSION|salt`); `/llms.txt` cached under
-   `sma_llms_txt`. Everything through the `Cache` helper (persistent object
+6. **Cache**: key `sysmda_md_{post_id}`, value with a validity hash
+   (`post_modified_gmt|SYSMDA_VERSION|salt`); `/llms.txt` cached under
+   `sysmda_llms_txt`. Everything through the `Cache` helper (persistent object
    cache or transients). The **same hash is the strong `ETag`** of the `.md`
    response (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
    work even when the body cache is off.
 7. **i18n**: **English** source in `__()`/`esc_html__()` and in the
    `Description:` header; strings with inline HTML (`<code>`, `<strong>`, …) go
-   through `wp_kses_post()`. Text domain `system-markdown-alternate` loaded on
-   `init` from `/languages`. The **source of truth for translations is the
-   `.po`** (editable by hand or with Poedit). **Canonical** regeneration via
-   `bash bin/make-i18n.sh`: `wp i18n make-pot` (extracts the `msgid`s from the
-   code, no tables to keep in sync) → `msgmerge` (aligns the `.po`s) → `msgfmt`
-   (`.mo`) → `wp i18n make-php` (`.l10n.php`). WP 6.5+ loads the `.l10n.php`
-   (faster, OPcache-friendly), `.mo` stays as fallback for 6.1–6.4. The tools
-   (`wp-cli` + `gettext`) are **not preinstalled** in the ephemeral container
-   but install in-session (see the header of `bin/make-i18n.sh`:
-   `apt-get install -y gettext` + `wp-cli.phar` download).
+   through `wp_kses_post()`. Text domain `system-markdown-alternate` (= plugin
+   slug, required by wordpress.org). **No translation files in the repo and no
+   `load_plugin_textdomain()`** (removed on the reviewers' advice): since WP 4.6
+   the language packs built by translate.wordpress.org are loaded automatically.
+   Translations are managed there once the plugin is live (see "Open / to do").
+   Installs from the GitHub zip are English-only by design.
 
 ## Notes from the reference plugin (ProgressPlanner/markdown-alternate)
 

@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
  * Regole di eleggibilità condivise: quali post espongono la versione Markdown.
  *
  * Punto unico di verità per endpoint .md, content negotiation, link alternate,
- * shortcode [sma_md_url] e dynamic tag {{sma_md_url}}.
+ * shortcode [sysmda_md_url] e dynamic tag {{sysmda_md_url}}.
  */
 class PostSupport {
 
@@ -25,7 +25,7 @@ class PostSupport {
 
 		if ( null === $types ) {
 			/** Filtro: post type che espongono l'endpoint .md e il link alternate. */
-			$types = (array) apply_filters( 'sma_markdown_supported_post_types', array() );
+			$types = (array) apply_filters( 'sysmda_markdown_supported_post_types', array() );
 		}
 
 		return $types;

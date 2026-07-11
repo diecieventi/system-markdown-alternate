@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -21,18 +21,9 @@ class Plugin {
 	 * Costruisce il grafo delle dipendenze e aggancia gli hook.
 	 */
 	public function boot(): void {
-		// Traduzioni bundlate in /languages (caricate su init per il timing di WP 6.7+).
-		add_action(
-			'init',
-			static function () {
-				load_plugin_textdomain(
-					'system-markdown-alternate',
-					false,
-					dirname( plugin_basename( SMA_PLUGIN_FILE ) ) . '/languages'
-				);
-			}
-		);
-
+		// Traduzioni: nessun load_plugin_textdomain() — la distribuzione è via
+		// wordpress.org, che consegna i language pack da translate.wordpress.org
+		// e li carica automaticamente (WP >= 4.6).
 		$shortcodes = new ShortcodeCleaner();
 		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
 		$converter  = new MarkdownConverter();
@@ -54,15 +45,15 @@ class Plugin {
 		$llms = new LlmsTxtController( $metadata );
 		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );
 
-		// Integrazione ACF (opt-in tramite filtri sma_acf_field_keys, sma_acf_subtitle_key, sma_acf_tldr_key).
+		// Integrazione ACF (opt-in tramite filtri sysmda_acf_field_keys, sysmda_acf_subtitle_key, sysmda_acf_tldr_key).
 		$acf = new AcfIntegration( $converter, $renderer );
-		add_filter( 'sma_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
-		add_filter( 'sma_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
+		add_filter( 'sysmda_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
+		add_filter( 'sysmda_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
 
-		// Shortcode [sma_md_url] per l'URL dinamico del .md.
+		// Shortcode [sysmda_md_url] per l'URL dinamico del .md.
 		( new Shortcodes() )->register();
 
-		// Dynamic Tag GenerateBlocks {{sma_md_url}} (auto-attivo se GB 2.x è presente).
+		// Dynamic Tag GenerateBlocks {{sysmda_md_url}} (auto-attivo se GB 2.x è presente).
 		( new DynamicTags() )->register();
 
 		// AdminSettings: registra i filtri su tutti i contesti (front-end incluso),

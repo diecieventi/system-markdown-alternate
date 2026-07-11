@@ -1,19 +1,19 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Shortcode [sma_md_url]: restituisce l'URL della versione Markdown del post.
+ * Shortcode [sysmda_md_url]: restituisce l'URL della versione Markdown del post.
  *
  * L'URL è calcolato al volo dal permalink (nessun dato salvato a DB).
  *
- *   [sma_md_url]           → URL del .md del post corrente
- *   [sma_md_url id="123"]  → URL del .md di un post specifico
+ *   [sysmda_md_url]           → URL del .md del post corrente
+ *   [sysmda_md_url id="123"]  → URL del .md di un post specifico
  *
  * Restituisce stringa vuota se il post non è servibile (tipo non supportato,
  * non pubblicato o protetto da password), per non generare link verso un 404.
@@ -21,14 +21,14 @@ defined( 'ABSPATH' ) || exit;
 class Shortcodes {
 
 	public function register(): void {
-		add_shortcode( 'sma_md_url', array( $this, 'render_url' ) );
+		add_shortcode( 'sysmda_md_url', array( $this, 'render_url' ) );
 	}
 
 	/**
 	 * @param array<string,mixed>|string $atts Attributi shortcode.
 	 */
 	public function render_url( $atts ): string {
-		$atts = shortcode_atts( array( 'id' => 0 ), $atts, 'sma_md_url' );
+		$atts = shortcode_atts( array( 'id' => 0 ), $atts, 'sysmda_md_url' );
 
 		$post = $this->resolve_post( (int) $atts['id'] );
 

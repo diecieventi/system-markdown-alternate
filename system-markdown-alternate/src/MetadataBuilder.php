@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 

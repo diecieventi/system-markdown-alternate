@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -108,7 +108,7 @@ class MarkdownController {
 			return;
 		}
 
-		Cache::delete( 'sma_md_' . $post_id );
+		Cache::delete( 'sysmda_md_' . $post_id );
 		Cache::delete( LlmsTxtController::CACHE_KEY );
 	}
 
@@ -201,12 +201,12 @@ class MarkdownController {
 	 *
 	 * I client reali (browser, crawler, agenti) mandano sempre `text/html` o un
 	 * wildcard e non vengono mai colpiti. Disattivabile via filtro
-	 * `sma_markdown_strict_406` (RFC 9110: il 406 è opzionale, è lecito servire
+	 * `sysmda_markdown_strict_406` (RFC 9110: il 406 è opzionale, è lecito servire
 	 * comunque la rappresentazione di default).
 	 */
 	private function should_reject_unacceptable(): bool {
 		/** Filtro: invia 406 quando l'Accept non accetta né HTML né Markdown. */
-		if ( ! apply_filters( 'sma_markdown_strict_406', true ) ) {
+		if ( ! apply_filters( 'sysmda_markdown_strict_406', true ) ) {
 			return false;
 		}
 
@@ -430,18 +430,18 @@ class MarkdownController {
 	/**
 	 * Recupera il Markdown dalla cache transient o lo rigenera.
 	 *
-	 * Chiave: `sma_md_{post_id}`. Il valore include un hash di versione
+	 * Chiave: `sysmda_md_{post_id}`. Il valore include un hash di versione
 	 * (post_modified_gmt + versione plugin + salt impostazioni) per rilevare
 	 * modifiche senza chiavi orfane. Viene invalidato proattivamente:
 	 * - all'edit del post (post_modified_gmt cambia)
-	 * - all'aggiornamento del plugin (SMA_VERSION cambia)
+	 * - all'aggiornamento del plugin (SYSMDA_VERSION cambia)
 	 * - al salvataggio delle impostazioni (salt cambia, vedi AdminSettings)
 	 * - dall'hook save_post tramite invalidate_cache().
 	 */
 	private function get_markdown( \WP_Post $post ): string {
 		/** Filtro: TTL cache in secondi. 0 disabilita la cache. */
-		$ttl       = (int) apply_filters( 'sma_markdown_cache_ttl', DAY_IN_SECONDS, $post );
-		$cache_key = 'sma_md_' . $post->ID;
+		$ttl       = (int) apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );
+		$cache_key = 'sysmda_md_' . $post->ID;
 		$version   = $this->cache_version( $post );
 
 		if ( $ttl > 0 ) {
@@ -473,9 +473,9 @@ class MarkdownController {
 	 * del plugin o al salvataggio delle impostazioni (salt globale).
 	 */
 	private function cache_version( \WP_Post $post ): string {
-		$salt = (string) get_option( 'sma_cache_salt', '0' );
+		$salt = (string) get_option( 'sysmda_cache_salt', '0' );
 
-		return md5( (string) $post->post_modified_gmt . '|' . SMA_VERSION . '|' . $salt );
+		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt );
 	}
 
 	/**
@@ -490,12 +490,12 @@ class MarkdownController {
 		$title = trim( preg_replace( '/\s+/', ' ', $title ) );
 
 		/** Filtro: blocco Markdown tra # Titolo e corpo (sottotitolo, TL;DR, ecc.). */
-		$preamble = (string) apply_filters( 'sma_markdown_preamble', '', $post );
+		$preamble = (string) apply_filters( 'sysmda_markdown_preamble', '', $post );
 
 		$markdown = $front_matter . "\n# " . $title . "\n\n" . $preamble . $body;
 
 		/** Filtro: Markdown finale (front matter + contenuto). */
-		$markdown = apply_filters( 'sma_markdown_output', $markdown, $post );
+		$markdown = apply_filters( 'sysmda_markdown_output', $markdown, $post );
 
 		return rtrim( $markdown ) . "\n";
 	}
@@ -521,7 +521,7 @@ class MarkdownController {
 		}
 
 		/** Filtro: header X-Robots-Tag. Stringa vuota = header non inviato. */
-		$robots = apply_filters( 'sma_markdown_robots_header', 'noindex, follow', $post );
+		$robots = apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );
 
 		if ( is_string( $robots ) && '' !== $robots ) {
 			header( 'X-Robots-Tag: ' . $robots );
@@ -531,7 +531,7 @@ class MarkdownController {
 		 * Filtro: URL canonico verso l'originale HTML (header Link rel="canonical").
 		 * Stringa vuota = header non inviato.
 		 */
-		$canonical = apply_filters( 'sma_markdown_canonical_url', get_permalink( $post ), $post );
+		$canonical = apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post );
 
 		if ( is_string( $canonical ) && '' !== $canonical ) {
 			header( 'Link: <' . $canonical . '>; rel="canonical"', false );

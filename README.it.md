@@ -20,17 +20,17 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 - **Endpoint `.md`** per ogni post pubblicato, pubblico e non protetto dei tipi abilitati.
 - **Content negotiation** (RFC 9110): stesso Markdown servito con `Accept: text/markdown` o `?format=markdown`. L'header `Accept` è parsato con q-values: il Markdown si serve solo se preferito esplicitamente, così un client che preferisce l'HTML (q più alto) o che manda un wildcard (`*/*`) riceve l'HTML.
 - **`Vary: Accept`** sugli URL negoziabili: cache e CDN non mischiano le rappresentazioni HTML e Markdown dello stesso indirizzo.
-- **`406 Not Acceptable`** opzionale se il client non accetta né HTML né Markdown (filtro `sma_markdown_strict_406`, default attivo; i client reali non sono mai colpiti).
+- **`406 Not Acceptable`** opzionale se il client non accetta né HTML né Markdown (filtro `sysmda_markdown_strict_406`, default attivo; i client reali non sono mai colpiti).
 - **Link `rel="alternate"`** nell'`<head>` dei contenuti supportati.
 - **Header HTTP** corretti: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`), `Link: rel="canonical"` verso l'HTML.
 - **Conversione pulita**: blocchi Gutenberg renderizzati singolarmente (niente related/CTA iniettati), esclusione di blocchi/shortcode/classi CSS, code block fenced, URL assoluti.
 - **Endpoint `/llms.txt`** (opzionale): indice dei contenuti per LLM e agenti. Una **modalità arricchita** opzionale (spenta di default) aggiunge sintesi del sito, sezione "Contenuti chiave" curata, una description per ogni voce e una sezione `Optional` per i post meno recenti. Un ulteriore toggle opzionale aggiunge a ogni voce la **data di ultima modifica** (`updated: YYYY-MM-DD`), così i crawler individuano i contenuti cambiati senza rifare il fetch di ogni URL.
 - **Cache transient** con invalidazione proattiva (modifica post, aggiornamento plugin, salvataggio impostazioni).
 - **Pannello admin** per scegliere i tipi di contenuto esposti e regolare cache, esclusioni e header. Nessun tipo è esposto finché non lo selezioni.
-- **Shortcode** `[sma_md_url]` per stampare l'URL del `.md`.
+- **Shortcode** `[sysmda_md_url]` per stampare l'URL del `.md`.
 - **Integrazioni opzionali**, mostrate solo se il plugin relativo è attivo:
   - **Advanced Custom Fields**: sottotitolo e TL;DR (da campi ACF) come preambolo tra H1 e corpo.
-  - **GenerateBlocks 2.x**: Dynamic Tag `{{sma_md_url}}` auto-attivo, usabile nei campi degli elementi (es. URL di un Button).
+  - **GenerateBlocks 2.x**: Dynamic Tag `{{sysmda_md_url}}` auto-attivo, usabile nei campi degli elementi (es. URL di un Button).
 
 ## Utilizzo
 
@@ -65,16 +65,14 @@ L'indice opzionale dei contenuti per LLM e agenti è disponibile su
 ├── .github/workflows/ci.yml      ← CI: php -l + test su PHP 7.4/8.4
 ├── .wordpress-org/               ← assets scheda wordpress.org (icona, banner)
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
-├── bin/make-i18n.sh              ← rigenera le traduzioni
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← il plugin
     ├── system-markdown-alternate.php
     ├── readme.txt                ← readme in formato WordPress.org
     ├── uninstall.php
     ├── composer.json
-    ├── languages/                ← .pot + traduzione it_IT
     ├── tests/run-tests.php       ← test della logica pura (no WP/PHPUnit)
-    └── src/                      ← classi PSR-4 (namespace SystemMarkdownAlternate)
+    └── src/                      ← classi PSR-4 (namespace Diecieventi\SystemMarkdownAlternate)
 ```
 
 ## Build

@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -32,7 +32,7 @@ class ContentRenderer {
 	 */
 	public function render( \WP_Post $post ): string {
 		/** Filtro: contenuto sorgente (punto di estensione per ACF/contenuti custom in v2). */
-		$content = (string) apply_filters( 'sma_markdown_source_content', $post->post_content, $post );
+		$content = (string) apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 
 		// 1. Rimuove gli shortcode esclusi dal sorgente grezzo (anche dentro i blocchi).
 		$content = $this->shortcodes->strip( $content );
@@ -54,7 +54,7 @@ class ContentRenderer {
 		$html = $this->process_dom( $html, (string) get_permalink( $post ) );
 
 		/** Filtro: HTML renderizzato e ripulito, prima della conversione. */
-		return (string) apply_filters( 'sma_markdown_rendered_html', $html, $post );
+		return (string) apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 	}
 
 	/**
@@ -83,7 +83,7 @@ class ContentRenderer {
 		$previous = libxml_use_internal_errors( true );
 
 		$dom     = new \DOMDocument( '1.0', 'UTF-8' );
-		$wrapped = '<?xml encoding="UTF-8"?><div id="sma-root">' . $html . '</div>';
+		$wrapped = '<?xml encoding="UTF-8"?><div id="sysmda-root">' . $html . '</div>';
 		$dom->loadHTML( $wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
 
 		libxml_clear_errors();
@@ -114,7 +114,7 @@ class ContentRenderer {
 		$xpath = new \DOMXPath( $dom );
 
 		/** Filtro: classi CSS i cui elementi vengono rimossi dall'output Markdown. */
-		$excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+		$excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 
 		foreach ( $excluded_classes as $class ) {
 			$query = sprintf(

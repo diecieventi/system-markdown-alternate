@@ -5,23 +5,23 @@
  * visibili (impilati) e la pagina è pienamente utilizzabile; i campi sono
  * sempre nel form, quindi il salvataggio non cambia. Vanilla JS, nessuna
  * dipendenza. Nasconde i pannelli inattivi solo dopo aver aggiunto la classe
- * `sma-js-tabs` (vedi CSS), così il no-JS non nasconde nulla.
+ * `sysmda-js-tabs` (vedi CSS), così il no-JS non nasconde nulla.
  */
 ( function () {
 	'use strict';
 
-	var root = document.querySelector( '.sma-settings-page' );
+	var root = document.querySelector( '.sysmda-settings-page' );
 	if ( ! root ) {
 		return;
 	}
 
-	var tabs = Array.prototype.slice.call( root.querySelectorAll( '.sma-tabs .nav-tab' ) );
-	var panels = Array.prototype.slice.call( root.querySelectorAll( '.sma-tab-panel' ) );
+	var tabs = Array.prototype.slice.call( root.querySelectorAll( '.sysmda-tabs .nav-tab' ) );
+	var panels = Array.prototype.slice.call( root.querySelectorAll( '.sysmda-tab-panel' ) );
 	if ( tabs.length < 2 || ! panels.length ) {
 		return;
 	}
 
-	root.classList.add( 'sma-js-tabs' );
+	root.classList.add( 'sysmda-js-tabs' );
 
 	function hasPanel( id ) {
 		return panels.some( function ( p ) {
@@ -43,10 +43,10 @@
 		} );
 		if ( store ) {
 			try {
-				window.sessionStorage.setItem( 'smaActiveTab', id );
+				window.sessionStorage.setItem( 'sysmdaActiveTab', id );
 			} catch ( e ) {}
 			if ( window.history && window.history.replaceState ) {
-				window.history.replaceState( null, '', '#sma-panel-' + id );
+				window.history.replaceState( null, '', '#sysmda-panel-' + id );
 			}
 		}
 	}
@@ -61,12 +61,12 @@
 
 	// Stato iniziale: hash dell'URL > sessionStorage > primo tab.
 	var initial = '';
-	var hash = ( window.location.hash || '' ).replace( '#sma-panel-', '' );
+	var hash = ( window.location.hash || '' ).replace( '#sysmda-panel-', '' );
 	if ( hash && hasPanel( hash ) ) {
 		initial = hash;
 	} else {
 		try {
-			var saved = window.sessionStorage.getItem( 'smaActiveTab' );
+			var saved = window.sessionStorage.getItem( 'sysmdaActiveTab' );
 			if ( saved && hasPanel( saved ) ) {
 				initial = saved;
 			}

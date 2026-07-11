@@ -1,16 +1,16 @@
 /*
  * System Markdown Alternate — stile pagina impostazioni.
- * Tutto è scopato sotto .sma-settings-page: nessun selettore globale su
+ * Tutto è scopato sotto .sysmda-settings-page: nessun selettore globale su
  * .wrap, .form-table, input, textarea o h2. Palette nativa WordPress.
  */
 
-.sma-settings-page {
+.sysmda-settings-page {
 	max-width: 1180px;
 	margin-top: 10px;
 }
 
 /* ─── Header ─────────────────────────────────────────────────────────────── */
-.sma-settings-page__header {
+.sysmda-settings-page__header {
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
@@ -18,7 +18,7 @@
 	margin: 10px 0 4px;
 }
 
-.sma-settings-page__header h1 {
+.sysmda-settings-page__header h1 {
 	display: flex;
 	align-items: baseline;
 	gap: 10px;
@@ -26,13 +26,13 @@
 	padding: 0;
 }
 
-.sma-settings-page__desc {
+.sysmda-settings-page__desc {
 	max-width: 640px;
 	margin: 6px 0 0;
 	color: #50575e;
 }
 
-.sma-settings-page .sma-version {
+.sysmda-settings-page .sysmda-version {
 	font-size: 12px;
 	font-weight: 400;
 	color: #50575e;
@@ -42,31 +42,31 @@
 	padding: 1px 7px;
 }
 
-.sma-settings-page__actions {
+.sysmda-settings-page__actions {
 	flex: 0 0 auto;
 	padding-top: 4px;
 }
 
-.sma-settings-page hr.wp-header-end {
+.sysmda-settings-page hr.wp-header-end {
 	visibility: hidden;
 	margin: 0;
 }
 
 /* ─── Tab ────────────────────────────────────────────────────────────────── */
-.sma-settings-page .sma-tabs {
+.sysmda-settings-page .sysmda-tabs {
 	margin: 12px 0 20px;
 }
 
 /* Contiene i .nav-tab floattati, così il contenuto successivo non scivola
    accanto ai float ma parte pulito sotto le tab. */
-.sma-settings-page .sma-tabs::after {
+.sysmda-settings-page .sysmda-tabs::after {
 	content: "";
 	display: block;
 	clear: both;
 }
 
 /* ─── Layout a due colonne ───────────────────────────────────────────────── */
-.sma-settings-page__layout {
+.sysmda-settings-page__layout {
 	clear: both;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -74,22 +74,22 @@
 	align-items: start;
 }
 
-.sma-settings-page__aside {
+.sysmda-settings-page__aside {
 	position: sticky;
 	top: 46px;
 }
 
 /* Tab client-side: nasconde i pannelli inattivi solo con JS attivo. */
-.sma-settings-page.sma-js-tabs .sma-tab-panel {
+.sysmda-settings-page.sysmda-js-tabs .sysmda-tab-panel {
 	display: none;
 }
 
-.sma-settings-page.sma-js-tabs .sma-tab-panel.is-active {
+.sysmda-settings-page.sysmda-js-tabs .sysmda-tab-panel.is-active {
 	display: block;
 }
 
 /* ─── Card ───────────────────────────────────────────────────────────────── */
-.sma-settings-page .sma-card {
+.sysmda-settings-page .sysmda-card {
 	margin-bottom: 20px;
 	overflow: hidden;
 	background: #fff;
@@ -98,17 +98,17 @@
 	box-shadow: 0 1px 2px rgba( 0, 0, 0, .04 );
 }
 
-.sma-settings-page .sma-card:last-child {
+.sysmda-settings-page .sysmda-card:last-child {
 	margin-bottom: 0;
 }
 
-.sma-settings-page .sma-card__header {
+.sysmda-settings-page .sysmda-card__header {
 	padding: 14px 22px;
 	border-bottom: 1px solid #dcdcde;
 	background: #f6f7f7;
 }
 
-.sma-settings-page .sma-card__header h2 {
+.sysmda-settings-page .sysmda-card__header h2 {
 	margin: 0;
 	padding: 0;
 	font-size: 15px;
@@ -117,50 +117,50 @@
 	border: 0;
 }
 
-.sma-settings-page .sma-card__body {
+.sysmda-settings-page .sysmda-card__body {
 	padding: 6px 22px 18px;
 }
 
-.sma-settings-page .sma-card__body > .sma-help:first-child {
+.sysmda-settings-page .sysmda-card__body > .sysmda-help:first-child {
 	margin-top: 14px;
 }
 
 /* ─── Righe impostazione (form-table nativa rifinita) ────────────────────── */
-.sma-settings-page .sma-card .form-table {
+.sysmda-settings-page .sysmda-card .form-table {
 	margin: 8px 0 0;
 }
 
-.sma-settings-page .sma-card .form-table th {
+.sysmda-settings-page .sysmda-card .form-table th {
 	width: 200px;
 	padding: 18px 20px 18px 0;
 	font-weight: 600;
 }
 
-.sma-settings-page .sma-card .form-table td {
+.sysmda-settings-page .sysmda-card .form-table td {
 	padding: 16px 0;
 }
 
-.sma-settings-page .sma-card .form-table tr {
+.sysmda-settings-page .sysmda-card .form-table tr {
 	border-top: 1px solid #f0f0f1;
 }
 
-.sma-settings-page .sma-card .form-table tr:first-child {
+.sysmda-settings-page .sysmda-card .form-table tr:first-child {
 	border-top: 0;
 }
 
-.sma-settings-page .sma-card .form-table input[type="text"],
-.sma-settings-page .sma-card .form-table input[type="url"],
-.sma-settings-page .sma-card .form-table input[type="number"],
-.sma-settings-page .sma-card .form-table select {
+.sysmda-settings-page .sysmda-card .form-table input[type="text"],
+.sysmda-settings-page .sysmda-card .form-table input[type="url"],
+.sysmda-settings-page .sysmda-card .form-table input[type="number"],
+.sysmda-settings-page .sysmda-card .form-table select {
 	max-width: 100%;
 }
 
-.sma-settings-page .sma-help {
+.sysmda-settings-page .sysmda-help {
 	max-width: 760px;
 }
 
 /* Textarea esclusioni / summary: compatte. */
-.sma-settings-page textarea.sma-textarea {
+.sysmda-settings-page textarea.sysmda-textarea {
 	width: 100%;
 	max-width: 560px;
 	min-height: 88px;
@@ -168,12 +168,12 @@
 }
 
 /* ─── Progressive disclosure: default in <details> ───────────────────────── */
-.sma-settings-page .sma-defaults-toggle {
+.sysmda-settings-page .sysmda-defaults-toggle {
 	margin-top: 8px;
 	max-width: 560px;
 }
 
-.sma-settings-page .sma-defaults-toggle > summary {
+.sysmda-settings-page .sysmda-defaults-toggle > summary {
 	display: inline-block;
 	cursor: pointer;
 	color: #2271b1;
@@ -181,12 +181,12 @@
 	user-select: none;
 }
 
-.sma-settings-page .sma-defaults-toggle > summary:hover,
-.sma-settings-page .sma-defaults-toggle > summary:focus {
+.sysmda-settings-page .sysmda-defaults-toggle > summary:hover,
+.sysmda-settings-page .sysmda-defaults-toggle > summary:focus {
 	color: #135e96;
 }
 
-.sma-settings-page .sma-defaults {
+.sysmda-settings-page .sysmda-defaults {
 	margin: 8px 0 0;
 	padding: 8px 12px;
 	background: #f6f7f7;
@@ -199,7 +199,7 @@
 }
 
 /* ─── Aside: stato endpoint llms.txt ─────────────────────────────────────── */
-.sma-settings-page .sma-endpoint-state {
+.sysmda-settings-page .sysmda-endpoint-state {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -207,7 +207,7 @@
 	font-weight: 600;
 }
 
-.sma-settings-page .sma-endpoint-state .sma-dot {
+.sysmda-settings-page .sysmda-endpoint-state .sysmda-dot {
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
@@ -215,23 +215,23 @@
 	box-shadow: 0 0 0 3px rgba( 167, 170, 173, .18 );
 }
 
-.sma-settings-page .sma-endpoint-state.is-on .sma-dot {
+.sysmda-settings-page .sysmda-endpoint-state.is-on .sysmda-dot {
 	background: #00a32a;
 	box-shadow: 0 0 0 3px rgba( 0, 163, 42, .18 );
 }
 
-.sma-settings-page .sma-endpoint-state.is-off .sma-dot {
+.sysmda-settings-page .sysmda-endpoint-state.is-off .sysmda-dot {
 	background: #d63638;
 	box-shadow: 0 0 0 3px rgba( 214, 54, 56, .18 );
 }
 
-.sma-settings-page .sma-endpoint-url {
+.sysmda-settings-page .sysmda-endpoint-url {
 	margin: 0 0 6px;
 	word-break: break-all;
 }
 
 /* ─── Card informative (sezione Integrazioni) ────────────────────────────── */
-.sma-settings-page .sma-integration-card {
+.sysmda-settings-page .sysmda-integration-card {
 	max-width: 760px;
 	margin: 12px 0;
 	padding: 12px 16px;
@@ -240,11 +240,11 @@
 	border-radius: 4px;
 }
 
-.sma-settings-page .sma-integration-card:first-of-type {
+.sysmda-settings-page .sysmda-integration-card:first-of-type {
 	margin-top: 4px;
 }
 
-.sma-settings-page .sma-integration-card h3 {
+.sysmda-settings-page .sysmda-integration-card h3 {
 	margin: 0 0 8px;
 	font-size: 13px;
 	text-transform: uppercase;
@@ -252,38 +252,38 @@
 	color: #1d2327;
 }
 
-.sma-settings-page .sma-integration-card p {
+.sysmda-settings-page .sysmda-integration-card p {
 	margin: 6px 0;
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media screen and ( max-width: 960px ) {
-	.sma-settings-page__layout {
+	.sysmda-settings-page__layout {
 		grid-template-columns: 1fr;
 	}
 
-	.sma-settings-page__aside {
+	.sysmda-settings-page__aside {
 		position: static;
 	}
 }
 
 @media screen and ( max-width: 782px ) {
-	.sma-settings-page__header {
+	.sysmda-settings-page__header {
 		display: block;
 	}
 
-	.sma-settings-page__actions {
+	.sysmda-settings-page__actions {
 		margin-top: 12px;
 	}
 
-	.sma-settings-page .sma-card__header,
-	.sma-settings-page .sma-card__body {
+	.sysmda-settings-page .sysmda-card__header,
+	.sysmda-settings-page .sysmda-card__body {
 		padding-left: 16px;
 		padding-right: 16px;
 	}
 
 	/* form-table nativa già impila th/td sotto 782px: nessun override rigido. */
-	.sma-settings-page .sma-card .form-table th {
+	.sysmda-settings-page .sysmda-card .form-table th {
 		width: auto;
 		padding-bottom: 4px;
 	}

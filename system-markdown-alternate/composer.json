@@ -9,7 +9,7 @@
     },
     "autoload": {
         "psr-4": {
-            "SystemMarkdownAlternate\\": "src/"
+            "Diecieventi\\SystemMarkdownAlternate\\": "src/"
         }
     },
     "config": {

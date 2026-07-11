@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -16,12 +16,12 @@ defined( 'ABSPATH' ) || exit;
  * gruppo, quindi nessun rischio di perdere impostazioni di altre sezioni.
  *
  * Le opzioni salvate sovrascrivono i default del codice tramite i filtri
- * `sma_markdown_*`. Campo vuoto = si usa il default.
+ * `sysmda_markdown_*`. Campo vuoto = si usa il default.
  */
 class AdminSettings {
 
-	const PAGE         = 'sma-settings';
-	const OPTION_GROUP = 'sma_options';
+	const PAGE         = 'sysmda-settings';
+	const OPTION_GROUP = 'sysmda_options';
 
 	/** Default di esclusione (solo a scopo visivo nel pannello). */
 	const DEFAULT_SHORTCODES   = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
@@ -50,7 +50,7 @@ class AdminSettings {
 	 * @param string $option Nome dell'opzione appena salvata.
 	 */
 	public function maybe_bump_cache_salt( $option ): void {
-		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sma_' ) || 'sma_cache_salt' === $option ) {
+		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sysmda_' ) || 'sysmda_cache_salt' === $option ) {
 			return;
 		}
 
@@ -60,7 +60,7 @@ class AdminSettings {
 		}
 		$bumped = true;
 
-		update_option( 'sma_cache_salt', (string) time() );
+		update_option( 'sysmda_cache_salt', (string) time() );
 	}
 
 	public function add_menu(): void {
@@ -84,77 +84,77 @@ class AdminSettings {
 		}
 
 		wp_enqueue_style(
-			'sma-admin-settings',
-			SMA_PLUGIN_URL . 'assets/admin-settings.css',
+			'sysmda-admin-settings',
+			SYSMDA_PLUGIN_URL . 'assets/admin-settings.css',
 			array(),
-			SMA_VERSION
+			SYSMDA_VERSION
 		);
 
 		// Tab client-side (progressive enhancement): vanilla JS, nessuna dipendenza.
 		// Senza JS tutti i pannelli restano visibili e i campi restano nel form.
 		wp_enqueue_script(
-			'sma-admin-settings',
-			SMA_PLUGIN_URL . 'assets/admin-settings.js',
+			'sysmda-admin-settings',
+			SYSMDA_PLUGIN_URL . 'assets/admin-settings.js',
 			array(),
-			SMA_VERSION,
+			SYSMDA_VERSION,
 			true
 		);
 	}
 
 	public function register_settings(): void {
 		// ── Opzioni sempre registrate ──────────────────────────────────────────
-		register_setting( self::OPTION_GROUP, 'sma_cache_ttl', array( 'type' => 'integer', 'sanitize_callback' => 'absint' ) );
-		register_setting( self::OPTION_GROUP, 'sma_excluded_shortcodes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_excluded_block_names', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
-		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_llms_txt_enriched', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_llms_txt_lastmod', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sma_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
-		register_setting( self::OPTION_GROUP, 'sma_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_cache_ttl', array( 'type' => 'integer', 'sanitize_callback' => 'absint' ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_excluded_shortcodes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_excluded_block_names', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_enriched', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_lastmod', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 
 		// Opzioni ACF: registrate SOLO se ACF è attivo. Così, quando ACF è spento e
 		// i suoi campi non sono nel form, il salvataggio NON le azzera (options.php
 		// scrive solo le opzioni registrate nel gruppo).
 		if ( $this->acf_active() ) {
-			register_setting( self::OPTION_GROUP, 'sma_acf_subtitle_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
-			register_setting( self::OPTION_GROUP, 'sma_acf_tldr_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+			register_setting( self::OPTION_GROUP, 'sysmda_acf_subtitle_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+			register_setting( self::OPTION_GROUP, 'sysmda_acf_tldr_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 		}
 
 		// ── Generale ───────────────────────────────────────────────────────────
-		add_settings_section( 'sma_general', __( 'General', 'system-markdown-alternate' ), array( $this, 'render_general_intro' ), self::PAGE );
-		add_settings_field( 'sma_supported_post_types', __( 'Enabled content types', 'system-markdown-alternate' ), array( $this, 'field_post_types' ), self::PAGE, 'sma_general' );
-		add_settings_field( 'sma_cache_ttl', __( 'Cache TTL (seconds)', 'system-markdown-alternate' ), array( $this, 'field_cache_ttl' ), self::PAGE, 'sma_general' );
+		add_settings_section( 'sysmda_general', __( 'General', 'system-markdown-alternate' ), array( $this, 'render_general_intro' ), self::PAGE );
+		add_settings_field( 'sysmda_supported_post_types', __( 'Enabled content types', 'system-markdown-alternate' ), array( $this, 'field_post_types' ), self::PAGE, 'sysmda_general' );
+		add_settings_field( 'sysmda_cache_ttl', __( 'Cache TTL (seconds)', 'system-markdown-alternate' ), array( $this, 'field_cache_ttl' ), self::PAGE, 'sysmda_general' );
 
 		// ── Output Markdown ──────────────────────────────────────────────────────
-		add_settings_section( 'sma_markdown', __( 'Markdown output', 'system-markdown-alternate' ), array( $this, 'render_markdown_intro' ), self::PAGE );
-		add_settings_field( 'sma_excluded_shortcodes', __( 'Excluded shortcodes', 'system-markdown-alternate' ), array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sma_markdown' );
-		add_settings_field( 'sma_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sma_markdown' );
-		add_settings_field( 'sma_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sma_markdown' );
+		add_settings_section( 'sysmda_markdown', __( 'Markdown output', 'system-markdown-alternate' ), array( $this, 'render_markdown_intro' ), self::PAGE );
+		add_settings_field( 'sysmda_excluded_shortcodes', __( 'Excluded shortcodes', 'system-markdown-alternate' ), array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sysmda_markdown' );
+		add_settings_field( 'sysmda_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sysmda_markdown' );
+		add_settings_field( 'sysmda_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sysmda_markdown' );
 
 		if ( $this->acf_active() ) {
-			add_settings_field( 'sma_acf_subtitle_key', __( 'ACF subtitle field', 'system-markdown-alternate' ), array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sma_markdown' );
-			add_settings_field( 'sma_acf_tldr_key', __( 'ACF TL;DR field', 'system-markdown-alternate' ), array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sysmda_acf_subtitle_key', __( 'ACF subtitle field', 'system-markdown-alternate' ), array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sysmda_markdown' );
+			add_settings_field( 'sysmda_acf_tldr_key', __( 'ACF TL;DR field', 'system-markdown-alternate' ), array( $this, 'field_acf_tldr_key' ), self::PAGE, 'sysmda_markdown' );
 		} else {
-			add_settings_field( 'sma_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sma_markdown' );
+			add_settings_field( 'sysmda_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sysmda_markdown' );
 		}
 
 		// ── llms.txt ─────────────────────────────────────────────────────────────
-		add_settings_section( 'sma_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
-		add_settings_field( 'sma_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sma_llmstxt' );
-		add_settings_field( 'sma_llms_txt_enriched', __( 'Enriched output', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enriched' ), self::PAGE, 'sma_llmstxt' );
-		add_settings_field( 'sma_llms_txt_lastmod', __( 'Last modified dates', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_lastmod' ), self::PAGE, 'sma_llmstxt' );
-		add_settings_field( 'sma_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sma_llmstxt' );
-		add_settings_field( 'sma_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sma_llmstxt' );
+		add_settings_section( 'sysmda_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
+		add_settings_field( 'sysmda_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sysmda_llmstxt' );
+		add_settings_field( 'sysmda_llms_txt_enriched', __( 'Enriched output', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enriched' ), self::PAGE, 'sysmda_llmstxt' );
+		add_settings_field( 'sysmda_llms_txt_lastmod', __( 'Last modified dates', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_lastmod' ), self::PAGE, 'sysmda_llmstxt' );
+		add_settings_field( 'sysmda_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sysmda_llmstxt' );
+		add_settings_field( 'sysmda_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sysmda_llmstxt' );
 
 		// ── Integrazioni (solo informativa) ──────────────────────────────────────
-		add_settings_section( 'sma_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
+		add_settings_section( 'sysmda_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
 
 		// ── Avanzate ─────────────────────────────────────────────────────────────
-		add_settings_section( 'sma_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
-		add_settings_field( 'sma_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sma_advanced' );
+		add_settings_section( 'sysmda_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
+		add_settings_field( 'sysmda_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sysmda_advanced' );
 	}
 
 	/**
@@ -233,9 +233,9 @@ class AdminSettings {
 	 */
 	private function hook_filters(): void {
 		add_filter(
-			'sma_markdown_cache_ttl',
+			'sysmda_markdown_cache_ttl',
 			function ( $default, $post ) {
-				$v = get_option( 'sma_cache_ttl' );
+				$v = get_option( 'sysmda_cache_ttl' );
 				return false !== $v ? (int) $v : $default;
 			},
 			20,
@@ -243,77 +243,77 @@ class AdminSettings {
 		);
 
 		add_filter(
-			'sma_llms_txt_cache_ttl',
+			'sysmda_llms_txt_cache_ttl',
 			function ( $default ) {
-				$v = get_option( 'sma_cache_ttl' );
+				$v = get_option( 'sysmda_cache_ttl' );
 				return false !== $v ? (int) $v : $default;
 			},
 			20
 		);
 
 		add_filter(
-			'sma_llms_txt_enriched',
+			'sysmda_llms_txt_enriched',
 			function ( $default ) {
-				$v = get_option( 'sma_llms_txt_enriched' );
+				$v = get_option( 'sysmda_llms_txt_enriched' );
 				return false !== $v ? '1' === $v : $default;
 			},
 			20
 		);
 
 		add_filter(
-			'sma_llms_txt_lastmod',
+			'sysmda_llms_txt_lastmod',
 			function ( $default ) {
-				$v = get_option( 'sma_llms_txt_lastmod' );
+				$v = get_option( 'sysmda_llms_txt_lastmod' );
 				return false !== $v ? '1' === $v : $default;
 			},
 			20
 		);
 
 		add_filter(
-			'sma_llms_txt_summary',
+			'sysmda_llms_txt_summary',
 			function ( $default ) {
-				$v = get_option( 'sma_llms_txt_summary' );
+				$v = get_option( 'sysmda_llms_txt_summary' );
 				return ( false !== $v && '' !== trim( (string) $v ) ) ? (string) $v : $default;
 			},
 			20
 		);
 
 		add_filter(
-			'sma_llms_txt_key_content',
+			'sysmda_llms_txt_key_content',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sma_llms_txt_key_content', (array) $defaults );
+				return $this->option_to_list( 'sysmda_llms_txt_key_content', (array) $defaults );
 			},
 			20
 		);
 
 		add_filter(
-			'sma_markdown_excluded_shortcodes',
+			'sysmda_markdown_excluded_shortcodes',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sma_excluded_shortcodes', $defaults );
+				return $this->option_to_list( 'sysmda_excluded_shortcodes', $defaults );
 			},
 			20
 		);
 
 		add_filter(
-			'sma_markdown_excluded_block_names',
+			'sysmda_markdown_excluded_block_names',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sma_excluded_block_names', $defaults );
+				return $this->option_to_list( 'sysmda_excluded_block_names', $defaults );
 			},
 			20
 		);
 
 		add_filter(
-			'sma_markdown_excluded_classes',
+			'sysmda_markdown_excluded_classes',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sma_excluded_classes', $defaults );
+				return $this->option_to_list( 'sysmda_excluded_classes', $defaults );
 			},
 			20
 		);
 
 		add_filter(
-			'sma_markdown_supported_post_types',
+			'sysmda_markdown_supported_post_types',
 			function ( $defaults ) {
-				$v = get_option( 'sma_supported_post_types' );
+				$v = get_option( 'sysmda_supported_post_types' );
 				if ( false === $v ) {
 					return $defaults;
 				}
@@ -324,9 +324,9 @@ class AdminSettings {
 		);
 
 		add_filter(
-			'sma_markdown_robots_header',
+			'sysmda_markdown_robots_header',
 			function ( $default, $post ) {
-				$v = get_option( 'sma_robots_header' );
+				$v = get_option( 'sysmda_robots_header' );
 				return false !== $v ? $v : $default;
 			},
 			20,
@@ -334,9 +334,9 @@ class AdminSettings {
 		);
 
 		add_filter(
-			'sma_acf_subtitle_key',
+			'sysmda_acf_subtitle_key',
 			function ( $default, $post ) {
-				$v = get_option( 'sma_acf_subtitle_key' );
+				$v = get_option( 'sysmda_acf_subtitle_key' );
 				return ( false !== $v && '' !== $v ) ? $v : $default;
 			},
 			20,
@@ -344,9 +344,9 @@ class AdminSettings {
 		);
 
 		add_filter(
-			'sma_acf_tldr_key',
+			'sysmda_acf_tldr_key',
 			function ( $default, $post ) {
-				$v = get_option( 'sma_acf_tldr_key' );
+				$v = get_option( 'sysmda_acf_tldr_key' );
 				return ( false !== $v && '' !== $v ) ? $v : $default;
 			},
 			20,
@@ -373,25 +373,25 @@ class AdminSettings {
 	// ─── Intro sezioni ──────────────────────────────────────────────────────────
 
 	public function render_general_intro(): void {
-		echo '<p class="sma-help">' . esc_html__( 'Main settings. Without at least one selected content type, the plugin stays inactive.', 'system-markdown-alternate' ) . '</p>';
+		echo '<p class="sysmda-help">' . esc_html__( 'Main settings. Without at least one selected content type, the plugin stays inactive.', 'system-markdown-alternate' ) . '</p>';
 
 		if ( '' === (string) get_option( 'permalink_structure' ) ) {
-			echo '<div class="sma-status">';
+			echo '<div class="sysmda-status">';
 			echo wp_kses_post( __( 'Your site uses <strong>plain permalinks</strong>: the <code>.md</code> suffix is not available, so Markdown URLs fall back to <code>?format=markdown</code>. For clean <code>.md</code> URLs, choose a pretty permalink structure in Settings → Permalinks.', 'system-markdown-alternate' ) );
 			echo '</div>';
 		}
 	}
 
 	public function render_markdown_intro(): void {
-		echo '<p class="sma-help">' . wp_kses_post( __( 'Controls what goes into or stays out of the <code>.md</code> file. For exclusions: one entry per line, leave empty to use the built-in defaults.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="sysmda-help">' . wp_kses_post( __( 'Controls what goes into or stays out of the <code>.md</code> file. For exclusions: one entry per line, leave empty to use the built-in defaults.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function render_advanced_intro(): void {
-		echo '<p class="sma-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
+		echo '<p class="sysmda-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function render_llmstxt_intro(): void {
-		echo '<p class="sma-help">' . wp_kses_post( __( 'The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="sysmda-help">' . wp_kses_post( __( 'The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	/**
@@ -399,19 +399,19 @@ class AdminSettings {
 	 * Solo presentazione: usa gli stessi dati già calcolati dal plugin.
 	 */
 	public function render_llmstxt_aside(): void {
-		$enabled = '1' === get_option( 'sma_llms_txt_enabled', '1' );
+		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
 		$url     = home_url( '/llms.txt' );
 
-		echo '<section class="sma-card sma-aside-card">';
-		echo '<header class="sma-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
-		echo '<div class="sma-card__body">';
+		echo '<section class="sysmda-card sysmda-aside-card">';
+		echo '<header class="sysmda-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
+		echo '<div class="sysmda-card__body">';
 
-		echo '<p class="sma-endpoint-state ' . ( $enabled ? 'is-on' : 'is-off' ) . '">';
-		echo '<span class="sma-dot" aria-hidden="true"></span>';
+		echo '<p class="sysmda-endpoint-state ' . ( $enabled ? 'is-on' : 'is-off' ) . '">';
+		echo '<span class="sysmda-dot" aria-hidden="true"></span>';
 		echo esc_html( $enabled ? __( 'Enabled', 'system-markdown-alternate' ) : __( 'Disabled', 'system-markdown-alternate' ) );
 		echo '</p>';
 
-		echo '<p class="sma-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
+		echo '<p class="sysmda-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
 
 		$this->render_conflict_warning();
 
@@ -419,27 +419,27 @@ class AdminSettings {
 	}
 
 	public function render_integrations_intro(): void {
-		echo '<p class="sma-help">' . wp_kses_post( __( 'Informational section: how to use the <code>.md</code> URL in content and templates.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="sysmda-help">' . wp_kses_post( __( 'Informational section: how to use the <code>.md</code> URL in content and templates.', 'system-markdown-alternate' ) ) . '</p>';
 
-		echo '<div class="sma-integration-card">';
+		echo '<div class="sysmda-integration-card">';
 		echo '<h3>' . esc_html__( 'Shortcode', 'system-markdown-alternate' ) . '</h3>';
-		echo '<p>' . wp_kses_post( __( '<code>[sma_md_url]</code> — <code>.md</code> URL of the current post.', 'system-markdown-alternate' ) ) . '<br>';
-		echo wp_kses_post( __( '<code>[sma_md_url id="123"]</code> — <code>.md</code> URL of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p>' . wp_kses_post( __( '<code>[sysmda_md_url]</code> — <code>.md</code> URL of the current post.', 'system-markdown-alternate' ) ) . '<br>';
+		echo wp_kses_post( __( '<code>[sysmda_md_url id="123"]</code> — <code>.md</code> URL of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
 		echo '<p class="description">' . esc_html__( 'Returns empty if the post does not expose a .md (type not enabled, draft, or password-protected).', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
 
-		echo '<div class="sma-integration-card">';
+		echo '<div class="sysmda-integration-card">';
 		echo '<h3>GenerateBlocks</h3>';
 		if ( $this->generateblocks_active() ) {
 			echo '<p>' . esc_html__( 'GenerateBlocks detected. The dynamic tag is available automatically.', 'system-markdown-alternate' ) . '</p>';
-			echo '<p><code>{{sma_md_url}}</code></p>';
-			echo '<p class="description">' . wp_kses_post( __( 'Insert <code>{{sma_md_url}}</code> in GenerateBlocks/GeneratePress fields that accept a dynamic tag, e.g. a button URL. If the post has no <code>.md</code>, the tag resolves to empty and the element is hidden (required to render).', 'system-markdown-alternate' ) ) . '</p>';
+			echo '<p><code>{{sysmda_md_url}}</code></p>';
+			echo '<p class="description">' . wp_kses_post( __( 'Insert <code>{{sysmda_md_url}}</code> in GenerateBlocks/GeneratePress fields that accept a dynamic tag, e.g. a button URL. If the post has no <code>.md</code>, the tag resolves to empty and the element is hidden (required to render).', 'system-markdown-alternate' ) ) . '</p>';
 		} else {
 			echo '<p>' . esc_html__( 'GenerateBlocks not detected. The dynamic tag is not available.', 'system-markdown-alternate' ) . '</p>';
 		}
 		echo '</div>';
 
-		echo '<div class="sma-integration-card">';
+		echo '<div class="sysmda-integration-card">';
 		echo '<h3>ACF</h3>';
 		echo $this->acf_active()
 			? '<p>' . wp_kses_post( __( 'ACF detected. The Subtitle and TL;DR fields are configured in the <strong>Markdown output</strong> section.', 'system-markdown-alternate' ) ) . '</p>'
@@ -486,7 +486,7 @@ class AdminSettings {
 	// ─── Campi ──────────────────────────────────────────────────────────────────
 
 	public function field_post_types(): void {
-		$raw   = get_option( 'sma_supported_post_types' ); // false = mai salvato
+		$raw   = get_option( 'sysmda_supported_post_types' ); // false = mai salvato
 		$saved = false !== $raw ? (array) $raw : array();
 
 		$all_types = get_post_types( array( 'public' => true ), 'objects' );
@@ -494,7 +494,7 @@ class AdminSettings {
 
 		foreach ( $all_types as $pt ) {
 			printf(
-				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sma_supported_post_types[]" value="%s"%s /> %s <code>(%s)</code></label>',
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%s"%s /> %s <code>(%s)</code></label>',
 				esc_attr( $pt->name ),
 				checked( in_array( $pt->name, $saved, true ), true, false ),
 				esc_html( $pt->labels->singular_name ),
@@ -505,22 +505,22 @@ class AdminSettings {
 	}
 
 	public function field_cache_ttl(): void {
-		$v = get_option( 'sma_cache_ttl' );
+		$v = get_option( 'sysmda_cache_ttl' );
 		$v = false !== $v ? (int) $v : DAY_IN_SECONDS;
-		echo '<input type="number" min="0" step="1" name="sma_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" /> ' . esc_html__( 'seconds', 'system-markdown-alternate' );
+		echo '<input type="number" min="0" step="1" name="sysmda_cache_ttl" value="' . esc_attr( $v ) . '" class="small-text" /> ' . esc_html__( 'seconds', 'system-markdown-alternate' );
 		echo '<p class="description">' . esc_html__( '0 = cache disabled. Default: 86400 (24 hours).', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_excluded_shortcodes(): void {
-		$this->render_exclusion_field( 'sma_excluded_shortcodes', self::DEFAULT_SHORTCODES );
+		$this->render_exclusion_field( 'sysmda_excluded_shortcodes', self::DEFAULT_SHORTCODES );
 	}
 
 	public function field_excluded_block_names(): void {
-		$this->render_exclusion_field( 'sma_excluded_block_names', self::DEFAULT_BLOCK_NAMES );
+		$this->render_exclusion_field( 'sysmda_excluded_block_names', self::DEFAULT_BLOCK_NAMES );
 	}
 
 	public function field_excluded_classes(): void {
-		$this->render_exclusion_field( 'sma_excluded_classes', self::DEFAULT_CSS_CLASSES );
+		$this->render_exclusion_field( 'sysmda_excluded_classes', self::DEFAULT_CSS_CLASSES );
 	}
 
 	/**
@@ -530,22 +530,22 @@ class AdminSettings {
 	 */
 	private function render_exclusion_field( string $option, array $defaults ): void {
 		$v = (string) get_option( $option, '' );
-		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sma-help">' . esc_html__( 'One per line. Leave empty to use the built-in defaults.', 'system-markdown-alternate' ) . '</p>';
-		echo '<details class="sma-defaults-toggle"><summary>' . esc_html__( 'View built-in defaults', 'system-markdown-alternate' ) . '</summary>';
-		echo '<pre class="sma-defaults">' . esc_html( implode( "\n", $defaults ) ) . '</pre>';
+		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sysmda-help">' . esc_html__( 'One per line. Leave empty to use the built-in defaults.', 'system-markdown-alternate' ) . '</p>';
+		echo '<details class="sysmda-defaults-toggle"><summary>' . esc_html__( 'View built-in defaults', 'system-markdown-alternate' ) . '</summary>';
+		echo '<pre class="sysmda-defaults">' . esc_html( implode( "\n", $defaults ) ) . '</pre>';
 		echo '</details>';
 	}
 
 	public function field_acf_subtitle_key(): void {
-		$v = (string) get_option( 'sma_acf_subtitle_key', '' );
-		echo '<input type="text" name="sma_acf_subtitle_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
+		$v = (string) get_option( 'sysmda_acf_subtitle_key', '' );
+		echo '<input type="text" name="sysmda_acf_subtitle_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
 		echo '<p class="description">' . esc_html__( 'ACF field name for the subtitle (type: text). Inserted in italics right after the H1 title.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_acf_tldr_key(): void {
-		$v = (string) get_option( 'sma_acf_tldr_key', '' );
-		echo '<input type="text" name="sma_acf_tldr_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
+		$v = (string) get_option( 'sysmda_acf_tldr_key', '' );
+		echo '<input type="text" name="sysmda_acf_tldr_key" value="' . esc_attr( $v ) . '" class="regular-text" />';
 		echo '<p class="description">' . wp_kses_post( __( 'ACF field name for the TL;DR (type: WYSIWYG editor). Inserted as a <code>**TL;DR**</code> section with <code>---</code> separators.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
@@ -554,39 +554,39 @@ class AdminSettings {
 	}
 
 	public function field_llms_txt_enabled(): void {
-		$v = get_option( 'sma_llms_txt_enabled', '1' ); // abilitato per default
-		echo '<label><input type="checkbox" name="sma_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
+		$v = get_option( 'sysmda_llms_txt_enabled', '1' ); // abilitato per default
+		echo '<label><input type="checkbox" name="sysmda_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_enriched(): void {
-		$v = get_option( 'sma_llms_txt_enriched', '0' ); // disattivato per default
-		echo '<label><input type="checkbox" name="sma_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
+		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // disattivato per default
+		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_lastmod(): void {
-		$v = get_option( 'sma_llms_txt_lastmod', '0' ); // disattivato per default
-		echo '<label><input type="checkbox" name="sma_llms_txt_lastmod" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Append the last modified date to each entry', 'system-markdown-alternate' ) . '</label>';
+		$v = get_option( 'sysmda_llms_txt_lastmod', '0' ); // disattivato per default
+		echo '<label><input type="checkbox" name="sysmda_llms_txt_lastmod" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Append the last modified date to each entry', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds <code>(updated: YYYY-MM-DD)</code> after every entry, so crawlers can spot changed content without re-fetching each URL. Works with both the basic and the enriched output.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_summary(): void {
-		$v = (string) get_option( 'sma_llms_txt_summary', '' );
-		echo '<textarea name="sma_llms_txt_summary" rows="3" class="large-text sma-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sma-help">' . esc_html__( 'One short paragraph describing the site, shown after the tagline. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
+		$v = (string) get_option( 'sysmda_llms_txt_summary', '' );
+		echo '<textarea name="sysmda_llms_txt_summary" rows="3" class="large-text sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sysmda-help">' . esc_html__( 'One short paragraph describing the site, shown after the tagline. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_llms_txt_key_content(): void {
-		$v = (string) get_option( 'sma_llms_txt_key_content', '' );
-		echo '<textarea name="sma_llms_txt_key_content" rows="4" class="code sma-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sma-help">' . esc_html__( 'Featured content: one post ID or URL per line. Listed first, before the automatic sections. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
+		$v = (string) get_option( 'sysmda_llms_txt_key_content', '' );
+		echo '<textarea name="sysmda_llms_txt_key_content" rows="4" class="code sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sysmda-help">' . esc_html__( 'Featured content: one post ID or URL per line. Listed first, before the automatic sections. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_robots_header(): void {
-		$v = get_option( 'sma_robots_header' );
+		$v = get_option( 'sysmda_robots_header' );
 		$v = false !== $v ? (string) $v : 'noindex, follow';
-		echo '<input type="text" name="sma_robots_header" value="' . esc_attr( $v ) . '" class="regular-text" />';
+		echo '<input type="text" name="sysmda_robots_header" value="' . esc_attr( $v ) . '" class="regular-text" />';
 		echo '<p class="description">' . wp_kses_post( __( 'Default: <code>noindex, follow</code>. Leave empty to not send the header.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
@@ -598,19 +598,19 @@ class AdminSettings {
 		global $wp_settings_sections, $wp_settings_fields;
 		$sections = isset( $wp_settings_sections[ self::PAGE ] ) ? (array) $wp_settings_sections[ self::PAGE ] : array();
 		?>
-		<div class="wrap sma-settings-page">
-			<form method="post" action="options.php" class="sma-settings-page__form">
+		<div class="wrap sysmda-settings-page">
+			<form method="post" action="options.php" class="sysmda-settings-page__form">
 				<?php settings_fields( self::OPTION_GROUP ); ?>
 
-				<header class="sma-settings-page__header">
-					<div class="sma-settings-page__titles">
+				<header class="sysmda-settings-page__header">
+					<div class="sysmda-settings-page__titles">
 						<h1>
 							<?php echo esc_html( get_admin_page_title() ); ?>
-							<span class="sma-version">v<?php echo esc_html( SMA_VERSION ); ?></span>
+							<span class="sysmda-version">v<?php echo esc_html( SYSMDA_VERSION ); ?></span>
 						</h1>
-						<p class="sma-settings-page__desc"><?php esc_html_e( 'Serve a clean Markdown version of your content at the .md URL, for LLMs and AI agents.', 'system-markdown-alternate' ); ?></p>
+						<p class="sysmda-settings-page__desc"><?php esc_html_e( 'Serve a clean Markdown version of your content at the .md URL, for LLMs and AI agents.', 'system-markdown-alternate' ); ?></p>
 					</div>
-					<div class="sma-settings-page__actions">
+					<div class="sysmda-settings-page__actions">
 						<?php submit_button( '', 'primary', 'submit', false ); ?>
 					</div>
 				</header>
@@ -619,12 +619,12 @@ class AdminSettings {
 				<?php settings_errors(); ?>
 
 				<?php if ( count( $sections ) > 1 ) : ?>
-					<nav class="nav-tab-wrapper sma-tabs" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
+					<nav class="nav-tab-wrapper sysmda-tabs" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
 						<?php
 						$i = 0;
 						foreach ( $sections as $sid => $section ) {
 							printf(
-								'<a href="#sma-panel-%1$s" class="nav-tab%2$s" data-tab="%1$s">%3$s</a>',
+								'<a href="#sysmda-panel-%1$s" class="nav-tab%2$s" data-tab="%1$s">%3$s</a>',
 								esc_attr( (string) $sid ),
 								0 === $i ? ' nav-tab-active' : '',
 								esc_html( (string) $section['title'] )
@@ -635,22 +635,22 @@ class AdminSettings {
 					</nav>
 				<?php endif; ?>
 
-				<div class="sma-settings-page__layout">
-					<main class="sma-settings-page__main">
+				<div class="sysmda-settings-page__layout">
+					<main class="sysmda-settings-page__main">
 						<?php
 						$i = 0;
 						foreach ( $sections as $sid => $section ) {
 							$sid = (string) $sid;
 							printf(
-								'<div class="sma-tab-panel%1$s" id="sma-panel-%2$s" data-tab="%2$s" role="tabpanel">',
+								'<div class="sysmda-tab-panel%1$s" id="sysmda-panel-%2$s" data-tab="%2$s" role="tabpanel">',
 								0 === $i ? ' is-active' : '',
 								esc_attr( $sid )
 							);
-							echo '<section class="sma-card">';
+							echo '<section class="sysmda-card">';
 							if ( ! empty( $section['title'] ) ) {
-								echo '<header class="sma-card__header"><h2>' . esc_html( (string) $section['title'] ) . '</h2></header>';
+								echo '<header class="sysmda-card__header"><h2>' . esc_html( (string) $section['title'] ) . '</h2></header>';
 							}
-							echo '<div class="sma-card__body">';
+							echo '<div class="sysmda-card__body">';
 							if ( ! empty( $section['callback'] ) ) {
 								call_user_func( $section['callback'], $section );
 							}
@@ -664,7 +664,7 @@ class AdminSettings {
 						}
 						?>
 					</main>
-					<aside class="sma-settings-page__aside">
+					<aside class="sysmda-settings-page__aside">
 						<?php $this->render_llmstxt_aside(); ?>
 					</aside>
 				</div>

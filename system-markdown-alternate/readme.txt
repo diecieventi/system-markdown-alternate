@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.19.0
+Stable tag: 0.20.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,42 +47,42 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   and settings change.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
-* **Shortcode** `[sma_md_url]` to output the Markdown URL anywhere.
+* **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
-  * **GenerateBlocks 2.x**: a `{{sma_md_url}}` Dynamic Tag, available
+  * **GenerateBlocks 2.x**: a `{{sysmda_md_url}}` Dynamic Tag, available
     automatically, usable in element fields (e.g. a Button URL).
 
 = Developer filters =
 
 The output is customizable through filters:
 
-* `sma_markdown_supported_post_types` — post types that expose `.md` (default: none).
-* `sma_markdown_robots_header` — the `X-Robots-Tag` value (`''` = no header).
-* `sma_markdown_strict_406` — return `406` when the client accepts neither HTML nor
+* `sysmda_markdown_supported_post_types` — post types that expose `.md` (default: none).
+* `sysmda_markdown_robots_header` — the `X-Robots-Tag` value (`''` = no header).
+* `sysmda_markdown_strict_406` — return `406` when the client accepts neither HTML nor
   Markdown (default `true`; `false` always serves the HTML default).
-* `sma_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
-* `sma_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
-* `sma_markdown_source_content` — raw source content before rendering.
-* `sma_markdown_rendered_html` — cleaned HTML before conversion.
-* `sma_markdown_preamble` — Markdown inserted between the H1 and the body.
-* `sma_markdown_output` — final Markdown.
-* `sma_markdown_excluded_block_names` — Gutenberg blocks to drop.
-* `sma_markdown_excluded_shortcodes` — shortcodes to drop.
-* `sma_markdown_excluded_classes` — CSS classes whose elements are dropped.
-* `sma_acf_field_keys` — ACF fields appended to the source.
-* `sma_acf_subtitle_key` / `sma_acf_tldr_key` — ACF fields for subtitle/TL;DR.
-* `sma_llms_txt_max_posts` — max posts per type in `/llms.txt`.
-* `sma_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
-* `sma_llms_txt_enriched` — enable the enriched `/llms.txt` output (default `false`).
-* `sma_llms_txt_lastmod` — append `(updated: YYYY-MM-DD)` to every `/llms.txt`
+* `sysmda_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
+* `sysmda_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
+* `sysmda_markdown_source_content` — raw source content before rendering.
+* `sysmda_markdown_rendered_html` — cleaned HTML before conversion.
+* `sysmda_markdown_preamble` — Markdown inserted between the H1 and the body.
+* `sysmda_markdown_output` — final Markdown.
+* `sysmda_markdown_excluded_block_names` — Gutenberg blocks to drop.
+* `sysmda_markdown_excluded_shortcodes` — shortcodes to drop.
+* `sysmda_markdown_excluded_classes` — CSS classes whose elements are dropped.
+* `sysmda_acf_field_keys` — ACF fields appended to the source.
+* `sysmda_acf_subtitle_key` / `sysmda_acf_tldr_key` — ACF fields for subtitle/TL;DR.
+* `sysmda_llms_txt_max_posts` — max posts per type in `/llms.txt`.
+* `sysmda_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
+* `sysmda_llms_txt_enriched` — enable the enriched `/llms.txt` output (default `false`).
+* `sysmda_llms_txt_lastmod` — append `(updated: YYYY-MM-DD)` to every `/llms.txt`
   entry (default `false`).
-* `sma_llms_txt_summary` — site summary paragraph (enriched mode only).
-* `sma_llms_txt_key_content` — featured content, post IDs or URLs (enriched mode only).
-* `sma_llms_txt_main_posts` — posts per type in the main sections before the
+* `sysmda_llms_txt_summary` — site summary paragraph (enriched mode only).
+* `sysmda_llms_txt_key_content` — featured content, post IDs or URLs (enriched mode only).
+* `sysmda_llms_txt_main_posts` — posts per type in the main sections before the
   overflow moves to `Optional` (enriched mode only, default 25).
-* `sma_llms_txt_footer` — free-form block appended at the end (enriched mode only).
+* `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
 
 == Installation ==
 
@@ -106,7 +106,7 @@ tick at least one post type under **Supported post types**.
 
 Add one of the CSS classes `no-md`, `md-exclude` or `exclude-from-markdown` to a
 block; the element (and its children) is removed from the Markdown output. You
-can customize the list with the `sma_markdown_excluded_classes` filter.
+can customize the list with the `sysmda_markdown_excluded_classes` filter.
 
 = Does it affect my SEO? =
 
@@ -116,8 +116,8 @@ engines are told to prefer the original page.
 
 = How do I get the Markdown URL in a button or template? =
 
-Use the `[sma_md_url]` shortcode. If you run GenerateBlocks 2.x, the
-`{{sma_md_url}}` Dynamic Tag is available automatically — use it in element
+Use the `[sysmda_md_url]` shortcode. If you run GenerateBlocks 2.x, the
+`{{sysmda_md_url}}` Dynamic Tag is available automatically — use it in element
 fields such as a Button URL. When the post has no `.md`, the tag resolves to an
 empty value so GenerateBlocks can hide the element instead of leaving a broken
 link.
@@ -132,9 +132,21 @@ the post is edited, when the plugin is updated, or when you save the settings.
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
 2. Settings — exclusion defaults (blocks and CSS classes) and the ACF availability notice, above the `/llms.txt` section.
 3. Settings — the `/llms.txt` controls: enable the endpoint and, optionally, the enriched output (site summary and curated key content).
-4. Settings — Integrations and Advanced: the `[sma_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
+4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.20.0 =
+* All internal names now use the distinctive `sysmda_` / `SYSMDA_` prefix and
+  the `Diecieventi\SystemMarkdownAlternate` namespace, per the wordpress.org
+  plugin review guidelines (options, settings, filters, shortcode, Dynamic Tag,
+  constants, cache keys, asset handles). **Breaking**: filters and the shortcode
+  are renamed (`sma_*` → `sysmda_*`, `[sma_md_url]` → `[sysmda_md_url]`,
+  `{{sma_md_url}}` → `{{sysmda_md_url}}`); settings must be re-saved after
+  updating, since option names changed.
+* Removed `load_plugin_textdomain()` and the bundled translation files:
+  translations are delivered as language packs by translate.wordpress.org
+  (automatic since WP 4.6).
 
 = 0.19.0 =
 * `/llms.txt`: new optional **last modified dates** toggle (off by default —
@@ -142,7 +154,7 @@ the post is edited, when the plugin is updated, or when you save the settings.
   `(updated: YYYY-MM-DD)` note (ISO date, taken from the post's last
   modification), in both the basic and the enriched output, so LLM crawlers can
   spot changed content without re-fetching each `.md` URL. New
-  `sma_llms_txt_lastmod` filter.
+  `sysmda_llms_txt_lastmod` filter.
 
 = 0.18.0 =
 * Conditional requests on the `.md` endpoint: the Markdown response now sends
@@ -177,7 +189,7 @@ the post is edited, when the plugin is updated, or when you save the settings.
   (post IDs or URLs from the settings page), a description for each entry (Rank
   Math meta → excerpt → trimmed text, same chain as the front matter), overflow
   beyond the most recent posts moved to an `Optional` section, and a
-  `sma_llms_txt_footer` filter as a hook for future LLM signals.
+  `sysmda_llms_txt_footer` filter as a hook for future LLM signals.
 
 = 0.15.0 =
 * Synced patterns (reusable blocks) are now expanded and cleaned like regular
@@ -186,8 +198,8 @@ the post is edited, when the plugin is updated, or when you save the settings.
 * Plain permalinks (`?p=123`) no longer produce broken `.md` URLs: Markdown URLs
   fall back to `?format=markdown` (served via content negotiation) and the
   settings page shows a notice.
-* New `sma_llms_txt_cache_ttl` filter for the `/llms.txt` cache TTL
-  (previously shared with `sma_markdown_cache_ttl`, which received a `null`
+* New `sysmda_llms_txt_cache_ttl` filter for the `/llms.txt` cache TTL
+  (previously shared with `sysmda_markdown_cache_ttl`, which received a `null`
   post and could break third-party callbacks).
 * Internal: post eligibility rules centralized in a single helper; local test
   suite and CI added.
@@ -199,7 +211,7 @@ the post is edited, when the plugin is updated, or when you save the settings.
 * Negotiable URLs now send `Vary: Accept`, so caches/CDNs store the HTML and Markdown
   representations separately instead of poisoning each other.
 * Optional `406 Not Acceptable` when the client accepts neither HTML nor Markdown
-  (new `sma_markdown_strict_406` filter, on by default; real browsers and crawlers are
+  (new `sysmda_markdown_strict_406` filter, on by default; real browsers and crawlers are
   never affected).
 
 = 0.13.1 =
@@ -269,7 +281,7 @@ the post is edited, when the plugin is updated, or when you save the settings.
 * Added `uninstall.php` to remove all plugin options and cached data on deletion.
 
 = 0.8.0 =
-* The GenerateBlocks `{{sma_md_url}}` Dynamic Tag now registers automatically
+* The GenerateBlocks `{{sysmda_md_url}}` Dynamic Tag now registers automatically
   whenever GenerateBlocks 2.x is active (the on/off toggle has been removed). It
   resolves to an empty value for non-servable posts, so leftover tags never
   render as literal text while the plugin and GenerateBlocks are active.
@@ -280,8 +292,8 @@ the post is edited, when the plugin is updated, or when you save the settings.
 * Dedicated Shortcode section.
 
 = 0.6.0 =
-* Single `[sma_md_url]` shortcode.
-* GenerateBlocks 2.x `{{sma_md_url}}` Dynamic Tag, with an on/off toggle.
+* Single `[sysmda_md_url]` shortcode.
+* GenerateBlocks 2.x `{{sysmda_md_url}}` Dynamic Tag, with an on/off toggle.
 
 = 0.5.0 =
 * Shortcodes to output the Markdown URL.
@@ -301,7 +313,7 @@ the post is edited, when the plugin is updated, or when you save the settings.
 = 0.2.0 =
 * `/llms.txt` endpoint, custom post type support, content negotiation,
   proactive cache invalidation, ACF integration, admin settings panel and the
-  `sma_markdown_excluded_classes` filter.
+  `sysmda_markdown_excluded_classes` filter.
 
 = 0.1.0 =
 * Initial release: `.md` endpoint, alternate link, front matter, block/shortcode

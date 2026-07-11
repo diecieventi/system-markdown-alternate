@@ -8,7 +8,7 @@
  * MetadataBuilder::markdown_url) tramite stub minimi delle funzioni WP usate.
  * Esce con codice 1 se almeno un assert fallisce.
  *
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
 // ─── Ambiente ────────────────────────────────────────────────────────────────
@@ -20,9 +20,9 @@ ini_set( 'display_errors', '1' );
 
 // ─── Stub WordPress (solo ciò che serve alle classi sotto test) ─────────────
 
-$GLOBALS['sma_test_posts']   = array(); // id → WP_Post
-$GLOBALS['sma_test_parsed']  = array(); // content → blocks
-$GLOBALS['sma_test_options'] = array(); // option → value
+$GLOBALS['sysmda_test_posts']   = array(); // id → WP_Post
+$GLOBALS['sysmda_test_parsed']  = array(); // content → blocks
+$GLOBALS['sysmda_test_options'] = array(); // option → value
 
 /** Stub: i filtri restituiscono il valore di default. */
 function apply_filters( $tag, $value ) {
@@ -30,15 +30,15 @@ function apply_filters( $tag, $value ) {
 }
 
 function get_post( $id = null ) {
-	return isset( $GLOBALS['sma_test_posts'][ $id ] ) ? $GLOBALS['sma_test_posts'][ $id ] : null;
+	return isset( $GLOBALS['sysmda_test_posts'][ $id ] ) ? $GLOBALS['sysmda_test_posts'][ $id ] : null;
 }
 
 function parse_blocks( $content ) {
-	return isset( $GLOBALS['sma_test_parsed'][ $content ] ) ? $GLOBALS['sma_test_parsed'][ $content ] : array();
+	return isset( $GLOBALS['sysmda_test_parsed'][ $content ] ) ? $GLOBALS['sysmda_test_parsed'][ $content ] : array();
 }
 
 function get_option( $name, $default = false ) {
-	return array_key_exists( $name, $GLOBALS['sma_test_options'] ) ? $GLOBALS['sma_test_options'][ $name ] : $default;
+	return array_key_exists( $name, $GLOBALS['sysmda_test_options'] ) ? $GLOBALS['sysmda_test_options'][ $name ] : $default;
 }
 
 function get_permalink( $post ) {
@@ -88,24 +88,24 @@ require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
 
-use SystemMarkdownAlternate\AcceptNegotiator;
-use SystemMarkdownAlternate\BlockCleaner;
-use SystemMarkdownAlternate\LlmsTxtController;
-use SystemMarkdownAlternate\MarkdownController;
-use SystemMarkdownAlternate\MetadataBuilder;
-use SystemMarkdownAlternate\ShortcodeCleaner;
+use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
+use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
+use Diecieventi\SystemMarkdownAlternate\MarkdownController;
+use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
+use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 
 // ─── Micro-framework ─────────────────────────────────────────────────────────
 
-$GLOBALS['sma_failures'] = 0;
-$GLOBALS['sma_asserts']  = 0;
+$GLOBALS['sysmda_failures'] = 0;
+$GLOBALS['sysmda_asserts']  = 0;
 
 function check( $label, $expected, $actual ) {
-	++$GLOBALS['sma_asserts'];
+	++$GLOBALS['sysmda_asserts'];
 	if ( $expected === $actual ) {
 		return;
 	}
-	++$GLOBALS['sma_failures'];
+	++$GLOBALS['sysmda_failures'];
 	echo "FAIL: {$label}\n  expected: " . var_export( $expected, true ) . "\n  actual:   " . var_export( $actual, true ) . "\n";
 }
 
@@ -192,7 +192,7 @@ $out = $cleaner->clean( array( array( 'blockName' => null, 'attrs' => array(), '
 check( 'blocks: freeform conservato', 1, count( $out ) );
 
 // Espansione core/block: il contenuto referenziato viene ripulito.
-$GLOBALS['sma_test_posts'][10] = new WP_Post(
+$GLOBALS['sysmda_test_posts'][10] = new WP_Post(
 	array(
 		'ID'           => 10,
 		'post_type'    => 'wp_block',
@@ -200,33 +200,33 @@ $GLOBALS['sma_test_posts'][10] = new WP_Post(
 		'post_content' => 'PATTERN_A',
 	)
 );
-$GLOBALS['sma_test_parsed']['PATTERN_A'] = array( make_block( 'core/paragraph' ), make_block( 'wpforms/form-selector' ) );
+$GLOBALS['sysmda_test_parsed']['PATTERN_A'] = array( make_block( 'core/paragraph' ), make_block( 'wpforms/form-selector' ) );
 
 $out = $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 10 ) ) ) );
 check( 'reusable: espanso e ripulito', 1, count( $out ) );
 check( 'reusable: resta il paragraph', 'core/paragraph', $out[0]['blockName'] );
 
 // core/block verso bozza o post inesistente → scartato.
-$GLOBALS['sma_test_posts'][11] = new WP_Post( array( 'ID' => 11, 'post_type' => 'wp_block', 'post_status' => 'draft', 'post_content' => 'X' ) );
+$GLOBALS['sysmda_test_posts'][11] = new WP_Post( array( 'ID' => 11, 'post_type' => 'wp_block', 'post_status' => 'draft', 'post_content' => 'X' ) );
 check( 'reusable: bozza scartata', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 11 ) ) ) ) );
 check( 'reusable: ref inesistente scartato', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 999 ) ) ) ) );
 
 // Guardia anti-ricorsione: pattern che referenzia sé stesso.
-$GLOBALS['sma_test_posts'][12] = new WP_Post( array( 'ID' => 12, 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_content' => 'PATTERN_SELF' ) );
-$GLOBALS['sma_test_parsed']['PATTERN_SELF'] = array( make_block( 'core/paragraph' ), make_block( 'core/block', array(), array( 'ref' => 12 ) ) );
+$GLOBALS['sysmda_test_posts'][12] = new WP_Post( array( 'ID' => 12, 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_content' => 'PATTERN_SELF' ) );
+$GLOBALS['sysmda_test_parsed']['PATTERN_SELF'] = array( make_block( 'core/paragraph' ), make_block( 'core/block', array(), array( 'ref' => 12 ) ) );
 $out = $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 12 ) ) ) );
 check( 'reusable: ciclo interrotto', 1, count( $out ) );
 
 // Espansione annidata dentro un wrapper: i segnaposto si moltiplicano.
-$GLOBALS['sma_test_parsed']['PATTERN_A2'] = array( make_block( 'core/paragraph' ), make_block( 'core/paragraph' ) );
-$GLOBALS['sma_test_posts'][13] = new WP_Post( array( 'ID' => 13, 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_content' => 'PATTERN_A2' ) );
+$GLOBALS['sysmda_test_parsed']['PATTERN_A2'] = array( make_block( 'core/paragraph' ), make_block( 'core/paragraph' ) );
+$GLOBALS['sysmda_test_posts'][13] = new WP_Post( array( 'ID' => 13, 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_content' => 'PATTERN_A2' ) );
 $out = $cleaner->clean( array( make_block( 'core/group', array( make_block( 'core/block', array(), array( 'ref' => 13 ) ) ) ) ) );
 check( 'reusable annidato: 2 innerBlocks', 2, count( $out[0]['innerBlocks'] ) );
 check( 'reusable annidato: 2 segnaposto', 2, count( $out[0]['innerContent'] ) );
 
 // ─── MetadataBuilder::markdown_url ───────────────────────────────────────────
 
-$GLOBALS['sma_test_options']['permalink_structure'] = '/%postname%/';
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
 
 $p = new WP_Post( array( 'permalink' => 'https://example.com/my-post/' ) );
 check( 'url: pretty con trailing slash', 'https://example.com/my-post.md', MetadataBuilder::markdown_url( $p ) );
@@ -238,12 +238,12 @@ $p = new WP_Post( array( 'permalink' => 'https://example.com:8080/my-post/' ) );
 check( 'url: porta preservata', 'https://example.com:8080/my-post.md', MetadataBuilder::markdown_url( $p ) );
 
 // Permalink Plain: fallback ?format=markdown.
-$GLOBALS['sma_test_options']['permalink_structure'] = '';
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '';
 $p = new WP_Post( array( 'permalink' => 'https://example.com/?p=123' ) );
 check( 'url: plain → format=markdown', 'https://example.com/?p=123&format=markdown', MetadataBuilder::markdown_url( $p ) );
 
 // Struttura pretty ma permalink con query (es. ?page_id): stesso fallback.
-$GLOBALS['sma_test_options']['permalink_structure'] = '/%postname%/';
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
 $p = new WP_Post( array( 'permalink' => 'https://example.com/?page_id=2' ) );
 check( 'url: query string → format=markdown', 'https://example.com/?page_id=2&format=markdown', MetadataBuilder::markdown_url( $p ) );
 
@@ -284,5 +284,5 @@ check( 'etag: header vuoto', false, MarkdownController::etag_matches( '', '"abc"
 
 // ─── Esito ───────────────────────────────────────────────────────────────────
 
-echo "\n{$GLOBALS['sma_asserts']} assert, {$GLOBALS['sma_failures']} falliti.\n";
-exit( $GLOBALS['sma_failures'] > 0 ? 1 : 0 );
+echo "\n{$GLOBALS['sysmda_asserts']} assert, {$GLOBALS['sysmda_failures']} falliti.\n";
+exit( $GLOBALS['sysmda_failures'] > 0 ? 1 : 0 );

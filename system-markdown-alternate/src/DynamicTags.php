@@ -1,20 +1,20 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Dynamic Tag per GenerateBlocks 2.x: espone {{sma_md_url}} negli elementi
+ * Dynamic Tag per GenerateBlocks 2.x: espone {{sysmda_md_url}} negli elementi
  * GenerateBlocks/GeneratePress (es. campo URL di un Button).
  *
  * Si auto-registra quando GenerateBlocks 2.x è presente (come l'integrazione
  * ACF si attiva con ACF). Tenere il tag SEMPRE registrato è una scelta voluta:
  * se il post non è servibile il callback restituisce '' e il "required to render"
- * di GenerateBlocks nasconde l'elemento, evitando di lasciare {{sma_md_url}}
+ * di GenerateBlocks nasconde l'elemento, evitando di lasciare {{sysmda_md_url}}
  * letterale nell'href (cosa che accadrebbe se il tag non fosse registrato).
  *
  * API verificata sul sorgente di GenerateBlocks 2.2.1:
@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class DynamicTags {
 
-	const TAG = 'sma_md_url';
+	const TAG = 'sysmda_md_url';
 
 	/**
 	 * Aggancia la registrazione del tag su `init`. La presenza di GenerateBlocks

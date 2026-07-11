@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -55,6 +55,6 @@ class ShortcodeCleaner {
 		);
 
 		/** Filtro: shortcode da escludere dal Markdown. */
-		return (array) apply_filters( 'sma_markdown_excluded_shortcodes', $defaults );
+		return (array) apply_filters( 'sysmda_markdown_excluded_shortcodes', $defaults );
 	}
 }

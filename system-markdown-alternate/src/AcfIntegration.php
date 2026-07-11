@@ -1,28 +1,28 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Integrazione ACF: aggiunge il contenuto di campi specifici al sorgente Markdown.
  *
- * Opt-in tramite il filtro `sma_acf_field_keys`:
+ * Opt-in tramite il filtro `sysmda_acf_field_keys`:
  *
- *   add_filter( 'sma_acf_field_keys', function( $keys, $post ) {
+ *   add_filter( 'sysmda_acf_field_keys', function( $keys, $post ) {
  *       return array( 'my_text_field', 'my_wysiwyg_field' );
  *   }, 10, 2 );
  *
  * I valori vengono accodati al post_content prima della conversione, quindi
  * attraversano l'intera pipeline (pulizia blocchi, DOM, URL assoluti).
  * Supporta campi text e wysiwyg; campi complessi (repeater, gallery) vanno
- * gestiti tramite filtro personalizzato su `sma_markdown_source_content`.
+ * gestiti tramite filtro personalizzato su `sysmda_markdown_source_content`.
  *
- * Per sottotitolo e TL;DR, configurare `sma_acf_subtitle_key` e
- * `sma_acf_tldr_key` (tramite admin panel o filtro): vengono inseriti
+ * Per sottotitolo e TL;DR, configurare `sysmda_acf_subtitle_key` e
+ * `sysmda_acf_tldr_key` (tramite admin panel o filtro): vengono inseriti
  * tra il titolo H1 e il corpo dell'articolo.
  */
 class AcfIntegration {
@@ -41,7 +41,7 @@ class AcfIntegration {
 	/**
 	 * Aggiunge il contenuto dei campi ACF configurati in coda al sorgente.
 	 *
-	 * Hook: sma_markdown_source_content (priorità 20).
+	 * Hook: sysmda_markdown_source_content (priorità 20).
 	 *
 	 * @param string   $content Contenuto sorgente corrente.
 	 * @param \WP_Post $post    Post di riferimento.
@@ -58,7 +58,7 @@ class AcfIntegration {
 		 * @param string[]  $keys Chiavi dei campi (default: nessuno).
 		 * @param \WP_Post  $post Post di riferimento.
 		 */
-		$keys = (array) apply_filters( 'sma_acf_field_keys', array(), $post );
+		$keys = (array) apply_filters( 'sysmda_acf_field_keys', array(), $post );
 
 		if ( empty( $keys ) ) {
 			return $content;
@@ -86,7 +86,7 @@ class AcfIntegration {
 	/**
 	 * Inserisce sottotitolo e TL;DR nel preambolo Markdown (tra # Titolo e corpo).
 	 *
-	 * Hook: sma_markdown_preamble (priorità 20).
+	 * Hook: sysmda_markdown_preamble (priorità 20).
 	 *
 	 * @param string   $preamble Preambolo corrente.
 	 * @param \WP_Post $post     Post di riferimento.
@@ -101,13 +101,13 @@ class AcfIntegration {
 		 * Filtro: nome/chiave del campo ACF per il sottotitolo (testo).
 		 * Stringa vuota = disabilitato.
 		 */
-		$subtitle_key = (string) apply_filters( 'sma_acf_subtitle_key', '', $post );
+		$subtitle_key = (string) apply_filters( 'sysmda_acf_subtitle_key', '', $post );
 
 		/**
 		 * Filtro: nome/chiave del campo ACF per il TL;DR (WYSIWYG).
 		 * Stringa vuota = disabilitato.
 		 */
-		$tldr_key = (string) apply_filters( 'sma_acf_tldr_key', '', $post );
+		$tldr_key = (string) apply_filters( 'sysmda_acf_tldr_key', '', $post );
 
 		$parts = array();
 

@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -45,7 +45,7 @@ class BlockCleaner {
 		// chiamato per ogni blocco (anche annidato) e i filtri non vanno rilanciati N volte.
 		$this->excluded_names   = $this->excluded_block_names();
 		/** Filtro: classi CSS i cui blocchi vengono esclusi dall'output Markdown. */
-		$this->excluded_classes = (array) apply_filters( 'sma_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+		$this->excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 		$this->expanding_refs   = array();
 
 		return $this->clean_list( $blocks );
@@ -192,6 +192,6 @@ class BlockCleaner {
 		);
 
 		/** Filtro: nomi dei blocchi da escludere dal Markdown. */
-		return (array) apply_filters( 'sma_markdown_excluded_block_names', $defaults );
+		return (array) apply_filters( 'sysmda_markdown_excluded_block_names', $defaults );
 	}
 }

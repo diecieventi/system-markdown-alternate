@@ -1,9 +1,9 @@
 <?php
 /**
- * @package SystemMarkdownAlternate
+ * @package Diecieventi\SystemMarkdownAlternate
  */
 
-namespace SystemMarkdownAlternate;
+namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -12,13 +12,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * Due modalità:
  * - base (default): nome sito, tagline, elenco per post type (excerpt manuale).
- * - arricchita (toggle `sma_llms_txt_enriched`): aggiunge una sintesi del sito,
+ * - arricchita (toggle `sysmda_llms_txt_enriched`): aggiunge una sintesi del sito,
  *   una sezione di contenuti in evidenza, la description per ogni voce (stessa
  *   catena del front matter) e sposta l'overflow in una sezione `Optional`
  *   (parola chiave della spec llms.txt, non tradotta). A toggle spento l'output
  *   resta identico alla modalità base.
  *
- * Opzione trasversale (`sma_llms_txt_lastmod`, default off): aggiunge a ogni
+ * Opzione trasversale (`sysmda_llms_txt_lastmod`, default off): aggiunge a ogni
  * voce la data di ultima modifica come `(updated: YYYY-MM-DD)` nelle note dopo
  * i `:`, così i crawler individuano i contenuti cambiati senza rifare il fetch
  * di ogni URL. Vale sia in modalità base sia arricchita.
@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
 class LlmsTxtController {
 
 	/** Chiave di cache dell'output /llms.txt. */
-	const CACHE_KEY = 'sma_llms_txt';
+	const CACHE_KEY = 'sysmda_llms_txt';
 
 	/** @var MetadataBuilder */
 	private $metadata;
@@ -56,7 +56,7 @@ class LlmsTxtController {
 			return;
 		}
 
-		if ( '1' !== get_option( 'sma_llms_txt_enabled', '1' ) ) {
+		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '1' ) ) {
 			return; // Disabilitato dal pannello admin.
 		}
 
@@ -81,8 +81,8 @@ class LlmsTxtController {
 		}
 
 		/** Filtro: TTL cache di /llms.txt in secondi. 0 disabilita la cache. */
-		$ttl     = (int) apply_filters( 'sma_llms_txt_cache_ttl', DAY_IN_SECONDS );
-		$version = md5( SMA_VERSION . '|' . (string) get_option( 'sma_cache_salt', '0' ) );
+		$ttl     = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
+		$version = md5( SYSMDA_VERSION . '|' . (string) get_option( 'sysmda_cache_salt', '0' ) );
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( self::CACHE_KEY );
@@ -115,10 +115,10 @@ class LlmsTxtController {
 		$post_types = PostSupport::supported_post_types();
 
 		/** Filtro: abilita l'output arricchito (sintesi, contenuti in evidenza, description, Optional). */
-		$enriched = (bool) apply_filters( 'sma_llms_txt_enriched', false );
+		$enriched = (bool) apply_filters( 'sysmda_llms_txt_enriched', false );
 
 		/** Filtro: aggiunge la data di ultima modifica `(updated: YYYY-MM-DD)` a ogni voce. */
-		$with_lastmod = (bool) apply_filters( 'sma_llms_txt_lastmod', false );
+		$with_lastmod = (bool) apply_filters( 'sysmda_llms_txt_lastmod', false );
 
 		$lines   = array();
 		$lines[] = '# ' . get_bloginfo( 'name' );
@@ -131,7 +131,7 @@ class LlmsTxtController {
 
 		if ( $enriched ) {
 			/** Filtro: paragrafo di sintesi del sito, dopo la tagline ('' = nessuno). */
-			$summary = trim( wp_strip_all_tags( (string) apply_filters( 'sma_llms_txt_summary', '' ) ) );
+			$summary = trim( wp_strip_all_tags( (string) apply_filters( 'sysmda_llms_txt_summary', '' ) ) );
 			if ( '' !== $summary ) {
 				$lines[] = '';
 				$lines[] = preg_replace( '/\s+/', ' ', $summary );
@@ -155,13 +155,13 @@ class LlmsTxtController {
 			$label = $obj ? $obj->labels->name : $post_type;
 
 			/** Filtro: numero massimo di post per tipo nell'indice llms.txt. */
-			$limit = (int) apply_filters( 'sma_llms_txt_max_posts', 500, $post_type );
+			$limit = (int) apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );
 
 			/**
 			 * Filtro: in modalità arricchita, numero di post per tipo nella sezione
 			 * principale; l'eccedenza (fino al max) finisce sotto `## Optional`.
 			 */
-			$main_limit = $enriched ? (int) apply_filters( 'sma_llms_txt_main_posts', 25, $post_type ) : $limit;
+			$main_limit = $enriched ? (int) apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type ) : $limit;
 
 			$posts = get_posts(
 				array(
@@ -212,7 +212,7 @@ class LlmsTxtController {
 
 		if ( $enriched ) {
 			/** Filtro: blocco libero in coda a /llms.txt ('' = nessuno; gancio per policy/LLM signals). */
-			$footer = trim( (string) apply_filters( 'sma_llms_txt_footer', '' ) );
+			$footer = trim( (string) apply_filters( 'sysmda_llms_txt_footer', '' ) );
 			if ( '' !== $footer ) {
 				$lines[] = '';
 				$lines[] = $footer;
@@ -319,7 +319,7 @@ class LlmsTxtController {
 	 */
 	private function key_content_items( bool $with_lastmod = false ): array {
 		/** Filtro: contenuti in evidenza per /llms.txt (ID numerici o URL). */
-		$entries = (array) apply_filters( 'sma_llms_txt_key_content', array() );
+		$entries = (array) apply_filters( 'sysmda_llms_txt_key_content', array() );
 
 		$items = array();
 		$seen  = array();
