@@ -117,6 +117,15 @@ The v1 scope is done and widely exceeded. Implemented:
   i18n coverage of future user-facing strings.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sma_llms_txt_footer`).
+- **`lastmod` in `/llms.txt`** (approved, to implement): add the last-modified
+  date next to each entry, so LLM crawlers can fetch incrementally instead of
+  revalidating every single `.md` URL (the conditional `304` remains the
+  per-URL mechanism). Scope decided: **`/llms.txt` only** — no XML sitemap and
+  no separate index endpoint (see "Product decisions"). Details to define at
+  implementation time: date placed in the free-text part of the entry
+  (`- [title](url): …`) to stay llms.txt-spec-compatible, and decide the
+  base-vs-enriched placement respecting the "enriched off = base output
+  unchanged" rule.
 - **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
   UI (before the tabs/cards restyle). Recapture them and update the
   `== Screenshots ==` captions in `readme.txt` whenever convenient (no version
@@ -174,6 +183,15 @@ The v1 scope is done and widely exceeded. Implemented:
   without ever serving stale Markdown. A `max-age` would risk conflicting with
   page-cache/CDN plugins and could keep serving an outdated version after an
   edit; freshness policy belongs to the infrastructure/CDN, not the plugin.
+- **NO XML sitemap for the `.md` URLs** (decided, do not propose again): the
+  `.md` responses are `noindex` by design, so listing them in a sitemap would
+  send contradictory signals to search engines (Search Console: "submitted URL
+  marked noindex") — exactly the SEO risk the plugin promises not to create —
+  and a second sitemap generator would overlap with the SEO plugin's sitemaps
+  (Rank Math & co.). Discovery for the real audience (LLMs/agents) is already
+  covered by the `rel="alternate"` link and by `/llms.txt`. Freshness signals
+  go into `/llms.txt` itself (see the `lastmod` item in "Open / to do"): no
+  separate machine-index endpoint either.
 
 ## Identity, versioning, workflow
 

@@ -109,6 +109,16 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   i18n di altre stringhe future esposte all'utente.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sma_llms_txt_footer`).
+- **`lastmod` in `/llms.txt`** (approvato, da implementare): aggiungere la data
+  di ultima modifica accanto a ogni voce, così i crawler LLM possono fare fetch
+  incrementale invece di rivalidare ogni singolo URL `.md` (il `304`
+  condizionale resta il meccanismo per-URL). Perimetro deciso: **solo
+  `/llms.txt`** — niente sitemap XML e niente endpoint indice separato (vedi
+  "Decisioni di prodotto"). Dettagli da definire in fase di implementazione:
+  data nella parte testuale libera della voce (`- [titolo](url): …`) per
+  restare compatibili con la spec llms.txt, e decidere il posizionamento
+  base-vs-enriched rispettando la regola "enriched spento = output base
+  invariato".
 - **`.wordpress-org/screenshot-*.jpg` sono superati**: mostrano il pannello
   admin pre-0.17.0 (prima del restyling tab/card). Da ricatturare aggiornando
   anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo (non
@@ -168,6 +178,15 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   entrare in conflitto con i plugin di page-cache/CDN e potrebbe continuare a
   servire una versione vecchia dopo una modifica; la policy di freshness spetta
   all'infrastruttura/CDN, non al plugin.
+- **NIENTE sitemap XML per gli URL `.md`** (deciso, non riproporre): le risposte
+  `.md` sono `noindex` per scelta, quindi elencarle in una sitemap manderebbe
+  segnali contraddittori ai motori di ricerca (Search Console: "URL inviato ma
+  contrassegnato noindex") — esattamente il rischio SEO che il plugin promette
+  di non creare — e un secondo generatore di sitemap si sovrapporrebbe alle
+  sitemap del plugin SEO (Rank Math & co.). La discovery per il pubblico reale
+  (LLM/agenti) è già coperta dal link `rel="alternate"` e da `/llms.txt`. I
+  segnali di freshness vanno dentro `/llms.txt` stesso (vedi la voce `lastmod`
+  in "Aperti / da fare"): niente endpoint indice separato.
 
 ## Identità, versioning, workflow
 
