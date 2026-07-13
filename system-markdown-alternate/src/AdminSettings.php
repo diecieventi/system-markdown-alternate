@@ -71,6 +71,25 @@ class AdminSettings {
 			self::PAGE,
 			array( $this, 'render_page' )
 		);
+
+		// Align .htaccess with the LiteSpeed option every time the settings page
+		// loads. options.php redirects back here after saving, so a toggle is
+		// applied right away, and a manually restored .htaccess gets repaired.
+		if ( '' !== $this->hook ) {
+			add_action( 'load-' . $this->hook, array( $this, 'sync_litespeed_htaccess' ) );
+		}
+	}
+
+	/**
+	 * Writes or removes the LiteSpeed compatibility block in .htaccess so it
+	 * matches the `sysmda_litespeed_htaccess` option (see LiteSpeedCompat).
+	 */
+	public function sync_litespeed_htaccess(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		LiteSpeedCompat::sync( '1' === get_option( 'sysmda_litespeed_htaccess', '0' ) );
 	}
 
 	/**
@@ -114,6 +133,7 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_lastmod', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_litespeed_htaccess', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 
 		// ACF options are registered ONLY when ACF is active. This prevents saving
 		// the form from clearing them when ACF is inactive and its fields are absent
@@ -155,6 +175,7 @@ class AdminSettings {
 		// ── Avanzate ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sysmda_advanced' );
+		add_settings_field( 'sysmda_litespeed_htaccess', __( 'LiteSpeed cache compatibility', 'system-markdown-alternate' ), array( $this, 'field_litespeed_htaccess' ), self::PAGE, 'sysmda_advanced' );
 	}
 
 	/**
@@ -588,6 +609,32 @@ class AdminSettings {
 		$v = false !== $v ? (string) $v : 'noindex, follow';
 		echo '<input type="text" name="sysmda_robots_header" value="' . esc_attr( $v ) . '" class="regular-text" />';
 		echo '<p class="description">' . wp_kses_post( __( 'Default: <code>noindex, follow</code>. Leave empty to not send the header.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_litespeed_htaccess(): void {
+		$v = get_option( 'sysmda_litespeed_htaccess', '0' ); // Disabled by default.
+		echo '<label><input type="checkbox" name="sysmda_litespeed_htaccess" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Add LiteSpeed cache bypass rules to <code>.htaccess</code>', 'system-markdown-alternate' ) ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Some LiteSpeed servers cache pages by URL only and ignore <code>Vary: Accept</code>, breaking content negotiation on the permalink (a cached variant is served regardless of the <code>Accept</code> header). These rules make requests that negotiate Markdown bypass the LiteSpeed page cache, so PHP always decides the representation. Normal browser traffic stays fully cached; on servers other than LiteSpeed the rules are inert (<code>&lt;IfModule LiteSpeed&gt;</code>). After enabling, purge the LiteSpeed cache if entries look stale.', 'system-markdown-alternate' ) ) . '</p>';
+
+		$detected = LiteSpeedCompat::is_litespeed();
+		$present  = LiteSpeedCompat::rules_present();
+		$enabled  = '1' === $v;
+
+		$status   = array();
+		$status[] = $detected
+			? __( 'LiteSpeed detected on this server.', 'system-markdown-alternate' )
+			: __( 'LiteSpeed not detected on this server (a proxy may hide it; enabling is harmless anyway).', 'system-markdown-alternate' );
+		$status[] = $present
+			? __( 'The rules are currently present in .htaccess.', 'system-markdown-alternate' )
+			: __( 'The rules are currently not present in .htaccess.', 'system-markdown-alternate' );
+
+		echo '<p class="description">' . esc_html( implode( ' ', $status ) ) . '</p>';
+
+		if ( $enabled && ! $present && ! LiteSpeedCompat::htaccess_writable() ) {
+			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin:0">';
+			echo wp_kses_post( __( '<strong>.htaccess is not writable</strong>: add this block manually to the site root .htaccess:', 'system-markdown-alternate' ) );
+			echo '</p><pre class="sysmda-defaults">' . esc_html( '# BEGIN ' . LiteSpeedCompat::MARKER . "\n" . implode( "\n", LiteSpeedCompat::htaccess_rules() ) . "\n# END " . LiteSpeedCompat::MARKER ) . '</pre></div>';
+		}
 	}
 
 	public function render_page(): void {

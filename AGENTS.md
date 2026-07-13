@@ -47,7 +47,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Current state (v0.20.x)
+## Current state (v0.21.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -88,6 +88,23 @@ The v1 scope is done and widely exceeded. Implemented:
   date from `post_modified_gmt`, English `updated:` label never translated
   (same convention as the `Optional` spec keyword), placed in the free-text
   notes after the `:` so it stays llms.txt-spec-compatible.
+- **LiteSpeed page-cache compatibility** (`LiteSpeedCompat`): some LiteSpeed
+  servers key the page cache by URL only and ignore `Vary: Accept` (observed
+  live: a cached Markdown variant served to HTML clients and vice versa, while
+  PHP negotiated correctly). Two layers: (1) the negotiated Markdown and `406`
+  responses always send `X-LiteSpeed-Cache-Control: no-cache` + define
+  `DONOTCACHEPAGE` + fire the LSCache-plugin `litespeed_control_set_nocache`
+  action, so URL-keyed caches never store them (`.md` URLs stay cacheable: they
+  are their own key); (2) opt-in **`.htaccess` rules** (Advanced →
+  `sysmda_litespeed_htaccess` checkbox, default off) wrapped in
+  `<IfModule LiteSpeed>` (inert elsewhere): requests whose `Accept` mentions
+  `text/markdown`, or allows neither HTML nor a wildcard (the 406 case), get
+  `[E=Cache-Control:no-cache]` and bypass the LiteSpeed cache, so PHP always
+  negotiates even when the HTML variant is already cached. The block is synced
+  (written/removed/repaired) on every settings-page load via
+  `insert_with_markers`, triggers an LSCache purge-all on change, shows the
+  rules to copy manually when `.htaccess` is not writable, and is removed on
+  uninstall.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
   `SYSMDA_VERSION`; salt bump on settings save; cleanup on `save_post`/
@@ -111,7 +128,8 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Shortcode** `[sysmda_md_url]` (+ `id="123"`).
 - **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
-- `uninstall.php` (removes `sysmda_*` options + transients).
+- `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
+  `.htaccess` block).
 
 ## Open / to do (towards wordpress.org)
 
@@ -286,6 +304,10 @@ running code at the WP level.
   `sysmda_markdown_source_content` / `sysmda_acf_field_keys` filters remain the
   extension points.
 - **On-site search engines** (e.g. Algolia): irrelevant to the output.
+- **LiteSpeed page cache**: behaviour varies per server — some installs honour
+  `Vary: Accept`, others key by URL only and mix the representations. Handled by
+  `LiteSpeedCompat` (see "Current state"): no-cache signals on the negotiated
+  responses always on, `.htaccess` bypass rules opt-in from the panel.
 
 ## Repository structure
 
@@ -327,6 +349,7 @@ running code at the WP level.
         ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)
         ├── AdminSettings.php       ← settings page (Settings API)
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
+        ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules)
         ├── Shortcodes.php          ← [sysmda_md_url]
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)

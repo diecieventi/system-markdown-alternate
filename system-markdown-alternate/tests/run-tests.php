@@ -112,9 +112,11 @@ require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
+require __DIR__ . '/../src/LiteSpeedCompat.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
@@ -326,6 +328,35 @@ check( 'etag: no match', false, MarkdownController::etag_matches( '"xyz"', '"abc
 check( 'etag: list containing match', true, MarkdownController::etag_matches( '"xyz", "abc"', '"abc"' ) );
 check( 'etag: weak W/ prefix', true, MarkdownController::etag_matches( 'W/"abc"', '"abc"' ) );
 check( 'etag: empty header', false, MarkdownController::etag_matches( '', '"abc"' ) );
+
+// ─── LiteSpeedCompat ─────────────────────────────────────────────────────────
+
+// is_litespeed: case-insensitive signature match on the given string.
+check( 'litespeed: LiteSpeed signature', true, LiteSpeedCompat::is_litespeed( 'LiteSpeed' ) );
+check( 'litespeed: lowercase signature', true, LiteSpeedCompat::is_litespeed( 'litespeed/6.3 (Enterprise)' ) );
+check( 'litespeed: Apache is not LiteSpeed', false, LiteSpeedCompat::is_litespeed( 'Apache/2.4.62' ) );
+check( 'litespeed: nginx is not LiteSpeed', false, LiteSpeedCompat::is_litespeed( 'nginx/1.27.0' ) );
+check( 'litespeed: empty signature', false, LiteSpeedCompat::is_litespeed( '' ) );
+
+// htaccess_rules: guarded by <IfModule LiteSpeed>, bypasses on Markdown
+// negotiation and on Accept headers without HTML or a wildcard.
+$sysmda_ls_rules = LiteSpeedCompat::htaccess_rules();
+check( 'litespeed rules: IfModule guard opens', '<IfModule LiteSpeed>', $sysmda_ls_rules[0] );
+check( 'litespeed rules: IfModule guard closes', '</IfModule>', $sysmda_ls_rules[ count( $sysmda_ls_rules ) - 1 ] );
+check( 'litespeed rules: markdown condition', true, in_array( 'RewriteCond %{HTTP:Accept} text/markdown [NC,OR]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: non-HTML condition', true, in_array( 'RewriteCond %{HTTP:Accept} !(text/html|\*/\*) [NC]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: no-cache env', true, in_array( 'RewriteRule .* - [E=Cache-Control:no-cache]', $sysmda_ls_rules, true ) );
+
+// strip_rules: removes the whole marker block, leaves the rest untouched.
+$sysmda_ls_block = "# BEGIN System Markdown Alternate\n<IfModule LiteSpeed>\nRewriteRule .* - [E=Cache-Control:no-cache]\n</IfModule>\n# END System Markdown Alternate";
+check(
+	'litespeed strip: block removed, neighbours preserved',
+	"# BEGIN WordPress\nRewriteRule . /index.php [L]\n# END WordPress\n",
+	LiteSpeedCompat::strip_rules( "# BEGIN WordPress\nRewriteRule . /index.php [L]\n# END WordPress\n" . $sysmda_ls_block . "\n" )
+);
+check( 'litespeed strip: no block => unchanged', "# BEGIN WordPress\n# END WordPress\n", LiteSpeedCompat::strip_rules( "# BEGIN WordPress\n# END WordPress\n" ) );
+check( 'litespeed strip: block without trailing newline', "\n", LiteSpeedCompat::strip_rules( $sysmda_ls_block ) );
+check( 'litespeed strip: other markers untouched', "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n", LiteSpeedCompat::strip_rules( "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n" ) );
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

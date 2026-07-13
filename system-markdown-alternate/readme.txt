@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.20.2
+Stable tag: 0.21.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -127,6 +127,18 @@ link.
 Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
+= Content negotiation misbehaves behind LiteSpeed cache. What can I do? =
+
+Some LiteSpeed cache configurations key the page cache by URL only and ignore
+`Vary: Accept`, so a cached representation can be served regardless of the
+`Accept` header. The plugin already tells the cache not to store the negotiated
+Markdown; if requests for Markdown on the permalink still receive cached HTML,
+enable **LiteSpeed cache compatibility** in **Settings → Markdown Alternate →
+Advanced**: it adds `.htaccess` rules that make Markdown-negotiating requests
+bypass the LiteSpeed page cache (normal browser traffic stays cached; on other
+servers the rules are inert). Then purge the LiteSpeed cache. The explicit
+`.md` URLs are not affected and remain fully cacheable.
+
 == Screenshots ==
 
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
@@ -135,6 +147,19 @@ the post is edited, when the plugin is updated, or when you save the settings.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.21.0 =
+* LiteSpeed cache compatibility. Some LiteSpeed servers cache the permalink by
+  URL only and ignore `Vary: Accept`, so a cached Markdown variant could be
+  served to HTML clients (and cached HTML to Markdown clients). The negotiated
+  Markdown and `406` responses now send `X-LiteSpeed-Cache-Control: no-cache`
+  and define `DONOTCACHEPAGE`, so URL-keyed page caches never store them; the
+  explicit `.md` URLs remain fully cacheable. A new opt-in setting (Advanced →
+  LiteSpeed cache compatibility) writes an `.htaccess` block, inert outside
+  LiteSpeed, that makes Markdown-negotiating requests bypass the LiteSpeed page
+  cache so PHP always performs the negotiation; the block is kept in sync from
+  the settings page, purges the LiteSpeed cache on change, and is removed on
+  uninstall.
 
 = 0.20.2 =
 * Packaging fix: keep `composer.json` alongside the bundled `vendor/` directory

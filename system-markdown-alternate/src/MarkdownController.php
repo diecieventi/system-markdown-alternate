@@ -60,10 +60,16 @@ class MarkdownController {
 		$this->send_vary_header();
 
 		if ( $this->prefers_markdown() ) {
+			// The negotiated Markdown shares its URL with the HTML page: page
+			// caches that key by URL only (observed on some LiteSpeed setups,
+			// which ignore Vary: Accept) must never store this variant, or it
+			// would be served to HTML clients too. .md URLs stay cacheable.
+			LiteSpeedCompat::mark_nocache();
 			$this->serve_markdown( $queried );
 		}
 
 		if ( $this->should_reject_unacceptable() ) {
+			LiteSpeedCompat::mark_nocache();
 			$this->send_not_acceptable();
 			exit;
 		}

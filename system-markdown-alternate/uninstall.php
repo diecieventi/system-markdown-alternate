@@ -26,6 +26,7 @@ $sysmda_options = array(
 	'sysmda_llms_txt_lastmod',
 	'sysmda_llms_txt_summary',
 	'sysmda_llms_txt_key_content',
+	'sysmda_litespeed_htaccess',
 	'sysmda_cache_salt',
 	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
 );
@@ -51,3 +52,7 @@ $wpdb->query(
 if ( function_exists( 'wp_cache_flush_group' ) && wp_using_ext_object_cache() ) {
 	wp_cache_flush_group( 'sysmda' );
 }
+
+// Remove the LiteSpeed compatibility block from .htaccess, if present.
+require_once __DIR__ . '/src/LiteSpeedCompat.php';
+\Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat::remove_rules();
