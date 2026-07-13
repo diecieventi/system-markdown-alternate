@@ -100,11 +100,15 @@ The v1 scope is done and widely exceeded. Implemented:
   `<IfModule LiteSpeed>` (inert elsewhere): requests whose `Accept` mentions
   `text/markdown`, or allows neither HTML nor a wildcard (the 406 case), get
   `[E=Cache-Control:no-cache]` and bypass the LiteSpeed cache, so PHP always
-  negotiates even when the HTML variant is already cached. The block is synced
-  (written/removed/repaired) on every settings-page load via
-  `insert_with_markers`, triggers an LSCache purge-all on change, shows the
-  rules to copy manually when `.htaccess` is not writable, and is removed on
-  uninstall.
+  negotiates even when the HTML variant is already cached. The block is
+  written at the **top** of `.htaccess` — it MUST precede `# BEGIN WordPress`,
+  whose `[L]` rules end every rewrite pass, so a block appended at the bottom
+  is never evaluated (verified live; do not switch back to
+  `insert_with_markers`, which appends). Synced (written/removed/moved back to
+  the top) on every settings-page load, comparing directive lines only (WP
+  injects an instruction comment inside marker blocks); triggers an LSCache
+  purge-all on change, shows the rules to copy manually when `.htaccess` is
+  not writable, and is removed on uninstall.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
   `SYSMDA_VERSION`; salt bump on settings save; cleanup on `save_post`/

@@ -94,11 +94,15 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   (inerti altrove): le richieste il cui `Accept` menziona `text/markdown`, o
   non ammette né HTML né un wildcard (il caso 406), ricevono
   `[E=Cache-Control:no-cache]` e bypassano la cache LiteSpeed, così PHP negozia
-  sempre anche quando la variante HTML è già in cache. Il blocco viene
-  sincronizzato (scritto/rimosso/riparato) a ogni caricamento della pagina
-  impostazioni via `insert_with_markers`, lancia un purge-all LSCache quando
-  cambia, mostra le regole da copiare a mano se `.htaccess` non è scrivibile,
-  ed è rimosso alla disinstallazione.
+  sempre anche quando la variante HTML è già in cache. Il blocco viene scritto
+  in **cima** a `.htaccess` — DEVE precedere `# BEGIN WordPress`, le cui regole
+  `[L]` terminano ogni passata di rewrite, quindi un blocco accodato in fondo
+  non viene mai valutato (verificato live; non tornare a
+  `insert_with_markers`, che accoda). Sincronizzato (scritto/rimosso/riportato
+  in cima) a ogni caricamento della pagina impostazioni, confrontando solo le
+  righe direttiva (WP inietta un commento istruzioni dentro i blocchi marker);
+  lancia un purge-all LSCache quando cambia, mostra le regole da copiare a
+  mano se `.htaccess` non è scrivibile, ed è rimosso alla disinstallazione.
 - **Cache Redis-aware** (`Cache` helper): object cache persistente se presente,
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
   `SYSMDA_VERSION`; bump del salt al salvataggio opzioni; pulizia su `save_post`/

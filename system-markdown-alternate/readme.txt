@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.21.0
+Stable tag: 0.21.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -147,6 +147,18 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.21.1 =
+* Fix: the LiteSpeed compatibility block is now written at the TOP of
+  `.htaccess`. Appended at the bottom (the `insert_with_markers` default) it
+  landed after the `# BEGIN WordPress` block, whose `[L]` rules end every
+  rewrite pass, so the bypass rules were never evaluated (verified live). An
+  existing bottom copy is automatically moved to the top on the next settings
+  page load.
+* Fix: the rules-present check now ignores comment lines (WordPress adds its
+  own instruction comment inside marker blocks) and verifies the block
+  position; previously the settings page always reported the rules as missing
+  and re-wrote the block (with a LiteSpeed purge) on every load.
 
 = 0.21.0 =
 * LiteSpeed cache compatibility. Some LiteSpeed servers cache the permalink by

@@ -114,10 +114,63 @@ class LiteSpeedCompat {
 	}
 
 	/**
-	 * Whether the marker block currently in .htaccess matches htaccess_rules().
+	 * Whether the marker block currently in .htaccess matches htaccess_rules()
+	 * AND sits before the WordPress rewrite block.
+	 *
+	 * Position matters: the WordPress block ends every rewrite pass with [L]
+	 * rules, so a block appended after it is never evaluated. Comment lines are
+	 * ignored in the comparison (WordPress adds its own instruction comment
+	 * inside marker blocks).
 	 */
 	public static function rules_present(): bool {
-		return self::current_rules() === self::htaccess_rules();
+		if ( self::directives( self::current_rules() ) !== self::directives( self::htaccess_rules() ) ) {
+			return false;
+		}
+
+		$path = self::htaccess_path();
+
+		if ( '' === $path || ! file_exists( $path ) || ! is_readable( $path ) ) {
+			return false;
+		}
+
+		return self::block_is_before_wordpress( (string) file_get_contents( $path ) );
+	}
+
+	/**
+	 * Whether the marker block occurs before the `# BEGIN WordPress` block
+	 * (or WordPress has no block at all) in an .htaccess contents string.
+	 *
+	 * Pure string logic (public so it can be tested in isolation).
+	 */
+	public static function block_is_before_wordpress( string $contents ): bool {
+		$ours = strpos( $contents, '# BEGIN ' . self::MARKER );
+
+		if ( false === $ours ) {
+			return false;
+		}
+
+		$wp = strpos( $contents, '# BEGIN WordPress' );
+
+		return false === $wp || $ours < $wp;
+	}
+
+	/**
+	 * Directive lines only: comments and blank lines removed.
+	 *
+	 * @param string[] $lines
+	 * @return string[]
+	 */
+	private static function directives( array $lines ): array {
+		$out = array();
+
+		foreach ( $lines as $line ) {
+			$line = trim( (string) $line );
+			if ( '' !== $line && '#' !== $line[0] ) {
+				$out[] = $line;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -148,25 +201,25 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		$current = self::current_rules();
-
 		if ( $enabled ) {
-			if ( $current === self::htaccess_rules() ) {
+			if ( self::rules_present() ) {
 				return true;
 			}
 
-			if ( ! function_exists( 'insert_with_markers' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/misc.php';
+			if ( ! self::htaccess_writable() || ( file_exists( $path ) && ! is_readable( $path ) ) ) {
+				return false;
 			}
 
-			$written = (bool) insert_with_markers( $path, self::MARKER, self::htaccess_rules() );
+			$contents = file_exists( $path ) ? (string) file_get_contents( $path ) : '';
+			$written  = false !== file_put_contents( $path, self::prepend_rules( $contents ) );
+
 			if ( $written ) {
 				self::purge_litespeed_cache();
 			}
 			return $written;
 		}
 
-		if ( array() === $current && ! self::markers_exist( $path ) ) {
+		if ( ! self::markers_exist( $path ) ) {
 			return true;
 		}
 
@@ -200,6 +253,28 @@ class LiteSpeedCompat {
 		}
 
 		return false !== file_put_contents( $path, $stripped );
+	}
+
+	/**
+	 * Returns the .htaccess contents with the marker block at the TOP of the
+	 * file (any previous copy removed first).
+	 *
+	 * The block must precede `# BEGIN WordPress`: the WordPress block ends
+	 * every rewrite pass with an [L] rule (`RewriteRule . /index.php [L]` in
+	 * the first pass, `RewriteRule ^index\.php$ - [L]` in the second), so
+	 * anything appended after it is never evaluated. Verified live: the block
+	 * written at the bottom by insert_with_markers had no effect.
+	 *
+	 * Pure string logic (public so it can be tested in isolation).
+	 */
+	public static function prepend_rules( string $contents ): string {
+		$block = '# BEGIN ' . self::MARKER . "\n"
+			. implode( "\n", self::htaccess_rules() ) . "\n"
+			. '# END ' . self::MARKER . "\n";
+
+		$rest = ltrim( self::strip_rules( $contents ), "\n" );
+
+		return $block . ( '' === $rest ? '' : "\n" . $rest );
 	}
 
 	/**

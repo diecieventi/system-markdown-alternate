@@ -358,6 +358,34 @@ check( 'litespeed strip: no block => unchanged', "# BEGIN WordPress\n# END WordP
 check( 'litespeed strip: block without trailing newline', "\n", LiteSpeedCompat::strip_rules( $sysmda_ls_block ) );
 check( 'litespeed strip: other markers untouched', "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n", LiteSpeedCompat::strip_rules( "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n" ) );
 
+// prepend_rules: the block must land at the TOP (before # BEGIN WordPress,
+// whose [L] rules would otherwise stop rewrite processing before our rules).
+$sysmda_ls_expected_block = "# BEGIN System Markdown Alternate\n" . implode( "\n", LiteSpeedCompat::htaccess_rules() ) . "\n# END System Markdown Alternate\n";
+$sysmda_wp_block          = "# BEGIN WordPress\nRewriteRule . /index.php [L]\n# END WordPress\n";
+
+check( 'litespeed prepend: empty file', $sysmda_ls_expected_block, LiteSpeedCompat::prepend_rules( '' ) );
+check(
+	'litespeed prepend: block goes before WordPress',
+	$sysmda_ls_expected_block . "\n" . $sysmda_wp_block,
+	LiteSpeedCompat::prepend_rules( $sysmda_wp_block )
+);
+check(
+	'litespeed prepend: bottom copy moved to top, single copy',
+	$sysmda_ls_expected_block . "\n" . $sysmda_wp_block,
+	LiteSpeedCompat::prepend_rules( $sysmda_wp_block . $sysmda_ls_block . "\n" )
+);
+check(
+	'litespeed prepend: idempotent',
+	LiteSpeedCompat::prepend_rules( $sysmda_wp_block ),
+	LiteSpeedCompat::prepend_rules( LiteSpeedCompat::prepend_rules( $sysmda_wp_block ) )
+);
+
+// block_is_before_wordpress: position check used by rules_present().
+check( 'litespeed position: before WordPress', true, LiteSpeedCompat::block_is_before_wordpress( $sysmda_ls_expected_block . "\n" . $sysmda_wp_block ) );
+check( 'litespeed position: after WordPress', false, LiteSpeedCompat::block_is_before_wordpress( $sysmda_wp_block . $sysmda_ls_block . "\n" ) );
+check( 'litespeed position: no WordPress block', true, LiteSpeedCompat::block_is_before_wordpress( $sysmda_ls_expected_block ) );
+check( 'litespeed position: block absent', false, LiteSpeedCompat::block_is_before_wordpress( $sysmda_wp_block ) );
+
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 echo "\n{$GLOBALS['sysmda_asserts']} assertions, {$GLOBALS['sysmda_failures']} failed.\n";
