@@ -81,18 +81,29 @@ class LiteSpeedCompat {
 	 * exclude a request from the page cache. The conditions only depend on the
 	 * Accept header, so they keep working in every rewrite pass.
 	 *
+	 * Two separate rules: (1) any Accept mentioning Markdown reaches PHP,
+	 * which evaluates the q-values; (2) an Accept allowing neither HTML nor a
+	 * wildcard reaches PHP for the 406. A missing/empty Accept and wildcard
+	 * accepts (`text/*` and the full wildcard) deliberately stay on the
+	 * cached HTML: PHP would serve HTML for them anyway.
+	 *
 	 * @return string[]
 	 */
 	public static function htaccess_rules(): array {
 		return array(
 			'<IfModule LiteSpeed>',
 			'RewriteEngine On',
-			'# Content negotiation must reach PHP: bypass the LiteSpeed page cache',
-			'# when the client asks for Markdown, or accepts neither HTML nor a',
-			'# wildcard (the 406 case). Normal browser traffic stays fully cached.',
-			'RewriteCond %{HTTP:Accept} text/markdown [NC,OR]',
-			'RewriteCond %{HTTP:Accept} !(text/html|\*/\*) [NC]',
-			'RewriteRule .* - [E=Cache-Control:no-cache]',
+			'# Requests that mention Markdown must reach WordPress,',
+			'# which evaluates the q-values.',
+			'RewriteCond %{HTTP:Accept} text/markdown [NC]',
+			'RewriteRule ^ - [E=Cache-Control:no-cache]',
+			'# Requests whose Accept allows neither HTML nor a wildcard',
+			'# must reach WordPress so it can answer 406.',
+			'RewriteCond %{HTTP:Accept} !^$',
+			'RewriteCond %{HTTP:Accept} !text/html [NC]',
+			'RewriteCond %{HTTP:Accept} !text/\* [NC]',
+			'RewriteCond %{HTTP:Accept} !\*/\* [NC]',
+			'RewriteRule ^ - [E=Cache-Control:no-cache]',
 			'</IfModule>',
 		);
 	}

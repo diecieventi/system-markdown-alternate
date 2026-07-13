@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.21.1
+Stable tag: 0.21.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -147,6 +147,16 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.21.2 =
+* Refined the LiteSpeed `.htaccess` rules: two separate bypass rules instead of
+  one combined condition. Requests with an empty Accept header or a wildcard
+  Accept (`text/*`, `*/*`) now stay on the cached HTML (PHP would serve HTML
+  for them anyway), so fewer requests skip the page cache. Same behaviour for
+  all real traffic (browsers, Markdown agents, 406 probes).
+* The rules-present check compares directives only (comments and indentation
+  ignored), so a hand-maintained block with equivalent directives is left
+  untouched by the settings-page sync instead of being rewritten.
 
 = 0.21.1 =
 * Fix: the LiteSpeed compatibility block is now written at the TOP of

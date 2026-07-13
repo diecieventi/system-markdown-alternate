@@ -343,9 +343,41 @@ check( 'litespeed: empty signature', false, LiteSpeedCompat::is_litespeed( '' ) 
 $sysmda_ls_rules = LiteSpeedCompat::htaccess_rules();
 check( 'litespeed rules: IfModule guard opens', '<IfModule LiteSpeed>', $sysmda_ls_rules[0] );
 check( 'litespeed rules: IfModule guard closes', '</IfModule>', $sysmda_ls_rules[ count( $sysmda_ls_rules ) - 1 ] );
-check( 'litespeed rules: markdown condition', true, in_array( 'RewriteCond %{HTTP:Accept} text/markdown [NC,OR]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: non-HTML condition', true, in_array( 'RewriteCond %{HTTP:Accept} !(text/html|\*/\*) [NC]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: no-cache env', true, in_array( 'RewriteRule .* - [E=Cache-Control:no-cache]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: markdown condition', true, in_array( 'RewriteCond %{HTTP:Accept} text/markdown [NC]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: empty Accept stays cached', true, in_array( 'RewriteCond %{HTTP:Accept} !^$', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: no text/html condition', true, in_array( 'RewriteCond %{HTTP:Accept} !text/html [NC]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: no text/* condition', true, in_array( 'RewriteCond %{HTTP:Accept} !text/\* [NC]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: no */* condition', true, in_array( 'RewriteCond %{HTTP:Accept} !\*/\* [NC]', $sysmda_ls_rules, true ) );
+check( 'litespeed rules: no-cache env', 2, count( array_keys( $sysmda_ls_rules, 'RewriteRule ^ - [E=Cache-Control:no-cache]', true ) ) );
+
+// A manual block with the SAME directives but different comments/indentation
+// must be recognized as equivalent (directive-only comparison in sync).
+$sysmda_ls_manual = array(
+	'<IfModule LiteSpeed>',
+	'    RewriteEngine On',
+	'',
+	'    # Le richieste che citano Markdown devono arrivare a WordPress.',
+	'    RewriteCond %{HTTP:Accept} text/markdown [NC]',
+	'    RewriteRule ^ - [E=Cache-Control:no-cache]',
+	'',
+	'    RewriteCond %{HTTP:Accept} !^$',
+	'    RewriteCond %{HTTP:Accept} !text/html [NC]',
+	'    RewriteCond %{HTTP:Accept} !text/\* [NC]',
+	'    RewriteCond %{HTTP:Accept} !\*/\* [NC]',
+	'    RewriteRule ^ - [E=Cache-Control:no-cache]',
+	'</IfModule>',
+);
+$sysmda_directives = function ( array $lines ): array {
+	$out = array();
+	foreach ( $lines as $line ) {
+		$line = trim( (string) $line );
+		if ( '' !== $line && '#' !== $line[0] ) {
+			$out[] = $line;
+		}
+	}
+	return $out;
+};
+check( 'litespeed rules: manual block with same directives is equivalent', $sysmda_directives( LiteSpeedCompat::htaccess_rules() ), $sysmda_directives( $sysmda_ls_manual ) );
 
 // strip_rules: removes the whole marker block, leaves the rest untouched.
 $sysmda_ls_block = "# BEGIN System Markdown Alternate\n<IfModule LiteSpeed>\nRewriteRule .* - [E=Cache-Control:no-cache]\n</IfModule>\n# END System Markdown Alternate";
