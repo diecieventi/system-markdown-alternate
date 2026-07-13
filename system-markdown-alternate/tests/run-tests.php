@@ -387,7 +387,15 @@ check(
 	LiteSpeedCompat::strip_rules( "# BEGIN WordPress\nRewriteRule . /index.php [L]\n# END WordPress\n" . $sysmda_ls_block . "\n" )
 );
 check( 'litespeed strip: no block => unchanged', "# BEGIN WordPress\n# END WordPress\n", LiteSpeedCompat::strip_rules( "# BEGIN WordPress\n# END WordPress\n" ) );
-check( 'litespeed strip: block without trailing newline', "\n", LiteSpeedCompat::strip_rules( $sysmda_ls_block ) );
+check( 'litespeed strip: block-only file => empty, no leading blank', '', LiteSpeedCompat::strip_rules( $sysmda_ls_block ) );
+
+// Block at the top followed by a blank line and other content: removal must
+// not leave leading blank lines (regression: two blank lines at the top).
+check(
+	'litespeed strip: top block leaves no leading blank lines',
+	"<IfModule mod_headers.c>\nHeader set X 1\n</IfModule>\n",
+	LiteSpeedCompat::strip_rules( $sysmda_ls_block . "\n\n<IfModule mod_headers.c>\nHeader set X 1\n</IfModule>\n" )
+);
 check( 'litespeed strip: other markers untouched', "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n", LiteSpeedCompat::strip_rules( "# BEGIN Other Plugin\nfoo\n# END Other Plugin\n" ) );
 
 // prepend_rules: the block must land at the TOP (before # BEGIN WordPress,

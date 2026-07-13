@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.21.2
+Stable tag: 0.21.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -147,6 +147,11 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.21.3 =
+* Fix: removing the LiteSpeed `.htaccess` block (disabling the option or
+  uninstalling) no longer leaves blank lines at the top of the file when the
+  block was the first thing in `.htaccess`.
 
 = 0.21.2 =
 * Refined the LiteSpeed `.htaccess` rules: two separate bypass rules instead of

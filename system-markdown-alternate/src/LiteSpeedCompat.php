@@ -297,9 +297,17 @@ class LiteSpeedCompat {
 		$marker  = preg_quote( self::MARKER, '/' );
 		$pattern = '/\n?# BEGIN ' . $marker . '.*?# END ' . $marker . '[^\n]*\n?/s';
 
-		$stripped = preg_replace( $pattern, "\n", $contents );
+		$stripped = preg_replace( $pattern, "\n", $contents, -1, $count );
 
-		return null !== $stripped ? $stripped : $contents;
+		if ( null === $stripped || 0 === $count ) {
+			return $contents; // Block not found: leave the file byte-for-byte intact.
+		}
+
+		// When the block sat at the very top of the file the "\n" replacement,
+		// plus any blank line that already followed the block, leaves blank
+		// lines at the start. Leading newlines are never meaningful in
+		// .htaccess, so drop them (a mid-file removal never starts with one).
+		return ltrim( $stripped, "\n" );
 	}
 
 	/**
