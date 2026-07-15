@@ -206,6 +206,26 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     permalink HTML? e se la home è una pagina statica **con** un suo body,
     emettiamo il body convertito, questo indice sintetizzato, o entrambi? Decidere
     la forma qui prima di scrivere qualsiasi piano o codice.
+  - **Obiezioni da valutare (la prossima volta)**:
+    - Se invece la front page è l'**indice dei post**, non c'è nessun post object
+      da convertire: un eventuale `.md` dovrebbe essere una **lista di link agli
+      articoli** — logica diversa, e a quel punto assomiglia più a un
+      `/llms.txt`. E, sempre dai dati di Dries, `/llms.txt` viene richiesto quasi
+      solo da **tool SEO, non da crawler AI**, quindi potrebbe non valere la pena
+      investirci.
+    - Se comunque gestiamo la **home dinamica** (ultimi articoli), la versione
+      Markdown potrebbe restituire semplicemente una lista pulita di link ai
+      post, es.:
+
+      ```markdown
+      # [Nome sito] - Ultimi articoli
+      - [Titolo articolo 1](/articolo-1) - *Breve riassunto/estratto*
+      - [Titolo articolo 2](/articolo-2) - *Breve riassunto/estratto*
+      ```
+
+    - Ma **prima di tutto valutare quanto serva davvero nel momento in cui
+      `/llms.txt` è attivo** — l'addon potrebbe essere proposto **solo quando
+      `/llms.txt` non è attivo** (da decidere).
   - **Docs/test**: nuovo filtro/toggle nell'elenco "Filters (public contract)" +
     docs + traduzioni; test unitari per la risoluzione `/.md` → home e per i due
     rami di `show_on_front`.

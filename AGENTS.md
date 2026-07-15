@@ -210,6 +210,24 @@ The v1 scope is done and widely exceeded. Implemented:
     permalinks? and if the front page is a static page **with** its own body,
     do we emit the converted body, this synthesized index, or both? Decide the
     shape here before writing any plan or code.
+  - **Objections to weigh (next time)**:
+    - When the front page is the **posts index**, there is no post object to
+      convert: a `.md` would just be a **list of links to the articles** —
+      different logic, and at that point it looks a lot like an `/llms.txt`.
+      And per Dries' data, `/llms.txt` is requested almost only by **SEO tools,
+      not AI crawlers**, so it may not be worth investing in.
+    - If we do handle the **dynamic home** (latest posts), the Markdown could
+      just return a clean list of post links, e.g.:
+
+      ```markdown
+      # [Site name] - Latest posts
+      - [Article title 1](/article-1) - *short summary/excerpt*
+      - [Article title 2](/article-2) - *short summary/excerpt*
+      ```
+
+    - But **first evaluate how much this really adds once `/llms.txt` is
+      enabled** — the addon might be offered **only when `/llms.txt` is off**
+      (to decide).
   - **Docs/tests**: new filter/toggle in the "Filters (public contract)" list +
     docs + translations; unit tests for the `/.md` → front-page resolution and
     the two `show_on_front` branches.
