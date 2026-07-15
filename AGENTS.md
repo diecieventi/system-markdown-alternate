@@ -142,6 +142,42 @@ The v1 scope is done and widely exceeded. Implemented:
   gets built — no translation files live in this repo.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sysmda_llms_txt_footer`).
+- **Serve `.md` for the site homepage** (to evaluate — idea, not yet decided):
+  expose the `.md` version of the **front page** even when its post type is not
+  among the enabled ones (typical case: the homepage is a `page` but `page` is
+  not selected because the user only enabled `post`). Idea: a dedicated **opt-in
+  toggle / "addon"** (e.g. `sysmda_markdown_homepage`, default off) that makes
+  the front page servable independently of `sysmda_markdown_supported_post_types`
+  — the current single gate — without forcing the whole `page` type on.
+  Points to work out before implementing:
+  - **Homepage variants** (`get_option('show_on_front')`):
+    - **static page** (`show_on_front = 'page'`, `page_on_front`): there is a
+      real `WP_Post` (usually type `page`, but it could be a CPT) → convertible
+      with the existing pipeline; just needs to pass eligibility.
+    - **blog posts index** (`show_on_front = 'posts'`): the front page is an
+      **archive, not a single post** → no `WP_Post` to convert. Decide: skip
+      (only static front pages are covered) or synthesize a listing (more work,
+      overlaps conceptually with `/llms.txt`). Leaning towards **skip** for v1.
+    - front page assigned to a CPT / page builder: same as static page, verify
+      it flows through `ContentRenderer` cleanly.
+  - **URL / resolution**: the front page permalink is `/`, so the `.md` URL is
+    `https://example.com/.md`. Check `resolve_requested_post()` /
+    `url_to_postid()` on `/.md` → `/` (may return 0 for the front page: needs a
+    `get_option('page_on_front')` fallback), plus trailing-slash and query
+    handling as today.
+  - **Eligibility**: extend `PostSupport::is_servable()` (the single source of
+    truth) to also accept the front-page post when the homepage toggle is on,
+    without loosening the rule for everything else. Keep `attachment` excluded;
+    keep published + not password-protected.
+  - **Content negotiation + alternate link**: make the front page negotiable
+    (`Vary: Accept`, `?format=markdown`) and print the `rel="alternate"` link in
+    its `<head>` — note `print_alternate_link()` currently guards on
+    `is_singular($types)`, which is **false on the blog-posts front page** and
+    also on a static front page whose type isn't in `$types`, so that guard must
+    be revisited for the homepage case.
+  - **Docs/tests**: new filter/toggle in the "Filters (public contract)" list +
+    docs + translations; unit tests for the `/.md` → front-page resolution and
+    the two `show_on_front` branches.
 - **`.md` hit counter** (decided; plan below — next planned minor):
   count how many times the `.md` endpoint is served, split **bot vs human**,
   and nothing else. Privacy by design (see "Product decisions"): aggregate

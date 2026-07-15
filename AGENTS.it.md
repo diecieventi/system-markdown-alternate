@@ -136,6 +136,44 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   il language pack `it_IT` — nessun file di traduzione vive in questo repo.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sysmda_llms_txt_footer`).
+- **Servire il `.md` per la homepage del sito** (da valutare — idea, non ancora
+  decisa): esporre la versione `.md` della **home** anche quando il suo post type
+  non è tra quelli abilitati (caso tipico: la homepage è una `page` ma `page` non
+  è selezionato perché l'utente ha abilitato solo `post`). Idea: un **toggle
+  opt-in / "addon" dedicato** (es. `sysmda_markdown_homepage`, default spento)
+  che rende servibile la home indipendentemente da
+  `sysmda_markdown_supported_post_types` — l'unico gate attuale — senza dover
+  attivare l'intero tipo `page`. Punti da chiarire prima di implementare:
+  - **Varianti di homepage** (`get_option('show_on_front')`):
+    - **pagina statica** (`show_on_front = 'page'`, `page_on_front`): esiste un
+      vero `WP_Post` (di solito tipo `page`, ma può essere un CPT) →
+      convertibile con la pipeline esistente; basta farlo passare
+      l'idoneità.
+    - **indice del blog** (`show_on_front = 'posts'`): la home è un **archivio,
+      non un singolo post** → nessun `WP_Post` da convertire. Da decidere:
+      saltare (coperte solo le home statiche) o sintetizzare un elenco (più
+      lavoro, concettualmente si sovrappone a `/llms.txt`). Propendo per
+      **saltare** nella v1.
+    - home assegnata a un CPT / page builder: come la pagina statica, verificare
+      che scorra pulita in `ContentRenderer`.
+  - **URL / risoluzione**: il permalink della home è `/`, quindi l'URL `.md` è
+    `https://example.com/.md`. Verificare `resolve_requested_post()` /
+    `url_to_postid()` su `/.md` → `/` (può restituire 0 per la home: serve un
+    fallback su `get_option('page_on_front')`), oltre alla gestione di trailing
+    slash e query come oggi.
+  - **Idoneità**: estendere `PostSupport::is_servable()` (la single source of
+    truth) per accettare anche il post della home quando il toggle è attivo,
+    senza allentare la regola per tutto il resto. Tenere `attachment` escluso;
+    tenere published + non protetto da password.
+  - **Content negotiation + link alternate**: rendere la home negoziabile
+    (`Vary: Accept`, `?format=markdown`) e stampare il link `rel="alternate"`
+    nel suo `<head>` — nota: `print_alternate_link()` oggi è protetto da
+    `is_singular($types)`, che è **falso sulla home con indice del blog** e anche
+    su una home statica il cui tipo non è in `$types`, quindi quel guard va
+    rivisto per il caso homepage.
+  - **Docs/test**: nuovo filtro/toggle nell'elenco "Filters (public contract)" +
+    docs + traduzioni; test unitari per la risoluzione `/.md` → home e per i due
+    rami di `show_on_front`.
 - **Contatore accessi `.md`** (deciso; piano sotto — prossima minor
   pianificata): contare quante volte viene servito l'endpoint `.md`, diviso
   **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
