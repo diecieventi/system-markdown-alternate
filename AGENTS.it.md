@@ -171,6 +171,41 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
     `is_singular($types)`, che è **falso sulla home con indice del blog** e anche
     su una home statica il cui tipo non è in `$types`, quindi quel guard va
     rivisto per il caso homepage.
+  - **Possibile struttura sintetizzata** (da **valutare e discutere** prima di
+    implementare o pianificare — NON ancora decisa): invece di limitarsi a
+    convertire il body della pagina statica in home, il `.md` della homepage
+    potrebbe essere un indice costruito ad hoc (coprirebbe anche il caso indice
+    del blog, dove non c'è un singolo post). Bozza da rivedere:
+
+    ```markdown
+    ---
+    title: "Nome del sito"
+    url: "https://example.com/"
+    type: "homepage"
+    ---
+
+    # Nome del sito
+
+    Descrizione del sito.
+
+    ## Contenuti principali
+
+    - [Servizio uno](https://example.com/servizio-uno.md)
+    - [Servizio due](https://example.com/servizio-due.md)
+
+    ## Articoli recenti
+
+    - [Titolo articolo uno](https://example.com/articolo-uno.md)
+    - [Titolo articolo due](https://example.com/articolo-due.md)
+    ```
+
+    Domande aperte da chiarire prima: si sovrappone troppo a `/llms.txt` (che già
+    elenca contenuti e link)? da dove arrivano le voci di "Contenuti principali"
+    (riuso degli ID/URL "Key content" dell'llms.txt arricchito, o un'impostazione
+    separata)? i link devono puntare alle varianti `.md` (come da bozza) o ai
+    permalink HTML? e se la home è una pagina statica **con** un suo body,
+    emettiamo il body convertito, questo indice sintetizzato, o entrambi? Decidere
+    la forma qui prima di scrivere qualsiasi piano o codice.
   - **Docs/test**: nuovo filtro/toggle nell'elenco "Filters (public contract)" +
     docs + traduzioni; test unitari per la risoluzione `/.md` → home e per i due
     rami di `show_on_front`.

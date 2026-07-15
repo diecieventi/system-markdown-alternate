@@ -175,6 +175,41 @@ The v1 scope is done and widely exceeded. Implemented:
     `is_singular($types)`, which is **false on the blog-posts front page** and
     also on a static front page whose type isn't in `$types`, so that guard must
     be revisited for the homepage case.
+  - **Possible synthesized structure** (to **evaluate and discuss** before
+    implementing or planning — NOT yet decided): rather than only converting the
+    static front page's body, the homepage `.md` could be a purpose-built index
+    (would also cover the blog-index case, where there is no single post). Draft
+    to review:
+
+    ```markdown
+    ---
+    title: "Site name"
+    url: "https://example.com/"
+    type: "homepage"
+    ---
+
+    # Site name
+
+    Site description.
+
+    ## Main content
+
+    - [Service one](https://example.com/service-one.md)
+    - [Service two](https://example.com/service-two.md)
+
+    ## Recent posts
+
+    - [Post title one](https://example.com/post-one.md)
+    - [Post title two](https://example.com/post-two.md)
+    ```
+
+    Open questions to settle first: does this overlap too much with `/llms.txt`
+    (which already lists content and links)? where do "Main content" entries come
+    from (reuse the enriched-llms.txt "Key content" IDs/URLs, or a separate
+    setting)? should links point to the `.md` variants (as drafted) or the HTML
+    permalinks? and if the front page is a static page **with** its own body,
+    do we emit the converted body, this synthesized index, or both? Decide the
+    shape here before writing any plan or code.
   - **Docs/tests**: new filter/toggle in the "Filters (public contract)" list +
     docs + translations; unit tests for the `/.md` → front-page resolution and
     the two `show_on_front` branches.
