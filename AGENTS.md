@@ -231,6 +231,19 @@ The v1 scope is done and widely exceeded. Implemented:
   - **Docs/tests**: new filter/toggle in the "Filters (public contract)" list +
     docs + translations; unit tests for the `/.md` → front-page resolution and
     the two `show_on_front` branches.
+- **Separate HTTP cache from conversion cache** (to evaluate next time): the
+  right mitigation lives inside the plugin and is simple — keep the **HTTP
+  response no-cache** (the security invariant we set), but store the
+  **HTML→Markdown conversion work in a per-post transient**, invalidated on
+  `save_post`. A repeated `.md` request then costs a WP bootstrap + a transient
+  read — a few ms of CPU instead of the full conversion, and practically nothing
+  on sites with a Redis object cache (already used). Optimal trade-off: safety of
+  HTTP no-cache, marginal cost of the internal cache. **NB — check current
+  state first**: a per-post conversion cache already exists (`get_markdown()`,
+  key `sysmda_md_{id}`, version hash, invalidated on `save_post` via
+  `invalidate_cache()`); so the discussion is mostly about whether/where an HTTP
+  no-cache invariant should be introduced and confirming the conversion cache
+  covers the repeated-request cost, not about building the cache from scratch.
 - **`.md` hit counter** (decided; plan below — next planned minor):
   count how many times the `.md` endpoint is served, split **bot vs human**,
   and nothing else. Privacy by design (see "Product decisions"): aggregate

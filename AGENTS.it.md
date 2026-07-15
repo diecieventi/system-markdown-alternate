@@ -229,6 +229,20 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   - **Docs/test**: nuovo filtro/toggle nell'elenco "Filters (public contract)" +
     docs + traduzioni; test unitari per la risoluzione `/.md` → home e per i due
     rami di `show_on_front`.
+- **Separare la cache HTTP dalla cache di conversione** (da valutare la prossima
+  volta): la mitigazione giusta è dentro il plugin ed è semplice — la **risposta
+  HTTP resta no-cache** (l'invariante di sicurezza che abbiamo stabilito), ma il
+  lavoro di conversione **HTML→Markdown lo metti in un transient per post**,
+  invalidato su `save_post`. Così la richiesta `.md` ripetuta costa un bootstrap
+  WP + una lettura dal transient — pochi ms di CPU invece della conversione
+  completa, e su siti con Redis object cache (già usato) praticamente niente.
+  Compromesso ottimale: sicurezza della no-cache HTTP, costo marginale della
+  cache interna. **NB — verificare prima lo stato attuale**: una cache di
+  conversione per post esiste già (`get_markdown()`, chiave `sysmda_md_{id}`,
+  hash di versione, invalidata su `save_post` via `invalidate_cache()`); quindi
+  il discorso è soprattutto se/dove introdurre un invariante HTTP no-cache e
+  confermare che la cache di conversione copra il costo delle richieste ripetute,
+  non costruire la cache da zero.
 - **Contatore accessi `.md`** (deciso; piano sotto — prossima minor
   pianificata): contare quante volte viene servito l'endpoint `.md`, diviso
   **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
