@@ -142,6 +142,108 @@ The v1 scope is done and widely exceeded. Implemented:
   gets built — no translation files live in this repo.
 - Future idea: formalized **LLM signals** in `/llms.txt` once the spec
   (Cloudflare & co.) settles — the hook is already in place (`sysmda_llms_txt_footer`).
+- **Serve `.md` for the site homepage** (to evaluate — idea, not yet decided):
+  expose the `.md` version of the **front page** even when its post type is not
+  among the enabled ones (typical case: the homepage is a `page` but `page` is
+  not selected because the user only enabled `post`). Idea: a dedicated **opt-in
+  toggle / "addon"** (e.g. `sysmda_markdown_homepage`, default off) that makes
+  the front page servable independently of `sysmda_markdown_supported_post_types`
+  — the current single gate — without forcing the whole `page` type on.
+  Points to work out before implementing:
+  - **Homepage variants** (`get_option('show_on_front')`):
+    - **static page** (`show_on_front = 'page'`, `page_on_front`): there is a
+      real `WP_Post` (usually type `page`, but it could be a CPT) → convertible
+      with the existing pipeline; just needs to pass eligibility.
+    - **blog posts index** (`show_on_front = 'posts'`): the front page is an
+      **archive, not a single post** → no `WP_Post` to convert. Decide: skip
+      (only static front pages are covered) or synthesize a listing (more work,
+      overlaps conceptually with `/llms.txt`). Leaning towards **skip** for v1.
+    - front page assigned to a CPT / page builder: same as static page, verify
+      it flows through `ContentRenderer` cleanly.
+  - **URL / resolution**: the front page permalink is `/`, so the `.md` URL is
+    `https://example.com/.md`. Check `resolve_requested_post()` /
+    `url_to_postid()` on `/.md` → `/` (may return 0 for the front page: needs a
+    `get_option('page_on_front')` fallback), plus trailing-slash and query
+    handling as today.
+  - **Eligibility**: extend `PostSupport::is_servable()` (the single source of
+    truth) to also accept the front-page post when the homepage toggle is on,
+    without loosening the rule for everything else. Keep `attachment` excluded;
+    keep published + not password-protected.
+  - **Content negotiation + alternate link**: make the front page negotiable
+    (`Vary: Accept`, `?format=markdown`) and print the `rel="alternate"` link in
+    its `<head>` — note `print_alternate_link()` currently guards on
+    `is_singular($types)`, which is **false on the blog-posts front page** and
+    also on a static front page whose type isn't in `$types`, so that guard must
+    be revisited for the homepage case.
+  - **Possible synthesized structure** (to **evaluate and discuss** before
+    implementing or planning — NOT yet decided): rather than only converting the
+    static front page's body, the homepage `.md` could be a purpose-built index
+    (would also cover the blog-index case, where there is no single post). Draft
+    to review:
+
+    ```markdown
+    ---
+    title: "Site name"
+    url: "https://example.com/"
+    type: "homepage"
+    ---
+
+    # Site name
+
+    Site description.
+
+    ## Main content
+
+    - [Service one](https://example.com/service-one.md)
+    - [Service two](https://example.com/service-two.md)
+
+    ## Recent posts
+
+    - [Post title one](https://example.com/post-one.md)
+    - [Post title two](https://example.com/post-two.md)
+    ```
+
+    Open questions to settle first: does this overlap too much with `/llms.txt`
+    (which already lists content and links)? where do "Main content" entries come
+    from (reuse the enriched-llms.txt "Key content" IDs/URLs, or a separate
+    setting)? should links point to the `.md` variants (as drafted) or the HTML
+    permalinks? and if the front page is a static page **with** its own body,
+    do we emit the converted body, this synthesized index, or both? Decide the
+    shape here before writing any plan or code.
+  - **Objections to weigh (next time)**:
+    - When the front page is the **posts index**, there is no post object to
+      convert: a `.md` would just be a **list of links to the articles** —
+      different logic, and at that point it looks a lot like an `/llms.txt`.
+      And per Dries' data, `/llms.txt` is requested almost only by **SEO tools,
+      not AI crawlers**, so it may not be worth investing in.
+    - If we do handle the **dynamic home** (latest posts), the Markdown could
+      just return a clean list of post links, e.g.:
+
+      ```markdown
+      # [Site name] - Latest posts
+      - [Article title 1](/article-1) - *short summary/excerpt*
+      - [Article title 2](/article-2) - *short summary/excerpt*
+      ```
+
+    - But **first evaluate how much this really adds once `/llms.txt` is
+      enabled** — the addon might be offered **only when `/llms.txt` is off**
+      (to decide).
+  - **Docs/tests**: new filter/toggle in the "Filters (public contract)" list +
+    docs + translations; unit tests for the `/.md` → front-page resolution and
+    the two `show_on_front` branches.
+- **Separate HTTP cache from conversion cache** (to evaluate next time): the
+  right mitigation lives inside the plugin and is simple — keep the **HTTP
+  response no-cache** (the security invariant we set), but store the
+  **HTML→Markdown conversion work in a per-post transient**, invalidated on
+  `save_post`. A repeated `.md` request then costs a WP bootstrap + a transient
+  read — a few ms of CPU instead of the full conversion, and practically nothing
+  on sites with a Redis object cache (already used). Optimal trade-off: safety of
+  HTTP no-cache, marginal cost of the internal cache. **NB — check current
+  state first**: a per-post conversion cache already exists (`get_markdown()`,
+  key `sysmda_md_{id}`, version hash, invalidated on `save_post` via
+  `invalidate_cache()`); so the discussion is mostly about whether/where an HTTP
+  no-cache invariant should be introduced and confirming the conversion cache
+  covers the repeated-request cost, not about building the cache from scratch.
 - **`.md` hit counter** (decided; plan below — next planned minor):
   count how many times the `.md` endpoint is served, split **bot vs human**,
   and nothing else. Privacy by design (see "Product decisions"): aggregate
