@@ -114,6 +114,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   righe direttiva (WP inietta un commento istruzioni dentro i blocchi marker);
   lancia un purge-all LSCache quando cambia, mostra le regole da copiare a
   mano se `.htaccess` non è scrivibile, ed è rimosso alla disinstallazione.
+  Quando LiteSpeed è rilevato e l'opzione è spenta, il pannello mostra un
+  avviso esplicito "recommended on LiteSpeed" (se un host onora `Vary` non è
+  rilevabile automaticamente — resta valida la decisione di scartare il
+  self-test — quindi il default sicuro nel dubbio è attivare); la FAQ di
+  `readme.txt` documenta il test curl manuale.
 - **Contatore accessi `.md`** (`HitCounter`; checkbox opt-in "Count `.md`
   requests" in Avanzate, default spento): conta quante volte viene servito
   l'endpoint `.md` — `200` **e** `304` (un accesso è un accesso), sia il

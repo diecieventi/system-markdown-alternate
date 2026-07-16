@@ -117,7 +117,11 @@ The v1 scope is done and widely exceeded. Implemented:
   the top) on every settings-page load, comparing directive lines only (WP
   injects an instruction comment inside marker blocks); triggers an LSCache
   purge-all on change, shows the rules to copy manually when `.htaccess` is
-  not writable, and is removed on uninstall.
+  not writable, and is removed on uninstall. When LiteSpeed is detected and
+  the option is off, the panel shows an explicit "recommended on LiteSpeed"
+  notice (whether a host honours `Vary` cannot be detected automatically —
+  the rejected self-test decision stands — so the safe default when unsure
+  is to enable); the `readme.txt` FAQ documents the manual curl diagnostic.
 - **`.md` hit counter** (`HitCounter`; opt-in "Count `.md` requests" checkbox
   in Advanced, default off): counts how many times the `.md` endpoint is
   served — `200` **and** `304` (an access is an access), both the `.md`

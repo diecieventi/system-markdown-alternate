@@ -638,6 +638,16 @@ class AdminSettings {
 
 		echo '<p class="description">' . esc_html( implode( ' ', $status ) ) . '</p>';
 
+		// Explicit recommendation when it matters: LiteSpeed is detected and the
+		// option is off. Whether the host honours Vary: Accept cannot be detected
+		// reliably (loopback checks are unreliable behind WAF/CDN — rejected), so
+		// the safe default for an unsure user is to enable the rules.
+		if ( $detected && ! $enabled ) {
+			echo '<div class="notice notice-info inline" style="margin:8px 0;padding:8px 12px"><p style="margin:0">';
+			echo wp_kses_post( __( '<strong>Recommended on LiteSpeed:</strong> whether a LiteSpeed server honours <code>Vary: Accept</code> depends on the host, and it cannot be detected automatically. If you are unsure how your host behaves, enabling these rules is the safe choice: normal browser traffic stays fully cached, and on hosts that already honour <code>Vary</code> the rules are simply redundant. See the plugin FAQ for a quick manual test.', 'system-markdown-alternate' ) );
+			echo '</p></div>';
+		}
+
 		if ( $enabled && ! $present && ! LiteSpeedCompat::htaccess_writable() ) {
 			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin:0">';
 			echo wp_kses_post( __( '<strong>.htaccess is not writable</strong>: add this block manually to the site root .htaccess:', 'system-markdown-alternate' ) );

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.22.0
+Stable tag: 0.22.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -161,6 +161,19 @@ bypass the LiteSpeed page cache (normal browser traffic stays cached; on other
 servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 `.md` URLs are not affected and remain fully cacheable.
 
+Not sure whether your host is affected? Whether a LiteSpeed server honours
+`Vary: Accept` depends on the host and cannot be detected automatically, so if
+in doubt simply enable the option: it is the safe choice, and on hosts that
+already behave correctly the rules are just redundant. To test it yourself:
+open a post in a normal browser first (so its HTML gets cached), then request
+the same permalink with a Markdown Accept header, for example:
+
+`curl -A "Mozilla/5.0" -H "Accept: text/markdown" https://example.com/my-post/`
+
+If the response is HTML (often with an `x-litespeed-cache: hit` header) instead
+of Markdown, your server ignores `Vary: Accept` and you need the option. The
+browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
+
 == Screenshots ==
 
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
@@ -169,6 +182,14 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.22.1 =
+* Clearer guidance for the LiteSpeed cache compatibility option: when LiteSpeed
+  is detected and the option is off, the settings page now shows an explicit
+  recommendation (whether a host honours `Vary: Accept` cannot be detected
+  automatically, so enabling the rules is the safe choice when unsure). The
+  FAQ now also documents a quick manual test to check whether a host ignores
+  `Vary: Accept`. No change to behaviour or output.
 
 = 0.22.0 =
 * New optional `.md` hit counter (Advanced → "Count `.md` requests", off by
