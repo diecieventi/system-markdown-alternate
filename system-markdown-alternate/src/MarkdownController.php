@@ -64,12 +64,14 @@ class MarkdownController {
 			// caches that key by URL only (observed on some LiteSpeed setups,
 			// which ignore Vary: Accept) must never store this variant, or it
 			// would be served to HTML clients too. .md URLs stay cacheable.
-			LiteSpeedCompat::mark_nocache();
+			// Sent before serve_markdown() so both the 200 and the conditional
+			// 304 exits carry the no-cache invariant.
+			$this->send_no_cache_headers();
 			$this->serve_markdown( $queried );
 		}
 
 		if ( $this->should_reject_unacceptable() ) {
-			LiteSpeedCompat::mark_nocache();
+			$this->send_no_cache_headers();
 			$this->send_not_acceptable();
 			exit;
 		}
@@ -251,6 +253,25 @@ class MarkdownController {
 		}
 
 		header( 'Vary: Accept', false );
+	}
+
+	/**
+	 * Marks the current response as non-cacheable for every cache in front of
+	 * PHP (negotiated Markdown and 406 responses only, never `.md` URLs).
+	 *
+	 * Honouring `Vary: Accept` is a per-host property: the default LiteSpeed
+	 * cache keys by URL only and ignores it, and CDNs may too. These responses
+	 * share their URL with the HTML page, so the standard `Cache-Control`
+	 * no-cache header is a server-agnostic security invariant — it must never
+	 * depend on a specific cache plugin being active. The LiteSpeed-specific
+	 * signals (header, DONOTCACHEPAGE, LSCWP action) stay in LiteSpeedCompat.
+	 */
+	private function send_no_cache_headers(): void {
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: no-cache, no-store, must-revalidate, private' );
+		}
+
+		LiteSpeedCompat::mark_nocache();
 	}
 
 	/**

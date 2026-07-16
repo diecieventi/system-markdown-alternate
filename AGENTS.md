@@ -61,7 +61,11 @@ The v1 scope is done and widely exceeded. Implemented:
 - **`rel="alternate"` link** in the `<head>` of supported singular content.
 - **HTTP headers**: `Content-Type: text/markdown; charset=utf-8`,
   `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
-  `Vary: Accept` (on negotiable URLs), **`ETag` + `Last-Modified`**.
+  `Vary: Accept` (on negotiable URLs), **`ETag` + `Last-Modified`**. Negotiated
+  Markdown and `406` responses additionally send
+  `Cache-Control: no-cache, no-store, must-revalidate, private` (server-agnostic
+  no-cache invariant — see "Product decisions"); `.md` URLs get no
+  `Cache-Control` at all (their own cache key, revalidation via `ETag`/`304`).
 - **Conditional requests**: the `.md` response honours `If-None-Match` /
   `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
   already holds the current version. Validator = the existing cache-version hash
@@ -92,10 +96,15 @@ The v1 scope is done and widely exceeded. Implemented:
   servers key the page cache by URL only and ignore `Vary: Accept` (observed
   live: a cached Markdown variant served to HTML clients and vice versa, while
   PHP negotiated correctly). Two layers: (1) the negotiated Markdown and `406`
-  responses always send `X-LiteSpeed-Cache-Control: no-cache` + define
+  responses always send the standard
+  `Cache-Control: no-cache, no-store, must-revalidate, private`
+  (`MarkdownController::send_no_cache_headers()`, server-agnostic) plus the
+  LiteSpeed-specific signals — `X-LiteSpeed-Cache-Control: no-cache` + define
   `DONOTCACHEPAGE` + fire the LSCache-plugin `litespeed_control_set_nocache`
-  action, so URL-keyed caches never store them (`.md` URLs stay cacheable: they
-  are their own key); (2) opt-in **`.htaccess` rules** (Advanced →
+  action — so URL-keyed caches never store them (`.md` URLs stay cacheable: they
+  are their own key); the LiteSpeed cache is also **purged on plugin
+  activation/deactivation** (`litespeed_purge_all`, no-op without LSCWP:
+  entries cached before activation carry no `Vary`); (2) opt-in **`.htaccess` rules** (Advanced →
   `sysmda_litespeed_htaccess` checkbox, default off) wrapped in
   `<IfModule LiteSpeed>` (inert elsewhere): requests whose `Accept` mentions
   `text/markdown`, or allows neither HTML nor a wildcard (the 406 case), get
@@ -163,17 +172,6 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in the "Filters (public contract)" list + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **Cache hardening** (decided; planned patch release — see
-  `PLAN-cache-hardening-and-hit-counter.md`): emit the standard
-  `Cache-Control: no-cache, no-store, must-revalidate, private` on negotiated
-  Markdown and `406` responses (general, server-agnostic invariant — today the
-  plugin sends only the LiteSpeed-specific signals and the standard header
-  appears only when LSCWP adds it), and purge the LiteSpeed cache on plugin
-  activation/deactivation. Decisions recorded in "Product decisions"; `.md`
-  URLs unchanged (cacheable, `ETag`/`304`). This also closes the former
-  "separate HTTP cache from conversion cache" question: the per-post
-  conversion cache already exists (`get_markdown()`, key `sysmda_md_{id}`,
-  invalidated on `save_post`), and the HTTP side is covered by the invariant.
 - **Surface the filter API in user-facing docs** (decided): neither `readme.txt`
   nor `README.md`/`README.it.md` mention that the filters exist. Add a
   `readme.txt` FAQ entry + a section/pointer in both READMEs — bundled with the

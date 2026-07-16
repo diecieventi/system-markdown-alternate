@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.21.3
+Stable tag: 0.21.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -147,6 +147,20 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.21.4 =
+* Cache hardening: the negotiated Markdown and `406` responses now always send
+  the standard `Cache-Control: no-cache, no-store, must-revalidate, private`
+  header. These responses share their URL with the HTML page and some caches
+  (default LiteSpeed, some CDNs) key by URL only and ignore `Vary: Accept`;
+  previously the standard header only appeared when the LiteSpeed Cache plugin
+  added it, so the protection now no longer depends on any specific cache
+  plugin. The explicit `.md` URLs are unchanged: they remain fully cacheable
+  with `ETag`/`Last-Modified` revalidation and no `Cache-Control`.
+* The LiteSpeed page cache is now purged on plugin activation and deactivation
+  (no-op when the LiteSpeed Cache plugin is absent): entries cached before
+  activation carry no `Vary` header and could produce mixed HTML/Markdown
+  responses that are hard to diagnose.
 
 = 0.21.3 =
 * Fix: removing the LiteSpeed `.htaccess` block (disabling the option or

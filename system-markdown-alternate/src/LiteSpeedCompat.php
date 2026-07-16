@@ -22,6 +22,9 @@ defined( 'ABSPATH' ) || exit;
  *    cache not to store them (`X-LiteSpeed-Cache-Control: no-cache`, the
  *    generic DONOTCACHEPAGE constant, and the LiteSpeed Cache plugin API), so
  *    a shared-URL cache can never be poisoned with the Markdown variant.
+ *    These LiteSpeed-specific signals complement the standard, server-agnostic
+ *    `Cache-Control` no-cache header that MarkdownController sends on the same
+ *    responses (see MarkdownController::send_no_cache_headers()).
  * 2. Opt-in `.htaccess` rules (Advanced settings, `sysmda_litespeed_htaccess`
  *    option): requests that negotiate Markdown — or accept neither HTML nor a
  *    wildcard (the 406 case) — bypass the LiteSpeed cache entirely, so PHP
@@ -54,12 +57,15 @@ class LiteSpeedCompat {
 	}
 
 	/**
-	 * Marks the current response as non-cacheable for page caches.
+	 * Marks the current response as non-cacheable for page caches
+	 * (LiteSpeed-specific signals).
 	 *
 	 * Used on the negotiated Markdown and 406 responses (NOT on `.md` URLs,
 	 * which are safe to cache per URL). Sent unconditionally: the LiteSpeed
 	 * header is ignored by other servers, and DONOTCACHEPAGE protects any
-	 * page-cache plugin that keys by URL only.
+	 * page-cache plugin that keys by URL only. The standard `Cache-Control`
+	 * no-cache header is sent by MarkdownController::send_no_cache_headers(),
+	 * which calls this method.
 	 */
 	public static function mark_nocache(): void {
 		if ( ! headers_sent() ) {
@@ -342,8 +348,12 @@ class LiteSpeedCompat {
 
 	/**
 	 * Purge-all through the LiteSpeed Cache plugin API (no-op when inactive).
+	 *
+	 * Public: also fired on plugin activation/deactivation (see the bootstrap
+	 * file), because entries cached before activation carry no `Vary` and can
+	 * produce ghost mixed-representation behaviour that is hard to diagnose.
 	 */
-	private static function purge_litespeed_cache(): void {
+	public static function purge_litespeed_cache(): void {
 		do_action( 'litespeed_purge_all' );
 	}
 }
