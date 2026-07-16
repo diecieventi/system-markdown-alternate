@@ -136,115 +136,47 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   il language pack `it_IT` — nessun file di traduzione vive in questo repo.
 - Idea futura: eventuali **LLM signals** formalizzati in `/llms.txt` quando la spec
   (Cloudflare & co.) si assesta — il gancio è già pronto (`sysmda_llms_txt_footer`).
-- **Servire il `.md` per la homepage del sito** (da valutare — idea, non ancora
-  decisa): esporre la versione `.md` della **home** anche quando il suo post type
-  non è tra quelli abilitati (caso tipico: la homepage è una `page` ma `page` non
-  è selezionato perché l'utente ha abilitato solo `post`). Idea: un **toggle
-  opt-in / "addon" dedicato** (es. `sysmda_markdown_homepage`, default spento)
-  che rende servibile la home indipendentemente da
-  `sysmda_markdown_supported_post_types` — l'unico gate attuale — senza dover
-  attivare l'intero tipo `page`. Punti da chiarire prima di implementare:
-  - **Varianti di homepage** (`get_option('show_on_front')`):
-    - **pagina statica** (`show_on_front = 'page'`, `page_on_front`): esiste un
-      vero `WP_Post` (di solito tipo `page`, ma può essere un CPT) →
-      convertibile con la pipeline esistente; basta farlo passare
-      l'idoneità.
-    - **indice del blog** (`show_on_front = 'posts'`): la home è un **archivio,
-      non un singolo post** → nessun `WP_Post` da convertire. Da decidere:
-      saltare (coperte solo le home statiche) o sintetizzare un elenco (più
-      lavoro, concettualmente si sovrappone a `/llms.txt`). Propendo per
-      **saltare** nella v1.
-    - home assegnata a un CPT / page builder: come la pagina statica, verificare
-      che scorra pulita in `ContentRenderer`.
-  - **URL / risoluzione**: il permalink della home è `/`, quindi l'URL `.md` è
-    `https://example.com/.md`. Verificare `resolve_requested_post()` /
-    `url_to_postid()` su `/.md` → `/` (può restituire 0 per la home: serve un
-    fallback su `get_option('page_on_front')`), oltre alla gestione di trailing
-    slash e query come oggi.
-  - **Idoneità**: estendere `PostSupport::is_servable()` (la single source of
-    truth) per accettare anche il post della home quando il toggle è attivo,
-    senza allentare la regola per tutto il resto. Tenere `attachment` escluso;
-    tenere published + non protetto da password.
-  - **Content negotiation + link alternate**: rendere la home negoziabile
-    (`Vary: Accept`, `?format=markdown`) e stampare il link `rel="alternate"`
-    nel suo `<head>` — nota: `print_alternate_link()` oggi è protetto da
-    `is_singular($types)`, che è **falso sulla home con indice del blog** e anche
-    su una home statica il cui tipo non è in `$types`, quindi quel guard va
-    rivisto per il caso homepage.
-  - **Possibile struttura sintetizzata** (da **valutare e discutere** prima di
-    implementare o pianificare — NON ancora decisa): invece di limitarsi a
-    convertire il body della pagina statica in home, il `.md` della homepage
-    potrebbe essere un indice costruito ad hoc (coprirebbe anche il caso indice
-    del blog, dove non c'è un singolo post). Bozza da rivedere:
-
-    ```markdown
-    ---
-    title: "Nome del sito"
-    url: "https://example.com/"
-    type: "homepage"
-    ---
-
-    # Nome del sito
-
-    Descrizione del sito.
-
-    ## Contenuti principali
-
-    - [Servizio uno](https://example.com/servizio-uno.md)
-    - [Servizio due](https://example.com/servizio-due.md)
-
-    ## Articoli recenti
-
-    - [Titolo articolo uno](https://example.com/articolo-uno.md)
-    - [Titolo articolo due](https://example.com/articolo-due.md)
-    ```
-
-    Domande aperte da chiarire prima: si sovrappone troppo a `/llms.txt` (che già
-    elenca contenuti e link)? da dove arrivano le voci di "Contenuti principali"
-    (riuso degli ID/URL "Key content" dell'llms.txt arricchito, o un'impostazione
-    separata)? i link devono puntare alle varianti `.md` (come da bozza) o ai
-    permalink HTML? e se la home è una pagina statica **con** un suo body,
-    emettiamo il body convertito, questo indice sintetizzato, o entrambi? Decidere
-    la forma qui prima di scrivere qualsiasi piano o codice.
-  - **Obiezioni da valutare (la prossima volta)**:
-    - Se invece la front page è l'**indice dei post**, non c'è nessun post object
-      da convertire: un eventuale `.md` dovrebbe essere una **lista di link agli
-      articoli** — logica diversa, e a quel punto assomiglia più a un
-      `/llms.txt`. E, sempre dai dati di Dries, `/llms.txt` viene richiesto quasi
-      solo da **tool SEO, non da crawler AI**, quindi potrebbe non valere la pena
-      investirci.
-    - Se comunque gestiamo la **home dinamica** (ultimi articoli), la versione
-      Markdown potrebbe restituire semplicemente una lista pulita di link ai
-      post, es.:
-
-      ```markdown
-      # [Nome sito] - Ultimi articoli
-      - [Titolo articolo 1](/articolo-1) - *Breve riassunto/estratto*
-      - [Titolo articolo 2](/articolo-2) - *Breve riassunto/estratto*
-      ```
-
-    - Ma **prima di tutto valutare quanto serva davvero nel momento in cui
-      `/llms.txt` è attivo** — l'addon potrebbe essere proposto **solo quando
-      `/llms.txt` non è attivo** (da decidere).
-  - **Docs/test**: nuovo filtro/toggle nell'elenco "Filters (public contract)" +
-    docs + traduzioni; test unitari per la risoluzione `/.md` → home e per i due
-    rami di `show_on_front`.
-- **Separare la cache HTTP dalla cache di conversione** (da valutare la prossima
-  volta): la mitigazione giusta è dentro il plugin ed è semplice — la **risposta
-  HTTP resta no-cache** (l'invariante di sicurezza che abbiamo stabilito), ma il
-  lavoro di conversione **HTML→Markdown lo metti in un transient per post**,
-  invalidato su `save_post`. Così la richiesta `.md` ripetuta costa un bootstrap
-  WP + una lettura dal transient — pochi ms di CPU invece della conversione
-  completa, e su siti con Redis object cache (già usato) praticamente niente.
-  Compromesso ottimale: sicurezza della no-cache HTTP, costo marginale della
-  cache interna. **NB — verificare prima lo stato attuale**: una cache di
-  conversione per post esiste già (`get_markdown()`, chiave `sysmda_md_{id}`,
-  hash di versione, invalidata su `save_post` via `invalidate_cache()`); quindi
-  il discorso è soprattutto se/dove introdurre un invariante HTTP no-cache e
-  confermare che la cache di conversione copra il costo delle richieste ripetute,
-  non costruire la cache da zero.
+- **Servire il `.md` per la homepage del sito** (rimandato — deciso a luglio
+  2026: rivalutare solo quando il contatore accessi `.md` fornirà dati reali
+  sulla domanda; la forma è già stabilita, vedi la decisione "NIENTE indice
+  homepage sintetizzato" in "Decisioni di prodotto"). Se/quando si implementa:
+  **solo front page statica** (`show_on_front = 'page'`: un vero `WP_Post`
+  convertito con la pipeline esistente), toggle opt-in dedicato (es.
+  `sysmda_markdown_homepage`, default spento) indipendente da
+  `sysmda_markdown_supported_post_types`; quando la home è l'indice dei post,
+  **saltare** (archivio, nessun `WP_Post`; avviso nel pannello). Note di
+  implementazione parcheggiate per quel giorno:
+  - URL `https://example.com/.md`: `url_to_postid('/')` può restituire 0 per la
+    home → serve un fallback su `get_option('page_on_front')` nella
+    risoluzione; gestione di trailing slash e query come oggi.
+  - Idoneità tramite `PostSupport::is_servable()` (single source of truth),
+    senza allentare la regola per tutto il resto; `attachment` resta escluso,
+    restano richiesti published + non protetto da password.
+  - `print_alternate_link()` è protetto da `is_singular($types)`, falso per una
+    home il cui tipo non è abilitato → guard da rivedere.
+  - Verificare prima la qualità di conversione: le home sono block-heavy.
+  - Nuovo toggle nell'elenco "Filters (public contract)" + docs + traduzioni;
+    test per la risoluzione `/.md` → home e per i due rami di `show_on_front`.
+- **Cache hardening** (deciso; release patch pianificata — vedi
+  `PLAN-cache-hardening-and-hit-counter.md`): emettere il
+  `Cache-Control: no-cache, no-store, must-revalidate, private` standard sulle
+  risposte Markdown negoziate e sulle `406` (invariante generale, indipendente
+  dal server — oggi il plugin manda solo i segnali specifici LiteSpeed e
+  l'header standard compare solo quando lo aggiunge LSCWP), e fare il purge
+  della cache LiteSpeed all'attivazione/disattivazione del plugin. Decisioni
+  registrate in "Decisioni di prodotto"; URL `.md` invariati (cachabili,
+  `ETag`/`304`). Questo chiude anche la vecchia questione "separare la cache
+  HTTP dalla cache di conversione": la cache di conversione per post esiste
+  già (`get_markdown()`, chiave `sysmda_md_{id}`, invalidata su `save_post`),
+  e il lato HTTP è coperto dall'invariante.
+- **Rendere visibile l'API dei filtri nella documentazione utente** (deciso):
+  né `readme.txt` né `README.md`/`README.it.md` menzionano che i filtri
+  esistono. Aggiungere una voce FAQ in `readme.txt` + una sezione/rimando in
+  entrambi i README — nel giro del contatore accessi (vedi
+  `PLAN-cache-hardening-and-hit-counter.md`).
 - **Contatore accessi `.md`** (deciso; piano sotto — prossima minor
-  pianificata): contare quante volte viene servito l'endpoint `.md`, diviso
+  pianificata, calendarizzata in `PLAN-cache-hardening-and-hit-counter.md`):
+  contare quante volte viene servito l'endpoint `.md`, diviso
   **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
   prodotto"): solo contatori giornalieri aggregati → dato anonimo, fuori dal
   perimetro GDPR (niente consenso, niente banner) e dentro la linea guida
@@ -283,19 +215,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
 ### Da controllare al prossimo giro (non urgente, parcheggiato qui)
 
-- **Filtri non documentati nella documentazione utente**: il plugin espone
-  un'ampia API di filtri (vedi "Filters (public contract)" più sotto) ma né il
-  `readme.txt` (`== Frequently Asked Questions ==`) né `README.md`/`README.it.md`
-  menzionano che esistono dei filtri. Decidere dove segnalarlo agli utenti finali
-  (almeno un rimando all'elenco filtri) e correggere.
 - **Valutare nuove integrazioni**: oltre ad ACF/GenerateBlocks, valutare cos'altro
   potrebbe meritare un'integrazione dedicata (candidati da definire).
 - **Valutare come arricchire/gestire ulteriormente `/llms.txt`**: oltre alla
   modalità enriched attuale, valutare cos'altro vale la pena aggiungere
   (candidati da definire, vedi anche l'idea LLM signals qui sopra).
-- ~~Possibile log di erogazione del `.md`~~ → valutato e promosso a
-  **contatore accessi `.md`** pianificato (vedi "Aperti / da fare" qui sopra
-  e la decisione count-only in "Decisioni di prodotto").
 
 ## Decisioni di prodotto (durevoli)
 
@@ -320,13 +244,51 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Description** front matter: Rank Math (`rank_math_description`) → scartata solo
   se contiene un placeholder `%variabile%` non risolto → fallback excerpt → testo
   troncato (~200 char). Front matter include `featured_image` (+ `featured_image_alt`).
-- **NIENTE `Cache-Control` esplicito sulla risposta `.md`** (deciso, non
-  riproporre): il plugin NON emette `Cache-Control`/`max-age`. Le richieste
-  condizionali (`ETag`/`Last-Modified` → `304`) danno già una rivalidazione
-  efficiente senza mai servire Markdown stantìo. Un `max-age` rischierebbe di
-  entrare in conflitto con i plugin di page-cache/CDN e potrebbe continuare a
-  servire una versione vecchia dopo una modifica; la policy di freshness spetta
-  all'infrastruttura/CDN, non al plugin.
+- **NIENTE `Cache-Control` di freshness sugli URL `.md` dedicati** (deciso, non
+  riproporre; scope chiarito a luglio 2026): gli URL `.md` non ricevono
+  `Cache-Control`/`max-age` — sono la loro propria chiave di cache (poisoning
+  impossibile) e le richieste condizionali (`ETag`/`Last-Modified` → `304`)
+  danno già una rivalidazione efficiente senza mai servire Markdown stantìo.
+  Un `max-age` rischierebbe di entrare in conflitto con i plugin di
+  page-cache/CDN e potrebbe continuare a servire una versione vecchia dopo una
+  modifica; la policy di freshness spetta all'infrastruttura/CDN, non al
+  plugin. Questa decisione NON copre le risposte negoziate — vedi la
+  successiva.
+- **Le risposte Markdown negoziate e le `406` sono sempre no-cache** (deciso,
+  vincolante — esito della diagnosi LiteSpeed/Vary di luglio 2026 su due host
+  di produzione): condividono l'URL con la pagina HTML, e il rispetto di
+  `Vary: Accept` è una **proprietà per-host** — il LiteSpeed di default usa
+  solo l'URL come chiave di cache e ignora il `Vary` standard (verificato live
+  con un test standalone fuori da WP; un host lo rispettava, uno no), e anche
+  le CDN possono ignorarlo. Il plugin non deve MAI appoggiarsi al `Vary` per
+  la sicurezza. Quindi queste risposte mandano sempre il
+  `Cache-Control: no-cache, no-store, must-revalidate, private` standard
+  (indipendente dal server: protegge da qualsiasi cache URL-keyed anche senza
+  LSCWP di mezzo) **in aggiunta** ai segnali specifici LiteSpeed
+  (`X-LiteSpeed-Cache-Control: no-cache`, `DONOTCACHEPAGE`, action LSCWP).
+  Il `Vary: Accept` continua a essere emesso in append (mai sovrascrivere: i
+  siti hanno già il vary su `User-Agent` per la cache mobile/desktop), e resta
+  corretto per browser/CDN che invece lo rispettano.
+- **Purge della cache LiteSpeed all'attivazione e disattivazione del plugin**
+  (deciso): le entry cachate prima dell'attivazione non contengono il `Vary` e
+  producono comportamenti fantasma difficilissimi da diagnosticare. Purge-all
+  via API LSCWP (`litespeed_purge_all`, no-op se LSCWP è assente).
+- **NIENTE self-test diagnostico del Vary** (deciso, non riproporre): con
+  l'invariante no-cache qui sopra, che l'hosting rispetti o meno il `Vary` è
+  irrilevante per la sicurezza; il test sarebbe solo informativo e
+  dipenderebbe da richieste HTTP loopback, già scartate come inaffidabili
+  dietro WAF/proxy (stesso motivo per cui sono state rimosse dal rilevamento
+  conflitti).
+- **NIENTE rate limiting sulle richieste `.md`** (deciso): non anticipare;
+  riconsiderare solo se i dati del contatore accessi mostreranno mai un abuso
+  reale.
+- **NIENTE indice homepage sintetizzato** (deciso, non riproporre): un indice
+  `.md` costruito ad hoc per la homepage (link del sito + articoli recenti)
+  duplicherebbe concettualmente `/llms.txt` — che per i dati pubblici viene
+  richiesto quasi solo da tool SEO. Il valore di un `.md` della homepage è il
+  fetch real-time del contenuto vero da parte degli assistenti: se mai si
+  implementerà, sarà solo il body convertito della front page statica (vedi
+  "Aperti / da fare").
 - **NIENTE sitemap XML per gli URL `.md`** (deciso, non riproporre): le risposte
   `.md` sono `noindex` per scelta, quindi elencarle in una sitemap manderebbe
   segnali contraddittori ai motori di ricerca (Search Console: "URL inviato ma
