@@ -14,6 +14,7 @@
 // ─── Environment ────────────────────────────────────────────────────────────────
 
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'DAY_IN_SECONDS', 86400 );
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', '1' );
@@ -113,9 +114,11 @@ require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
 require __DIR__ . '/../src/LiteSpeedCompat.php';
+require __DIR__ . '/../src/HitCounter.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
@@ -425,6 +428,57 @@ check( 'litespeed position: before WordPress', true, LiteSpeedCompat::block_is_b
 check( 'litespeed position: after WordPress', false, LiteSpeedCompat::block_is_before_wordpress( $sysmda_wp_block . $sysmda_ls_block . "\n" ) );
 check( 'litespeed position: no WordPress block', true, LiteSpeedCompat::block_is_before_wordpress( $sysmda_ls_expected_block ) );
 check( 'litespeed position: block absent', false, LiteSpeedCompat::block_is_before_wordpress( $sysmda_wp_block ) );
+
+// ─── HitCounter ──────────────────────────────────────────────────────────────
+
+// is_bot: an empty/missing UA is a bot (every browser sends one).
+check( 'hits is_bot: null UA', true, HitCounter::is_bot( null ) );
+check( 'hits is_bot: empty UA', true, HitCounter::is_bot( '' ) );
+check( 'hits is_bot: whitespace UA', true, HitCounter::is_bot( '   ' ) );
+
+// is_bot: real browser UAs are human.
+check( 'hits is_bot: Chrome', false, HitCounter::is_bot( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' ) );
+check( 'hits is_bot: Firefox', false, HitCounter::is_bot( 'Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0' ) );
+check( 'hits is_bot: Safari iPhone', false, HitCounter::is_bot( 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' ) );
+check( 'hits is_bot: Edge', false, HitCounter::is_bot( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0' ) );
+
+// is_bot: crawlers, HTTP clients and AI agents (case-insensitive substring).
+check( 'hits is_bot: Googlebot', true, HitCounter::is_bot( 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' ) );
+check( 'hits is_bot: curl', true, HitCounter::is_bot( 'curl/8.5.0' ) );
+check( 'hits is_bot: wget', true, HitCounter::is_bot( 'Wget/1.21.4' ) );
+check( 'hits is_bot: python-requests', true, HitCounter::is_bot( 'python-requests/2.32.0' ) );
+check( 'hits is_bot: Go http client', true, HitCounter::is_bot( 'Go-http-client/2.0' ) );
+check( 'hits is_bot: headless Chrome', true, HitCounter::is_bot( 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36' ) );
+check( 'hits is_bot: GPTBot', true, HitCounter::is_bot( 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; +https://openai.com/gptbot' ) );
+check( 'hits is_bot: ClaudeBot', true, HitCounter::is_bot( 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)' ) );
+check( 'hits is_bot: PerplexityBot case-insensitive', true, HitCounter::is_bot( 'MOZILLA/5.0 (COMPATIBLE; PERPLEXITYBOT/1.0)' ) );
+
+// prune: buckets older than the retention window (90 days) are dropped.
+$sysmda_hits = array(
+	'2026-07-16' => array( 'bot' => 1, 'human' => 2 ),           // Today: kept.
+	'2026-04-17' => array( 'bot' => 3, 'human' => 0 ),           // 90 days old: kept (cutoff is exclusive).
+	'2026-04-16' => array( 'bot' => 4, 'human' => 4 ),           // 91 days old: dropped.
+	'2025-01-01' => array( 'bot' => 9, 'human' => 9 ),           // Ancient: dropped.
+	'not-a-date' => array( 'bot' => 1, 'human' => 1 ),           // Malformed key: dropped.
+);
+$sysmda_pruned = HitCounter::prune( $sysmda_hits, '2026-07-16' );
+check( 'hits prune: surviving buckets', array( '2026-07-16', '2026-04-17' ), array_keys( $sysmda_pruned ) );
+check( 'hits prune: counters untouched', array( 'bot' => 1, 'human' => 2 ), $sysmda_pruned['2026-07-16'] );
+check( 'hits prune: empty input', array(), HitCounter::prune( array(), '2026-07-16' ) );
+
+// totals: window includes today, excludes older buckets and future/malformed keys.
+$sysmda_hits = array(
+	'2026-07-16' => array( 'bot' => 1, 'human' => 2 ),  // Today.
+	'2026-07-10' => array( 'bot' => 10, 'human' => 20 ), // 6 days ago: inside "last 7".
+	'2026-07-09' => array( 'bot' => 100, 'human' => 200 ), // 7 days ago: outside "last 7", inside "last 30".
+	'2026-06-17' => array( 'bot' => 1000, 'human' => 2000 ), // 29 days ago: inside "last 30".
+	'2026-06-16' => array( 'bot' => 5000, 'human' => 5000 ), // 30 days ago: outside "last 30".
+	'2026-08-01' => array( 'bot' => 7, 'human' => 7 ),   // Future (clock skew): ignored.
+);
+check( 'hits totals: today only', array( 'bot' => 1, 'human' => 2 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 1 ) );
+check( 'hits totals: last 7 days', array( 'bot' => 11, 'human' => 22 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 7 ) );
+check( 'hits totals: last 30 days', array( 'bot' => 1111, 'human' => 2222 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 30 ) );
+check( 'hits totals: zero-day window', array( 'bot' => 0, 'human' => 0 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 0 ) );
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

@@ -27,6 +27,7 @@ contenuti consumabili da strumenti che preferiscono Markdown all'HTML renderizza
 - **Endpoint `/llms.txt`** (opzionale): indice dei contenuti per LLM e agenti. Una **modalità arricchita** opzionale (spenta di default) aggiunge sintesi del sito, sezione "Contenuti chiave" curata, una description per ogni voce e una sezione `Optional` per i post meno recenti. Un ulteriore toggle opzionale aggiunge a ogni voce la **data di ultima modifica** (`updated: YYYY-MM-DD`), così i crawler individuano i contenuti cambiati senza rifare il fetch di ogni URL.
 - **Compatibilità con la cache LiteSpeed**: le risposte Markdown negoziate sono marcate come non cacheabili per le page cache keyed-by-URL (`X-LiteSpeed-Cache-Control: no-cache`, `DONOTCACHEPAGE`), e un'impostazione opt-in aggiunge regole `.htaccess` (inerti fuori da LiteSpeed) che fanno bypassare la page cache LiteSpeed alle richieste che negoziano Markdown, sui server che ignorano `Vary: Accept`.
 - **Cache transient** con invalidazione proattiva (modifica post, aggiornamento plugin, salvataggio impostazioni).
+- **Contatore accessi `.md` opzionale** (spento di default): conta quante volte viene servito l'endpoint Markdown, diviso bot vs umano. Privacy by design: solo totali giornalieri aggregati — niente IP, niente stringhe user-agent, niente dati per visitatore, niente cookie, nessuna chiamata esterna.
 - **Pannello admin** per scegliere i tipi di contenuto esposti e regolare cache, esclusioni e header. Nessun tipo è esposto finché non lo selezioni.
 - **Shortcode** `[sysmda_md_url]` per stampare l'URL del `.md`.
 - **Integrazioni opzionali**, mostrate solo se il plugin relativo è attivo:
@@ -53,6 +54,29 @@ raggiungibile in tre modi:
 
 L'indice opzionale dei contenuti per LLM e agenti è disponibile su
 `https://example.com/llms.txt` (attivabile dalla stessa pagina impostazioni).
+
+## Estendere con i filtri
+
+Tutto ciò che controlla la pagina impostazioni — e altro ancora — è esposto come
+filtri WordPress, quindi il plugin si può personalizzare da un tema o da un
+plugin di sito. Un paio di esempi:
+
+```php
+// Aggiunge un footer personalizzato a ogni output Markdown.
+add_filter( 'sysmda_markdown_output', function ( $markdown, $post ) {
+    return $markdown . "\n---\nConvertito da " . get_permalink( $post ) . "\n";
+}, 10, 2 );
+
+// Esclude dalla conversione una classe CSS aggiuntiva.
+add_filter( 'sysmda_markdown_excluded_classes', function ( $classes ) {
+    $classes[] = 'mio-blocco-privato';
+    return $classes;
+} );
+```
+
+Il contratto pubblico completo (ogni filtro con il suo valore di default) è
+documentato nella sezione ["Filters (public contract)"](AGENTS.md#filters-public-contract)
+di `AGENTS.md`.
 
 ## Struttura del repository
 

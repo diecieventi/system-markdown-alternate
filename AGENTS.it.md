@@ -41,7 +41,7 @@ composer install --working-dir=system-markdown-alternate
 bash bin/build.sh
 ```
 
-## Stato attuale (v0.21.x)
+## Stato attuale (v0.22.x)
 
 Lo scope v1 è realizzato e ampiamente superato. Implementato:
 
@@ -114,6 +114,26 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   righe direttiva (WP inietta un commento istruzioni dentro i blocchi marker);
   lancia un purge-all LSCache quando cambia, mostra le regole da copiare a
   mano se `.htaccess` non è scrivibile, ed è rimosso alla disinstallazione.
+- **Contatore accessi `.md`** (`HitCounter`; checkbox opt-in "Count `.md`
+  requests" in Avanzate, default spento): conta quante volte viene servito
+  l'endpoint `.md` — `200` **e** `304` (un accesso è un accesso), sia il
+  suffisso `.md` sia il permalink negoziato — diviso **bot vs umano**
+  (`is_bot()`: UA vuoto ⇒ bot; lista token case-insensitive — crawler, client
+  HTTP/CLI, stack headless, agenti AI/LLM; filtro
+  `sysmda_md_hits_bot_patterns`). Salva SOLO bucket giornalieri aggregati
+  nell'opzione `sysmda_md_hits` (autoload off, giorni UTC, forma
+  `[ 'YYYY-MM-DD' => [ 'bot' => n, 'human' => n ] ]`), potati oltre i 90
+  giorni (filtro `sysmda_md_hits_retention_days`); l'UA viene letto una volta
+  per classificare e mai salvato (decisione durevole count-only). Totali in
+  sola lettura nel pannello (oggi / ultimi 7 / ultimi 30 giorni, bot vs
+  umano) con l'avvertenza sul sottoconteggio da page cache. L'opzione dei
+  bucket è esclusa dal bump del salt al salvataggio impostazioni (cambia a
+  ogni richiesta contata e non influenza l'output). Entrambe le opzioni
+  rimosse alla disinstallazione.
+- **API dei filtri visibile nella documentazione utente**: voce FAQ in
+  `readme.txt` con esempi + sezione "Estendere con i filtri" in
+  `README.md`/`README.it.md`, tutte con rimando all'elenco completo
+  "Filters (public contract)" in `AGENTS.md`.
 - **Cache Redis-aware** (`Cache` helper): object cache persistente se presente,
   altrimenti transient. Invalidazione via salt globale + `post_modified_gmt` +
   `SYSMDA_VERSION`; bump del salt al salvataggio opzioni; pulizia su `save_post`/
@@ -168,44 +188,6 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   - Verificare prima la qualità di conversione: le home sono block-heavy.
   - Nuovo toggle nell'elenco "Filters (public contract)" + docs + traduzioni;
     test per la risoluzione `/.md` → home e per i due rami di `show_on_front`.
-- **Rendere visibile l'API dei filtri nella documentazione utente** (deciso):
-  né `readme.txt` né `README.md`/`README.it.md` menzionano che i filtri
-  esistono. Aggiungere una voce FAQ in `readme.txt` + una sezione/rimando in
-  entrambi i README — nel giro del contatore accessi (vedi
-  `PLAN-cache-hardening-and-hit-counter.md`).
-- **Contatore accessi `.md`** (deciso; piano sotto — prossima minor
-  pianificata, calendarizzata in `PLAN-cache-hardening-and-hit-counter.md`):
-  contare quante volte viene servito l'endpoint `.md`, diviso
-  **bot vs umano**, e nient'altro. Privacy by design (vedi "Decisioni di
-  prodotto"): solo contatori giornalieri aggregati → dato anonimo, fuori dal
-  perimetro GDPR (niente consenso, niente banner) e dentro la linea guida
-  wordpress.org "nessun tracking senza consenso". **Checkbox opt-in, default
-  spento.** Limite accettato: una page cache/CDN che serve il `.md` senza
-  arrivare a PHP fa sottocontare — è un indicatore, non analytics. Piano di
-  implementazione (minor dedicata dopo la 0.20.0):
-  1. Nuova `src/HitCounter.php` (responsabilità singola): `record( ?string
-     $ua )` classifica la richiesta via `public static is_bot( ?string $ua ):
-     bool` (UA vuoto ⇒ bot; lista token case-insensitive: bot, crawl, spider,
-     curl, wget, python, java, http, headless, gpt, claude, perplexity, …;
-     filtro documentato `sysmda_md_hits_bot_patterns`) e incrementa il bucket di
-     oggi nell'opzione `sysmda_md_hits` (autoload off, forma `[ 'YYYY-MM-DD' =>
-     [ 'bot' => n, 'human' => n ] ]`), potando i bucket più vecchi di 90
-     giorni (filtro documentato `sysmda_md_hits_retention_days`). L'UA viene
-     letto solo per classificare, mai salvato. Il read-modify-write può
-     perdere un incremento sotto forte concorrenza: accettato (indicatore).
-  2. `MarkdownController::serve_markdown()`: con `sysmda_md_hits_enabled`
-     attivo, `record()` su ogni risposta servita — `200` **e** `304` (un
-     accesso è un accesso) — sia per il suffisso `.md` sia per il permalink
-     negoziato.
-  3. `AdminSettings.php`: checkbox "Count `.md` requests" (sezione Advanced)
-     + totali in sola lettura nella pagina impostazioni (oggi / ultimi 7 /
-     ultimi 30 giorni, bot vs umano) con l'avvertenza page-cache nella
-     descrizione.
-  4. `uninstall.php`: aggiungere `sysmda_md_hits` + `sysmda_md_hits_enabled`
-     all'elenco.
-  5. Test per `is_bot()` e per la logica di pruning; `php -l`.
-  6. Elenco filtri, docs + traduzioni, changelog `readme.txt`, bump di
-     versione, build, commit, push.
 - **`.wordpress-org/screenshot-*.jpg` sono superati**: mostrano il pannello
   admin pre-0.17.0 (prima del restyling tab/card). Da ricatturare aggiornando
   anche le didascalie `== Screenshots ==` in `readme.txt`, quando comodo (non
@@ -415,6 +397,7 @@ livello WP.
         ├── MetadataBuilder.php     ← front matter YAML; markdown_url() (static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
         ├── AcfIntegration.php      ← sottotitolo + TL;DR (preambolo)
+        ├── HitCounter.php          ← contatore accessi .md opt-in (bucket giornalieri aggregati bot/umano)
         ├── LlmsTxtController.php   ← endpoint /llms.txt (cachato)
         ├── AdminSettings.php       ← pannello impostazioni (Settings API)
         ├── ConflictDetector.php    ← rilevamento conflitti /llms.txt (solo locale)
@@ -466,6 +449,8 @@ apply_filters( 'sysmda_llms_txt_summary', '' );                             // s
 apply_filters( 'sysmda_llms_txt_key_content', array() );                    // contenuti in evidenza: ID o URL (solo arricchito)
 apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );              // post per tipo nella sezione principale (solo arricchito)
 apply_filters( 'sysmda_llms_txt_footer', '' );                              // blocco libero in coda (solo arricchito)
+apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );                  // sottostringhe UA case-insensitive classificate bot (contatore)
+apply_filters( 'sysmda_md_hits_retention_days', 90 );                       // retention dei bucket giornalieri .md, in giorni
 ```
 
 Default esclusioni:

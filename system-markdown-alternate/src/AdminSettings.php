@@ -47,10 +47,16 @@ class AdminSettings {
 	 * Bumps the cache salt when a plugin option is saved, so all cached Markdown
 	 * is regenerated on the next request.
 	 *
+	 * The hit-counter buckets are excluded: they are written on every counted
+	 * `.md` request and do not affect the Markdown output, so bumping the salt
+	 * for them would invalidate the whole cache (and change every ETag) on
+	 * each hit.
+	 *
 	 * @param string $option Name of the option that was just saved.
 	 */
 	public function maybe_bump_cache_salt( $option ): void {
-		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sysmda_' ) || 'sysmda_cache_salt' === $option ) {
+		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sysmda_' )
+			|| 'sysmda_cache_salt' === $option || HitCounter::OPTION === $option ) {
 			return;
 		}
 
@@ -134,6 +140,7 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_litespeed_htaccess', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_md_hits_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
 
 		// ACF options are registered ONLY when ACF is active. This prevents saving
 		// the form from clearing them when ACF is inactive and its fields are absent
@@ -176,6 +183,7 @@ class AdminSettings {
 		add_settings_section( 'sysmda_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sysmda_advanced' );
 		add_settings_field( 'sysmda_litespeed_htaccess', __( 'LiteSpeed cache compatibility', 'system-markdown-alternate' ), array( $this, 'field_litespeed_htaccess' ), self::PAGE, 'sysmda_advanced' );
+		add_settings_field( 'sysmda_md_hits_enabled', __( 'Hit counter', 'system-markdown-alternate' ), array( $this, 'field_md_hits_enabled' ), self::PAGE, 'sysmda_advanced' );
 	}
 
 	/**
@@ -635,6 +643,50 @@ class AdminSettings {
 			echo wp_kses_post( __( '<strong>.htaccess is not writable</strong>: add this block manually to the site root .htaccess:', 'system-markdown-alternate' ) );
 			echo '</p><pre class="sysmda-defaults">' . esc_html( '# BEGIN ' . LiteSpeedCompat::MARKER . "\n" . implode( "\n", LiteSpeedCompat::htaccess_rules() ) . "\n# END " . LiteSpeedCompat::MARKER ) . '</pre></div>';
 		}
+	}
+
+	public function field_md_hits_enabled(): void {
+		$v = get_option( 'sysmda_md_hits_enabled', '0' ); // Disabled by default (opt-in).
+		echo '<label><input type="checkbox" name="sysmda_md_hits_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Count <code>.md</code> requests', 'system-markdown-alternate' ) ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Stores only aggregate daily totals, split bot vs human — no IP addresses, no user-agent strings, no per-visitor data (the user agent is read once to classify the request, then discarded). Requests served by a page cache or CDN without reaching PHP are not counted: treat the numbers as an indicator, not analytics.', 'system-markdown-alternate' ) ) . '</p>';
+
+		$this->render_md_hits_totals();
+	}
+
+	/**
+	 * Read-only bot/human totals (today / last 7 / last 30 days) for the `.md`
+	 * hit counter. Shown whenever data exists, so the numbers stay visible
+	 * after the counter is switched off.
+	 */
+	private function render_md_hits_totals(): void {
+		$hits = get_option( HitCounter::OPTION, array() );
+
+		if ( ! is_array( $hits ) || empty( $hits ) ) {
+			return;
+		}
+
+		$today   = gmdate( 'Y-m-d' );
+		$windows = array(
+			__( 'Today', 'system-markdown-alternate' )        => HitCounter::totals( $hits, $today, 1 ),
+			__( 'Last 7 days', 'system-markdown-alternate' )  => HitCounter::totals( $hits, $today, 7 ),
+			__( 'Last 30 days', 'system-markdown-alternate' ) => HitCounter::totals( $hits, $today, 30 ),
+		);
+
+		echo '<table class="widefat striped" style="max-width:420px;margin-top:8px">';
+		echo '<thead><tr><th></th><th>' . esc_html__( 'Bots', 'system-markdown-alternate' ) . '</th><th>' . esc_html__( 'Humans', 'system-markdown-alternate' ) . '</th><th>' . esc_html__( 'Total', 'system-markdown-alternate' ) . '</th></tr></thead><tbody>';
+
+		foreach ( $windows as $label => $totals ) {
+			printf(
+				'<tr><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>',
+				esc_html( $label ),
+				(int) $totals['bot'],
+				(int) $totals['human'],
+				(int) $totals['bot'] + (int) $totals['human']
+			);
+		}
+
+		echo '</tbody></table>';
+		echo '<p class="description">' . esc_html__( 'Days are counted in UTC.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function render_page(): void {

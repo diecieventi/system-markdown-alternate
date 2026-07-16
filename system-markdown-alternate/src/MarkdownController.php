@@ -338,6 +338,11 @@ class MarkdownController {
 	 * content negotiation so validation logic remains centralized.
 	 */
 	private function serve_markdown( \WP_Post $post ): void {
+		// Counts 200 and 304 alike (an access is an access), for both the .md
+		// suffix and the negotiated permalink: every path serving Markdown
+		// goes through this method.
+		$this->maybe_record_hit();
+
 		$version = $this->cache_version( $post );
 
 		if ( $this->handle_conditional( $post, $version ) ) {
@@ -347,6 +352,25 @@ class MarkdownController {
 		$this->send_headers( $post, $version );
 		echo $this->get_markdown( $post ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
+	}
+
+	/**
+	 * Records the response in the daily `.md` hit counter when the opt-in
+	 * `sysmda_md_hits_enabled` option is on (default off).
+	 *
+	 * The user agent is read only so HitCounter can classify bot vs human;
+	 * it is never stored (count-only privacy decision, see HitCounter).
+	 */
+	private function maybe_record_hit(): void {
+		if ( '1' !== get_option( 'sysmda_md_hits_enabled', '0' ) ) {
+			return;
+		}
+
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] )
+			? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: null;
+
+		HitCounter::record( $ua );
 	}
 
 	/**

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.21.4
+Stable tag: 0.22.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -45,6 +45,10 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   content without re-fetching each URL.
 * **Transient cache** with proactive invalidation on post edit, plugin update
   and settings change.
+* **Optional `.md` hit counter** (off by default): counts how many times the
+  Markdown endpoint is served, split bot vs human. Privacy by design: only
+  aggregate daily totals are stored — no IP addresses, no user-agent strings,
+  no per-visitor data, no cookies, no external calls.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
 * **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
@@ -83,6 +87,8 @@ The output is customizable through filters:
 * `sysmda_llms_txt_main_posts` — posts per type in the main sections before the
   overflow moves to `Optional` (enriched mode only, default 25).
 * `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
+* `sysmda_md_hits_bot_patterns` — user-agent substrings the hit counter classifies as bot.
+* `sysmda_md_hits_retention_days` — retention of the daily hit-counter buckets (default 90).
 
 == Installation ==
 
@@ -127,6 +133,22 @@ link.
 Yes, in a transient (default 24h). The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
+= Can I customize the plugin from my own code? =
+
+Yes: the plugin is developer-extensible through WordPress filters — every
+behaviour listed in the "Developer filters" section above can be changed from a
+theme or site plugin. A few examples:
+
+`add_filter( 'sysmda_markdown_output', fn( $md, $post ) => $md . "\n---\nCustom footer.\n", 10, 2 );`
+
+`add_filter( 'sysmda_markdown_excluded_classes', fn( $classes ) => array_merge( $classes, array( 'my-private-block' ) ) );`
+
+`add_filter( 'sysmda_llms_txt_enriched', '__return_true' );`
+
+The full, always up-to-date list (with default values) lives in the
+[GitHub repository](https://github.com/diecieventi/system-markdown-alternate)
+under "Filters (public contract)" in `AGENTS.md`.
+
 = Content negotiation misbehaves behind LiteSpeed cache. What can I do? =
 
 Some LiteSpeed cache configurations key the page cache by URL only and ignore
@@ -147,6 +169,21 @@ servers the rules are inert). Then purge the LiteSpeed cache. The explicit
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.22.0 =
+* New optional `.md` hit counter (Advanced → "Count `.md` requests", off by
+  default): counts how many times the Markdown endpoint is served — `200` and
+  `304` alike, for both the `.md` suffix and the negotiated permalink — split
+  bot vs human (empty user agents and known crawler/HTTP-client/AI-agent
+  signatures count as bot; customizable via the `sysmda_md_hits_bot_patterns`
+  filter). Only aggregate daily totals are stored (pruned after 90 days,
+  `sysmda_md_hits_retention_days` filter): no IP addresses, no user-agent
+  strings, no per-visitor data, no cookies, no external calls. The settings
+  page shows read-only totals for today / last 7 / last 30 days. Note:
+  requests served by a page cache or CDN without reaching PHP are not
+  counted — an indicator, not analytics.
+* Documented the developer filter API in the user-facing docs: new FAQ entry
+  with examples and a pointer to the full filter list in the GitHub repository.
 
 = 0.21.4 =
 * Cache hardening: the negotiated Markdown and `406` responses now always send

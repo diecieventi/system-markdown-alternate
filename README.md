@@ -26,6 +26,7 @@ content consumable by tools that prefer Markdown over rendered HTML.
 - **`/llms.txt` endpoint** (optional): an index of your content for LLMs and agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
 - **LiteSpeed cache compatibility**: negotiated Markdown responses are marked non-cacheable for URL-keyed page caches (`X-LiteSpeed-Cache-Control: no-cache`, `DONOTCACHEPAGE`), and an opt-in setting adds `.htaccess` rules (inert outside LiteSpeed) so Markdown-negotiating requests bypass the LiteSpeed page cache on servers that ignore `Vary: Accept`.
 - **Transient cache** with proactive invalidation (post edit, plugin update, settings save).
+- **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals — no IPs, no user-agent strings, no per-visitor data, no cookies, no external calls.
 - **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
 - **Shortcode** `[sysmda_md_url]` to print the `.md` URL anywhere.
 - **Optional integrations**, shown only when the related plugin is active:
@@ -52,6 +53,29 @@ ways:
 
 The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
+
+## Extending via filters
+
+Everything the settings page controls — and more — is exposed as WordPress
+filters, so the plugin can be customized from a theme or site plugin. A couple
+of examples:
+
+```php
+// Append a custom footer to every Markdown output.
+add_filter( 'sysmda_markdown_output', function ( $markdown, $post ) {
+    return $markdown . "\n---\nConverted from " . get_permalink( $post ) . "\n";
+}, 10, 2 );
+
+// Exclude an extra CSS class from the conversion.
+add_filter( 'sysmda_markdown_excluded_classes', function ( $classes ) {
+    $classes[] = 'my-private-block';
+    return $classes;
+} );
+```
+
+The full public contract (every filter with its default value) is documented in
+the ["Filters (public contract)"](AGENTS.md#filters-public-contract) section of
+`AGENTS.md`.
 
 ## Repository structure
 

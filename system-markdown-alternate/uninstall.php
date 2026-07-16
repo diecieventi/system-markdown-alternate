@@ -27,6 +27,8 @@ $sysmda_options = array(
 	'sysmda_llms_txt_summary',
 	'sysmda_llms_txt_key_content',
 	'sysmda_litespeed_htaccess',
+	'sysmda_md_hits',
+	'sysmda_md_hits_enabled',
 	'sysmda_cache_salt',
 	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
 );
