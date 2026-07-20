@@ -307,7 +307,11 @@ The v1 scope is done and widely exceeded. Implemented:
   every release: bump `system-markdown-alternate.php` (both the `Version:` header
   **and** `SYSMDA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
   `bash bin/build.sh`, commit, push the branch and open the PR (see the git
-  workflow below).
+  workflow below). **Along with every release PR, hand the user the
+  ready-to-paste terminal command** to create the annotated tag from the Mac
+  after the merge: tag message = version + that release's changelog entries
+  (shown as "Notes" on the GitHub Tags page). Never leave the user to create
+  the tag by hand.
 - **Git — PR workflow (decided July 2026, replaces the old "direct to `main`"
   rule)**: **no agent (Claude Code, Codex, or any other tool) ever pushes to
   `main` directly**. Every piece of work:

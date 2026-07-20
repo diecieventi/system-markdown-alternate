@@ -312,6 +312,11 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   release: bump in `system-markdown-alternate.php` (header `Version:` **e**
   `SYSMDA_VERSION`), aggiorna `Stable tag` + changelog in `readme.txt`, `bash bin/build.sh`,
   commit, push del branch e apertura della PR (vedi il workflow git qui sotto).
+  **Insieme a ogni PR di release, consegnare all'utente il comando pronto da
+  incollare** nel terminale per creare il tag annotato dal Mac dopo il merge:
+  messaggio del tag = versione + voci del changelog di quella release
+  (compaiono come "Notes" nella pagina Tags di GitHub). Mai lasciare che
+  l'utente crei il tag a mano.
 - **Git — workflow a PR (deciso luglio 2026, sostituisce la vecchia regola
   "diretto su `main`")**: **nessun agente (Claude Code, Codex o altro tool)
   pusha mai direttamente su `main`**. Ogni lavoro:
