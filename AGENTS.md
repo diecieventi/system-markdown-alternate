@@ -10,11 +10,9 @@ changelog.
 > Agent-specific notes (Claude Code web, Codex) live in the dedicated section at
 > the end of "Identity, versioning, workflow".
 >
-> **Translations**: `AGENTS.it.md` and `README.it.md` are the Italian versions of
-> this file and of `README.md`. The English files are the **source of truth**;
-> whenever you change one of them, update its Italian translation **in the same
-> commit**. The plugin itself is English-only (see the i18n note in
-> "Technical notes": translations come from translate.wordpress.org).
+> **Language**: the repository is **English-only** — runtime strings, docs,
+> comments and workflow messages. The plugin itself is English-only too (see the
+> i18n note in "Technical notes": translations come from translate.wordpress.org).
 
 ## What it is
 
@@ -142,7 +140,7 @@ The v1 scope is done and widely exceeded. Implemented:
   cache-salt bump (it changes on every counted request and does not affect
   the output). Both options removed on uninstall.
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
-  examples + "Extending via filters" section in `README.md`/`README.it.md`,
+  examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
@@ -383,10 +381,8 @@ running code at the WP level.
 ```
 .
 ├── AGENTS.md                     ← this file (tool-agnostic guide, English)
-├── AGENTS.it.md                  ← Italian translation of this file
 ├── CLAUDE.md                     ← symlink → AGENTS.md
 ├── README.md                     ← repo overview (GitHub, English)
-├── README.it.md                  ← Italian translation of README.md
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
@@ -509,10 +505,9 @@ Default exclusions:
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
    work even when the body cache is off.
 7. **i18n**: **English** is the source language for runtime strings, code
-   comments, DocBlocks, tests, build tooling and workflow messages. The only
-   intentional Italian repository documents are `AGENTS.it.md` and
-   `README.it.md`. Strings with inline HTML (`<code>`, `<strong>`, …) go through
-   `wp_kses_post()`. Text domain `system-markdown-alternate` (= plugin slug,
+   comments, DocBlocks, tests, build tooling and workflow messages. The whole
+   repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)
+   go through `wp_kses_post()`. Text domain `system-markdown-alternate` (= plugin slug,
    required by wordpress.org). **No translation catalogs or manual translation
    loader belong in the plugin or repository**: WordPress automatically loads
    the language packs built by translate.wordpress.org. Translations are managed

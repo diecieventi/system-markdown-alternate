@@ -1,7 +1,5 @@
 # System Markdown Alternate
 
-> 🇮🇹 Preferisci l'italiano? Leggi il [README in italiano](README.it.md).
-
 A WordPress plugin that exposes a **clean Markdown version** of your content —
 readable by LLMs, AI agents and technical scraping tools. Every published post
 of the enabled types becomes available by appending `.md` to its permalink.
@@ -82,9 +80,7 @@ the ["Filters (public contract)"](AGENTS.md#filters-public-contract) section of
 ```
 .
 ├── README.md                     ← this file (GitHub)
-├── README.it.md                  ← Italian version of this file
 ├── AGENTS.md                     ← operational guide (tool-agnostic; CLAUDE.md is a symlink)
-├── AGENTS.it.md                  ← Italian translation of the guide
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
