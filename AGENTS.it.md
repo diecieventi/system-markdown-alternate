@@ -39,6 +39,10 @@ composer install --working-dir=system-markdown-alternate
 
 # Builda lo zip distribuibile con vendor/ bundlato → DIST/system-markdown-alternate.zip
 bash bin/build.sh
+
+# Crea + pusha i tag di release mancanti, note dal changelog di readme.txt.
+# Lo lancia L'UTENTE dal Mac (l'ambiente web non può pushare tag); --dry-run per l'anteprima
+bash bin/release-tag.sh
 ```
 
 ## Stato attuale (v0.22.x)
@@ -312,11 +316,12 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   release: bump in `system-markdown-alternate.php` (header `Version:` **e**
   `SYSMDA_VERSION`), aggiorna `Stable tag` + changelog in `readme.txt`, `bash bin/build.sh`,
   commit, push del branch e apertura della PR (vedi il workflow git qui sotto).
-  **Insieme a ogni PR di release, consegnare all'utente il comando pronto da
-  incollare** nel terminale per creare il tag annotato dal Mac dopo il merge:
-  messaggio del tag = versione + voci del changelog di quella release
-  (compaiono come "Notes" nella pagina Tags di GitHub). Mai lasciare che
-  l'utente crei il tag a mano.
+  Dopo il merge di una PR di release, l'utente lancia `bash bin/release-tag.sh`
+  dal Mac: trova gli eventuali tag `vX.Y.Z` mancanti, li crea annotati sul
+  commit di release con le voci del changelog di quella versione come note
+  (compaiono come "Notes" nella pagina Tags di GitHub) e li pusha.
+  **Ricordare all'utente di lanciarlo nel messaggio di consegna della PR di
+  release**; mai lasciare che si costruisca un tag a mano.
 - **Git — workflow a PR (deciso luglio 2026, sostituisce la vecchia regola
   "diretto su `main`")**: **nessun agente (Claude Code, Codex o altro tool)
   pusha mai direttamente su `main`**. Ogni lavoro:
@@ -394,6 +399,7 @@ livello WP.
 ├── .github/workflows/deploy-wordpress-org.yml  ← deploy SVN (pronto, non attivo: servono i secret SVN + una Release pubblicata)
 ├── .wordpress-org/               ← assets scheda wordpress.org (icona, banner)
 ├── bin/build.sh                  ← genera DIST/system-markdown-alternate.zip
+├── bin/release-tag.sh            ← crea + pusha i tag di release mancanti (utente, dal Mac)
 ├── DIST/                         ← zip distribuibile (versionato)
 └── system-markdown-alternate/    ← IL PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (autoloader Composer)
@@ -570,8 +576,10 @@ come richiesto da WordPress.org Plugin Check per verificare le dipendenze.
   sul tag della versione.
 - **Tag Git**: annotati, `vX.Y.Z` sul commit squashato della release su `main`
   (es. `v0.18.0`); aggiunti retroattivamente da `v0.17.1` in poi. Li crea e
-  pusha **l'utente dal Mac** dopo il merge della PR di release (il proxy di
-  Claude Code web rifiuta il push dei tag). Non servono per lo sviluppo
+  pusha **l'utente dal Mac** con `bash bin/release-tag.sh` dopo il merge della
+  PR di release (il proxy di Claude Code web rifiuta il push dei tag; lo
+  script trova da solo i tag mancanti e usa il changelog come note). Non
+  servono per lo sviluppo
   locale — solo per le release SVN e per fissare una versione precisa su
   GitHub.
   Banner/icona/screenshot vivono nella
