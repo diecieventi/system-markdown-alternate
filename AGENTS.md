@@ -5,10 +5,10 @@ plugin: current state, decisions, structure, conventions and workflow. The
 functional state is documented here, in `README.md` and in the `readme.txt`
 changelog.
 
-> `CLAUDE.md` is a **symlink** to this file: Claude Code, Cursor, Copilot & co.
-> all read the same source of truth, with no duplicates to keep aligned. The few
-> notes specific to **Claude Code (web)** live in the dedicated section at the end
-> of "Identity, versioning, workflow"; other agents can ignore them.
+> `CLAUDE.md` is a **symlink** to this file: Claude Code, Codex, Cursor, Copilot
+> & co. all read the same source of truth, with no duplicates to keep aligned.
+> Agent-specific notes (Claude Code web, Codex) live in the dedicated section at
+> the end of "Identity, versioning, workflow".
 >
 > **Translations**: `AGENTS.it.md` and `README.it.md` are the Italian versions of
 > this file and of `README.md`. The English files are the **source of truth**;
@@ -306,31 +306,36 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Semver `0.x.y` versioning**: minor for new features, patch for fixes. On
   every release: bump `system-markdown-alternate.php` (both the `Version:` header
   **and** `SYSMDA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
-  `bash bin/build.sh`, commit, push.
-- **Git — single non-negotiable rule**: the **only destination for code is
-  `main`**. Single developer, no feature branches, **NEVER** open PRs (not even
-  on implicit request), **NEVER** leave work on a technical branch. Atomic
-  commits. The user syncs their Mac manually with a single `git pull origin
-  main`: no other steps, no "push here / merge there".
+  `bash bin/build.sh`, commit, push the branch and open the PR (see the git
+  workflow below).
+- **Git — PR workflow (decided July 2026, replaces the old "direct to `main`"
+  rule)**: **no agent (Claude Code, Codex, or any other tool) ever pushes to
+  `main` directly**. Every piece of work:
+  1. lives on its **own branch** — the branch imposed by the harness
+     (`claude/*`, `codex/*`, …) is fine as-is; create one if the environment
+     does not provide it. Atomic commits there, as always.
+  2. push the branch (`git push -u origin <branch>`) and **open a PR to
+     `main`** with a clear English title and description.
+  3. **the user merges from the GitHub UI with "Squash and merge"** — `main`
+     history stays linear, one commit per PR, no merge commits. Agents do
+     NOT merge PRs themselves unless the user explicitly asks in that session.
+  4. CI (lint + pure-logic tests on PHP 7.4/8.4) runs on every PR: a red PR
+     must not be merged — fix the branch first.
+  If `main` moves while a PR is open, rebase the branch on `origin/main` and
+  push with `--force-with-lease`. The user still syncs their Mac with a single
+  `git pull origin main`, unchanged.
 
-### Claude Code (web) — specific
+### Agent-specific notes (Claude Code web, Codex, …)
 
-Note valid only for the **Claude Code on the web** environment (other agents can
-ignore it). Fixed procedure, **permanent permission** from the user (never ask
-again): the harness forces work to start on a `claude/*` technical branch. Commit
-there normally, then **at the end of the work land on `main` only**:
-
-1. `git fetch origin main`
-2. `git checkout main && git merge --ff-only origin/main` (align the local main)
-3. `git merge --ff-only <technical-branch>` to bring the commits onto `main`
-   (if the fast-forward is not possible because `main` moved ahead, `git rebase
-   main` on the technical branch and repeat the ff-merge — history stays linear,
-   **no merge commits**)
-4. `git push origin main`
-
-The technical branch is **only the staging imposed by the environment**: it is
-not pushed, it creates no PRs, it is not merged via UI. Ignore it after the
-consolidation.
+- **Claude Code (web)**: the `claude/*` branch the harness creates IS the PR
+  branch — commit there, push it, open the PR (GitHub MCP tools). The old
+  "consolidate onto `main` with ff-merges" procedure is **retired**: never
+  push `main` from this environment. The environment's git proxy rejects tag
+  pushes (403): leave release tags to the user (see the SVN section).
+- **Codex and any other agent**: same rule, no exceptions — work on a
+  dedicated branch (e.g. `codex/<topic>`), push it, open a PR to `main`, let
+  the user merge. Code-review fixes follow the same path: a PR, never a
+  commit to `main`.
 
 ## Compatibility with known plugins / test environment
 
@@ -554,10 +559,11 @@ required for dependency review by WordPress.org Plugin Check.
   `0.18.0`). **Activation, once accepted on wordpress.org**: add the
   `SVN_USERNAME` / `SVN_PASSWORD` repository secrets, then publish a GitHub
   Release on the version tag.
-- **Git tags**: annotated, `vX.Y.Z` on the commit that bumps the version (e.g.
-  `v0.18.0`); retroactively added from `v0.17.1` onward. Not required for local
-  development — only for SVN releases and for pinning a specific version on
-  GitHub.
+- **Git tags**: annotated, `vX.Y.Z` on the squashed release commit on `main`
+  (e.g. `v0.18.0`); retroactively added from `v0.17.1` onward. Created and
+  pushed **by the user from the Mac** after merging the release PR (the Claude
+  Code web proxy rejects tag pushes). Not required for local development —
+  only for SVN releases and for pinning a specific version on GitHub.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.

@@ -311,29 +311,36 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
 - **Versionamento semver `0.x.y`**: minor per nuove feature, patch per fix. A ogni
   release: bump in `system-markdown-alternate.php` (header `Version:` **e**
   `SYSMDA_VERSION`), aggiorna `Stable tag` + changelog in `readme.txt`, `bash bin/build.sh`,
-  commit, push.
-- **Git — regola unica e inderogabile**: l'**unica destinazione del codice è `main`**.
-  Unico sviluppatore, niente feature branch, **MAI** aprire PR (nemmeno su richiesta
-  implicita), **MAI** lasciare il lavoro su un branch tecnico. Commit atomici. L'utente
-  sincronizza il Mac manualmente con un solo `git pull origin main`: nessun altro passaggio,
-  niente "push qui / merge là".
+  commit, push del branch e apertura della PR (vedi il workflow git qui sotto).
+- **Git — workflow a PR (deciso luglio 2026, sostituisce la vecchia regola
+  "diretto su `main`")**: **nessun agente (Claude Code, Codex o altro tool)
+  pusha mai direttamente su `main`**. Ogni lavoro:
+  1. vive su un **proprio branch** — quello imposto dall'harness (`claude/*`,
+     `codex/*`, …) va bene così com'è; se l'ambiente non lo fornisce, crearne
+     uno. Lì commit atomici, come sempre.
+  2. push del branch (`git push -u origin <branch>`) e **apertura di una PR
+     verso `main`** con titolo e descrizione chiari in inglese.
+  3. **il merge lo fa l'utente dalla UI di GitHub con "Squash and merge"** —
+     la storia di `main` resta lineare, un commit per PR, niente merge commit.
+     Gli agenti NON mergiano le PR da soli, salvo richiesta esplicita
+     dell'utente in quella sessione.
+  4. la CI (lint + test pure-logic su PHP 7.4/8.4) gira su ogni PR: una PR
+     rossa non si mergia — prima si sistema il branch.
+  Se `main` avanza mentre una PR è aperta, rebase del branch su `origin/main`
+  e push con `--force-with-lease`. L'utente continua a sincronizzare il Mac
+  con un solo `git pull origin main`, invariato.
 
-### Claude Code (web) — specifico
+### Note specifiche per agente (Claude Code web, Codex, …)
 
-Nota valida solo per l'ambiente **Claude Code on the web** (gli altri agenti la
-ignorano). Procedura fissa, **permesso permanente** dell'utente (non richiederlo
-mai): l'harness obbliga a partire su un branch tecnico `claude/*`. Si committa lì
-normalmente, poi **a fine lavoro si atterra solo su `main`**:
-
-1. `git fetch origin main`
-2. `git checkout main && git merge --ff-only origin/main` (allinea il main locale)
-3. `git merge --ff-only <branch-tecnico>` per portare i commit su `main`
-   (se il fast-forward non è possibile perché `main` è avanzato, fare `git rebase main`
-   sul branch tecnico e ripetere il ff-merge — la storia resta lineare, **niente merge commit**)
-4. `git push origin main`
-
-Il branch tecnico è **solo lo staging imposto dall'ambiente**: non si pusha, non
-genera PR, non va mergiato via interfaccia. Si ignora dopo il consolidamento.
+- **Claude Code (web)**: il branch `claude/*` creato dall'harness È il branch
+  della PR — committare lì, pusharlo, aprire la PR (tool MCP GitHub). La
+  vecchia procedura "consolidare su `main` con ff-merge" è **ritirata**: mai
+  pushare `main` da questo ambiente. Il proxy git dell'ambiente rifiuta il
+  push dei tag (403): i tag di release li fa l'utente (vedi sezione SVN).
+- **Codex e ogni altro agente**: stessa regola, senza eccezioni — lavorare su
+  un branch dedicato (es. `codex/<argomento>`), pusharlo, aprire una PR verso
+  `main`, lasciare il merge all'utente. Anche i fix da code review seguono lo
+  stesso percorso: una PR, mai un commit su `main`.
 
 ## Compatibilità con plugin noti / ambiente di test
 
@@ -556,10 +563,12 @@ come richiesto da WordPress.org Plugin Check per verificare le dipendenze.
   **Attivazione, una volta accettati su wordpress.org**: aggiungere i secret di
   repository `SVN_USERNAME` / `SVN_PASSWORD`, poi pubblicare una Release GitHub
   sul tag della versione.
-- **Tag Git**: annotati, `vX.Y.Z` sul commit che fa il bump di versione (es.
-  `v0.18.0`); aggiunti retroattivamente da `v0.17.1` in poi. Non servono per lo
-  sviluppo locale — solo per le release SVN e per fissare una versione precisa
-  su GitHub.
+- **Tag Git**: annotati, `vX.Y.Z` sul commit squashato della release su `main`
+  (es. `v0.18.0`); aggiunti retroattivamente da `v0.17.1` in poi. Li crea e
+  pusha **l'utente dal Mac** dopo il merge della PR di release (il proxy di
+  Claude Code web rifiuta il push dei tag). Non servono per lo sviluppo
+  locale — solo per le release SVN e per fissare una versione precisa su
+  GitHub.
   Banner/icona/screenshot vivono nella
   `/assets` dell'SVN (non nel plugin) e si aggiornano con
   `10up/action-wordpress-plugin-asset-update` dalla cartella `.wordpress-org/`
