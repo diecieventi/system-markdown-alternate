@@ -153,6 +153,8 @@ Lo scope v1 è realizzato e ampiamente superato. Implementato:
   salvataggio, sanitizzazione e nonce sono invariati. CSS scopato + piccolo
   enhancement vanilla-JS senza dipendenze (`assets/admin-settings.js`); usabile
   anche senza JS (tutti i pannelli visibili). Asset caricati solo nella pagina.
+  Un link azione "Settings" sulla riga del plugin nella lista Plugin porta al
+  pannello.
 - **i18n**: stringhe del pannello in `__()`/`esc_html__()` (sorgente **inglese**),
   text domain `system-markdown-alternate` (= slug del plugin). **Nessuna
   traduzione bundlata e nessun loader manuale**: i language pack

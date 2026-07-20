@@ -36,6 +36,9 @@ class AdminSettings {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
+		// "Settings" action link on the plugin row in the Plugins list.
+		add_filter( 'plugin_action_links_' . plugin_basename( SYSMDA_PLUGIN_FILE ), array( $this, 'add_settings_link' ) );
+
 		// Invalidate the Markdown cache when a plugin option changes.
 		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
 		add_action( 'updated_option', array( $this, 'maybe_bump_cache_salt' ) );
@@ -67,6 +70,26 @@ class AdminSettings {
 		$bumped = true;
 
 		update_option( 'sysmda_cache_salt', (string) time() );
+	}
+
+	/**
+	 * Prepends a "Settings" link to the plugin's action links in the Plugins list.
+	 *
+	 * @param array $links Existing action links (Deactivate, ...).
+	 * @return array Action links with the Settings link first.
+	 */
+	public function add_settings_link( $links ): array {
+		$links = (array) $links;
+
+		$settings_link = sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( 'options-general.php?page=' . self::PAGE ) ),
+			esc_html__( 'Settings', 'system-markdown-alternate' )
+		);
+
+		array_unshift( $links, $settings_link );
+
+		return $links;
 	}
 
 	public function add_menu(): void {

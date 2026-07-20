@@ -153,7 +153,8 @@ The v1 scope is done and widely exceeded. Implemented:
   **all fields stay in the single form** (tabs show/hide client-side), so saving,
   sanitization and nonces are unchanged. Admin-scoped CSS + a tiny dependency-free
   vanilla-JS enhancement (`assets/admin-settings.js`); usable without JS (all
-  panels visible). Assets loaded only on the settings screen.
+  panels visible). Assets loaded only on the settings screen. A "Settings"
+  action link on the plugin row in the Plugins list points to the panel.
 - **i18n**: panel strings in `__()`/`esc_html__()` (**English** source), text
   domain `system-markdown-alternate` (= plugin slug). **No bundled translations
   and no manual translation loader**: language packs come from

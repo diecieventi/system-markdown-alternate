@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.22.1
+Stable tag: 0.23.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -182,6 +182,10 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.23.0 =
+* New "Settings" action link on the plugin row in the Plugins list, pointing
+  to the settings page (Settings → Markdown Alternate).
 
 = 0.22.1 =
 * Clearer guidance for the LiteSpeed cache compatibility option: when LiteSpeed
