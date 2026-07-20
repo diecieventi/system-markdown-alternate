@@ -582,6 +582,15 @@ come richiesto da WordPress.org Plugin Check per verificare le dipendenze.
   servono per lo sviluppo
   locale — solo per le release SVN e per fissare una versione precisa su
   GitHub.
+- **Release GitHub**: opzionali (il tag con le note è la base), ma quando se ne
+  pubblica una DEVE avere in allegato lo zip buildato del plugin
+  `DIST/system-markdown-alternate.zip` — gli archivi "Source code" generati
+  automaticamente non sono un plugin installabile. Un solo comando, lanciato
+  dall'utente dal Mac dopo `bin/release-tag.sh`:
+  `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip`
+  (zip dimenticato? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
+  Nota: pubblicare una Release fa partire il workflow di deploy SVN, che
+  fallisce in modo innocuo finché i secret SVN non sono configurati (vedi sopra).
   Banner/icona/screenshot vivono nella
   `/assets` dell'SVN (non nel plugin) e si aggiornano con
   `10up/action-wordpress-plugin-asset-update` dalla cartella `.wordpress-org/`

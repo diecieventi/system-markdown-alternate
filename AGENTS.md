@@ -576,6 +576,15 @@ required for dependency review by WordPress.org Plugin Check.
   script finds the missing tags itself and uses the changelog as the tag
   notes). Not required for local development —
   only for SVN releases and for pinning a specific version on GitHub.
+- **GitHub Releases**: optional (the tag with notes is the baseline), but when
+  one is published it MUST attach the built plugin zip
+  `DIST/system-markdown-alternate.zip` as an asset — the auto-generated
+  "Source code" archives are not an installable plugin. One command, run by
+  the user from the Mac after `bin/release-tag.sh`:
+  `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip`
+  (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
+  Note: publishing a Release triggers the SVN deploy workflow, which fails
+  harmlessly until the SVN secrets are configured (see above).
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
