@@ -1,203 +1,172 @@
-# Piano: `/llms.txt` multilingua (fase 1 — solo modalità directory)
+# Piano: traduzioni in `/llms.txt` (sezione dedicata)
 
 ## Context
 
 Oggi `LlmsTxtController` elenca i contenuti con una singola `get_posts()`
-(`src/LlmsTxtController.php:166`) senza alcun override di lingua. Con WPML o
-Polylang attivi quella query viene filtrata per la lingua del contesto della
-richiesta, e `/llms.txt` (che non ha prefisso di lingua) gira nella lingua di
-default: **l'indice copre una sola lingua**, non tutto il sito.
+(`src/LlmsTxtController.php:166`) senza override di lingua. Con WPML o Polylang
+attivi quella query è filtrata per la lingua della richiesta, e `/llms.txt` (che
+non ha prefisso di lingua) gira nella lingua di default: l'indice mostra **solo
+la lingua di default** e le traduzioni non compaiono da nessuna parte.
 
-Obiettivo: quando è attivo un plugin multilingua (Polylang **o** WPML) **in
-modalità directory** (`sito.it/it/…`, `sito.it/en/…`) **con più di una lingua**,
-servire:
+Obiettivo (scope ridotto, deciso con l'utente):
 
-```
-/llms.txt        → indice della lingua di default + sezione "## Translations" con i link
-/it/llms.txt     → contenuti italiani
-/en/llms.txt     → contenuti inglesi
-/de/llms.txt     → contenuti tedeschi
-```
+- **Un solo `/llms.txt`, esattamente com'è ora.** Nessun endpoint per-lingua
+  (`/it/llms.txt`, `/en/llms.txt` — abbandonati), nessuna modifica al routing,
+  nessuna gestione della modalità directory.
+- Se sul sito ci sono altre lingue, **elencare le traduzioni in una sezione
+  dedicata** (`## Translations`) in fondo al file.
+- Le sezioni principali continuano a dipendere dai **CPT attivati nel pannello**
+  (`PostSupport::supported_post_types()`): `/llms.txt` può quindi elencare solo
+  articoli, o solo pagine, o altro, a seconda della configurazione. La sezione
+  traduzioni rispetta gli stessi tipi.
 
-**Gate stretto**: se non c'è un plugin multilingua, o la modalità URL non è
-directory, o c'è una sola lingua → **comportamento identico a oggi** (`/llms.txt`
-singolo). Coerente con la convenzione del plugin "feature off = output invariato"
-(come `enriched`/`lastmod`).
+Per ora basta questo: se ci sono traduzioni dei contenuti già elencati, listarle.
 
-Esito atteso: nessuna regressione sui siti monolingua; sui siti multilingua in
-directory mode, un indice per-lingua + un root che resta utile da solo.
+## Comportamento atteso
 
-## Scope boundaries (decisi con l'utente)
+- **Sito monolingua** (o nessun plugin multilingua): output **identico a oggi**.
+- **Sito multilingua** (Polylang o WPML, >1 lingua) con almeno una traduzione dei
+  contenuti elencati: in coda al file compare:
 
-- **Solo modalità directory.** Sottodominio/dominio separato: NON si servono
-  `/{lang}/llms.txt` — ogni host ha già il suo `/llms.txt` nella propria lingua
-  via il contesto `home_url()` esistente. Solo da documentare, nessun codice.
-- **Root = indice lingua default + riferimenti alle traduzioni**, non un puro
-  switchboard: `/llms.txt` mantiene contenuto reale (no regressione per i crawler
-  che leggono solo il root) e aggiunge una sezione `## Translations`.
-- Copertura: **Polylang + WPML** tramite un adapter.
+  ```
+  ## Translations
+
+  ### English
+  - [Post title (EN)](https://sito.it/en/post.md)
+  - [Page title (EN)](https://sito.it/en/page.md)
+
+  ### Deutsch
+  - [Titel (DE)](https://sito.it/de/titel.md)
+  ```
+
+  Raggruppato per lingua (heading `###` col nome nativo), voci nello stesso
+  formato del resto del file (`- [titolo](url.md)`). `## Translations` è un
+  heading libero in inglese, come `Optional`/`updated:` (stessa convenzione di
+  non-traduzione già in uso). Lingue senza traduzioni servibili → saltate;
+  nessuna traduzione in nessuna lingua → **la sezione non viene emessa**.
 
 ## Componenti
 
 ### 1. Nuova classe `MultilingualAdapter` (`src/MultilingualAdapter.php`)
 
-Astrazione su Polylang/WPML, stessa filosofia di `ConflictDetector` (solo segnali
-locali stabili — costanti/classi/opzioni del plugin, nessuna chiamata di rete).
-Metodi:
+Astrazione minima su Polylang/WPML, stessa filosofia di `ConflictDetector` (solo
+segnali locali stabili — costanti/classi/funzioni del plugin, nessuna chiamata di
+rete). Metodi:
 
 - `is_active(): bool`
-  - Polylang: `function_exists('pll_languages_list')` o `defined('POLYLANG_VERSION')`.
+  - Polylang: `function_exists('pll_get_post_translations')` o `defined('POLYLANG_VERSION')`.
   - WPML: `defined('ICL_SITEPRESS_VERSION')` o `class_exists('SitePress')`.
-- `is_directory_mode(): bool`
-  - Polylang: `get_option('polylang')['force_lang'] === 1` (1 = directory;
-    2 = sottodominio, 3 = dominio, 0 = nessuna modifica URL). In alternativa
-    `is_a(PLL()->links_model, 'PLL_Links_Directory')`.
-  - WPML: `(int) apply_filters('wpml_setting', 0, 'language_negotiation_type') === 1`
-    (1 = directory; 2 = dominio/sottodominio, 3 = parametro).
-- `languages(): string[]` — slug lingua (es. `['it','en','de']`).
+- `languages(): string[]` — slug di tutte le lingue attive (es. `['it','en','de']`).
   - Polylang: `pll_languages_list()`.
   - WPML: `array_keys((array) apply_filters('wpml_active_languages', null))`.
-- `default_language(): string` — Polylang `pll_default_language()`;
-  WPML `apply_filters('wpml_default_language', null)`.
-- `language_name(string $lang): string` — nome nativo per la sezione Translations
-  (Polylang `pll_languages_list(['fields'=>'name'])` mappato per slug; WPML
-  `icl_get_languages('skip_missing=0')[$lang]['native_name']`).
-- `llms_txt_url(string $lang): string` — URL assoluto del file per-lingua.
-  Costruito dall'home URL della lingua per rispettare l'opzione "nascondi
-  prefisso lingua default": Polylang `rtrim(pll_home_url($lang),'/').'/llms.txt'`;
-  WPML equivalente via `apply_filters('wpml_permalink', home_url('/'), $lang)`.
-- `build_for_language(string $lang, callable $fn)` — esegue `$fn` (che fa le
-  `get_posts` e costruisce l'indice) nel contesto lingua corretto:
-  - **WPML**: `do_action('wpml_switch_language', $lang)` → `$fn()` →
-    `do_action('wpml_switch_language', $restore)` (switch/restore).
-  - **Polylang**: non serve switch globale — Polylang onora il query var `lang`
-    per singola query. L'adapter espone anche `post_query_args(string $lang): array`
-    che ritorna `['lang' => $lang]` (Polylang) o `[]` (WPML), da mergiare negli
-    argomenti di `get_posts`. `build_for_language` per Polylang è quindi un
-    passthrough che esegue `$fn()`.
+- `default_language(): string`
+  - Polylang: `pll_default_language()`. WPML: `apply_filters('wpml_default_language', null)`.
+- `language_name(string $lang): string` — nome nativo per l'heading `###`.
+  - Polylang: mappa da `pll_languages_list(['fields' => 'name'])`.
+  - WPML: `icl_get_languages('skip_missing=0')[$lang]['native_name']`.
+- `translations(int $post_id, string $post_type): array<string,int>` — mappa
+  `lang => post_id` delle traduzioni del post (inclusa la propria lingua; il
+  chiamante esclude quella della voce principale).
+  - Polylang: `pll_get_post_translations($post_id)`.
+  - WPML: per ogni lingua, `apply_filters('wpml_object_id', $post_id, $post_type, false, $lang)`.
 
-> Nota: `MetadataBuilder::markdown_url()` (`src/MetadataBuilder.php:61`) usa
-> `get_permalink()`, che restituisce già il permalink tradotto per il post
-> corretto → i link `.md` di ogni indice per-lingua sono automaticamente giusti.
-> Nessuna modifica lì.
+> Nota: nessun rilevamento della modalità URL. `MetadataBuilder::markdown_url()`
+> (`src/MetadataBuilder.php:61`) usa `get_permalink()`, che restituisce già
+> l'URL corretto del post tradotto in **qualsiasi** modalità (directory,
+> sottodominio, dominio) → i link `.md` delle traduzioni sono automaticamente
+> giusti, senza logica di routing.
 
-### 2. Routing in `LlmsTxtController::maybe_render_llms_txt()` (`src/LlmsTxtController.php:43`)
+### 2. Sezione traduzioni in `LlmsTxtController::build()` (`src/LlmsTxtController.php:114`)
 
-- Nuovo **helper statico puro** (unità testabile senza WP):
-  `resolve_llms_target(string $path, string $home_path, array $languages): array`
-  → `['mode' => 'index', 'lang' => null]` (root),
-    `['mode' => 'language', 'lang' => 'it']`,
-    o `['mode' => 'none']` (non è un endpoint llms.txt).
-  Gestisce: prefisso `$home_path` (install in sottocartella), suffisso
-  `/llms.txt`, segmento intermedio che deve combaciare con uno slug lingua noto,
-  trailing slash.
-- Il gate multilingua costruisce `$languages` solo se
-  `adapter->is_active() && adapter->is_directory_mode() && count(languages) > 1`;
-  altrimenti `$languages = []` → il resolver riconosce solo il root `/llms.txt`
-  (comportamento odierno).
-- Redirect trailing-slash già presente: estenderlo per `/{lang}/llms.txt/`.
+- Il loop principale resta invariato. Durante il loop, **raccogliere gli ID (e il
+  post_type) dei post già elencati**, per riusarli senza query aggiuntive.
+- Dopo il loop principale (e dopo `Optional`/`footer`), se
+  `adapter->is_active() && count(languages) > 1`:
+  1. Per ogni post elencato, `adapter->translations($id, $post_type)`.
+  2. Raggruppare per lingua, **escludendo la lingua di default** (già nel corpo
+     principale) e i post non servibili (`PostSupport::is_servable()` — published,
+     non password-protected: stessa regola dell'endpoint `.md`). Deduplicare per ID.
+  3. Emettere `## Translations`, poi un `### <nome lingua>` per ogni lingua con
+     almeno una traduzione, con le voci `item_line()` (riuso di
+     `MetadataBuilder::markdown_url()` e `escape_link_text()`).
+- Se la mappa risultante è vuota → non emettere nulla (gate finale).
+- `enriched`/`lastmod` si applicano anche qui riusando `item_line($post, $enriched, $with_lastmod)`.
 
-### 3. Build output — refactor `build()` (`src/LlmsTxtController.php:114`)
+### 3. Cache e invalidazione — **nessuna modifica**
 
-- Estrarre l'attuale loop per post-type in `build_index(?string $lang): string`:
-  - `$lang === null` → identico a oggi.
-  - `$lang` valorizzato → esegue le `get_posts` dentro
-    `adapter->build_for_language($lang, …)` + merge di `post_query_args($lang)`
-    negli argomenti (riga `src/LlmsTxtController.php:166`). Tutto il resto
-    (`enriched`, `lastmod`, `Key content`, `Optional`, `footer`) resta invariato,
-    gira solo nel contesto lingua.
-- Root con multilingua attivo: `build_index(default_language())` +
-  append di una sezione:
-  ```
-  ## Translations
+- File unico → chiave cache unica `sysmda_llms_txt` (invariata).
+- Invalidazione `MarkdownController::invalidate_cache()` (`src/MarkdownController.php:118-119`)
+  già cancella `LlmsTxtController::CACHE_KEY`: quando si salva/aggiorna una
+  traduzione scatta `save_post` → cache azzerata. Nessun `flush_cache`, nessuna
+  chiave per-lingua.
 
-  - [Italiano](https://sito.it/it/llms.txt)
-  - [English](https://sito.it/en/llms.txt)
-  - [Deutsch](https://sito.it/de/llms.txt)
-  ```
-  ("Translations" è un heading libero, in inglese come `Optional`/`updated:` —
-  stessa convenzione di non-traduzione già in uso).
-
-### 4. Cache per-lingua
-
-- Helper `cache_key(?string $lang)`: root/default → `sysmda_llms_txt` (invariato,
-  preserva la cache esistente); lingua → `sysmda_llms_txt_{lang}`.
-- `render()` (`src/LlmsTxtController.php:76`) legge/scrive la chiave risolta.
-  Il version-hash (`SYSMDA_VERSION|cache_salt`) resta e continua a invalidare
-  tutte le varianti al salvataggio impostazioni (salt bump).
-- **Invalidazione su save_post**: `MarkdownController::invalidate_cache()`
-  (`src/MarkdownController.php:118-119`) oggi cancella solo `CACHE_KEY`. Aggiungere
-  un metodo statico `LlmsTxtController::flush_cache()` che cancella la chiave base
-  **e** ogni `sysmda_llms_txt_{lang}` (quando l'adapter è attivo, itera
-  `languages()`), e chiamarlo da `invalidate_cache()`. Non sappiamo a basso costo
-  quale lingua è cambiata → cancelliamo tutte le varianti.
-
-### 5. Registrazione / gating (`src/Plugin.php:42`)
+### 4. Registrazione / gating (`src/Plugin.php:42`)
 
 - Iniettare l'adapter: `new LlmsTxtController($metadata, new MultilingualAdapter())`.
-- Tutto il comportamento nuovo dietro il gate del punto 2; senza gate la classe
-  si comporta esattamente come oggi.
+- La sezione compare solo con plugin multilingua attivo, >1 lingua e ≥1 traduzione
+  servibile; altrimenti output identico a oggi.
 
-### 6. Nota informativa nel pannello admin (opzionale, leggera)
+### 5. Nota informativa nel pannello admin (opzionale, leggera)
 
-In `AdminSettings.php`, nell'aside della sezione llms.txt (riusa il pattern
-esistente dello status/conflict aside):
-- multilingua attivo + directory + >1 lingua → "Multilingual detected: serving
-  `/llms.txt` per language (`/it/llms.txt`, …)".
-- multilingua attivo ma NON directory → nota che l'indice per-lingua è servito
-  solo in modalità directory (in sottodominio/dominio ogni host ha già il suo
-  `/llms.txt`).
+In `AdminSettings.php`, aside della sezione llms.txt: quando l'adapter è attivo
+con >1 lingua, "Multilingual detected: translations are listed in `/llms.txt`."
 
 ## File toccati
 
 - **Nuovo**: `system-markdown-alternate/src/MultilingualAdapter.php`
-- `system-markdown-alternate/src/LlmsTxtController.php` — routing, resolver
-  statico, `build_index(?lang)`, sezione Translations, cache per-lingua,
-  `flush_cache()`.
+- `system-markdown-alternate/src/LlmsTxtController.php` — raccolta ID elencati +
+  sezione `## Translations`.
 - `system-markdown-alternate/src/Plugin.php` — iniezione adapter.
-- `system-markdown-alternate/src/MarkdownController.php` — invalidazione via
-  `LlmsTxtController::flush_cache()`.
 - `system-markdown-alternate/src/AdminSettings.php` — nota informativa (opzionale).
-- `system-markdown-alternate/tests/run-tests.php` — test del resolver + stub.
-- `AGENTS.md` / `README.md` — aggiornare il bullet llms.txt e "Product decisions"
-  (scope directory-only + gate stretto). Se si aggiunge un filtro pubblico
-  (es. `sysmda_llms_txt_languages` per override lista, o
-  `sysmda_llms_txt_multilingual` per forzare on/off), documentarlo in "Filters".
-- `system-markdown-alternate/uninstall.php` — verificare che la pulizia transient
-  `sysmda_*` copra già le chiavi `sysmda_llms_txt_{lang}` (probabile wildcard);
-  in caso, nessuna modifica.
+- `AGENTS.md` / `README.md` — aggiornare il bullet llms.txt. Se si aggiunge un
+  filtro pubblico (es. `sysmda_llms_txt_translations` per on/off, default on
+  quando multilingua è presente), documentarlo in "Filters (public contract)".
+- `system-markdown-alternate/tests/run-tests.php` — vedi sotto.
 
-## Limitazioni note (da documentare, non bloccanti)
+> Nessuna modifica a `MarkdownController.php` (cache invariata) né a
+> `uninstall.php` (nessuna opzione/chiave nuova).
 
-- `sysmda_llms_txt_key_content` è config globale (ID/URL), non per-lingua: gli
-  stessi elementi comparirebbero in ogni lingua salvo che l'utente li filtri.
-- Solo directory mode in questa fase (per scelta).
+## Test
+
+Gran parte della logica dipende dalle API runtime di Polylang/WPML e non è
+copribile con l'attuale harness pure-logic. Testabile senza WP:
+
+- il raggruppamento/dedup/esclusione-default della sezione traduzioni, se
+  estratto in un helper statico puro tipo
+  `group_translations(array $listed, array $translations_by_id, string $default): array`
+  (mappa `lang => [post_id...]`). Aggiungere i relativi test in
+  `tests/run-tests.php`.
+
+Il resto va validato su staging.
+
+## Limitazioni note (da documentare)
+
+- La sezione elenca le traduzioni dei **soli contenuti già presenti** nell'indice
+  principale (che dipende dai CPT attivi e dai limiti `sysmda_llms_txt_max_posts`).
+  Non è un crawl indipendente di tutte le traduzioni del sito.
+- `sysmda_llms_txt_key_content` resta config globale (non per-lingua).
 
 ## Verifica
 
-**Locale** (obbligatoria prima del commit):
-- `php system-markdown-alternate/tests/run-tests.php` — i nuovi test di
-  `resolve_llms_target()` passano (root, lingua valida, lingua sconosciuta,
-  trailing slash, install in sottocartella, path non-llms).
+**Locale** (prima del commit):
+- `php system-markdown-alternate/tests/run-tests.php` — passano i test dell'helper
+  di raggruppamento.
 - `php -l` sui file modificati.
 
-**Staging** (manuale, richiesta — lo stack ufficiale NON ha WPML/Polylang):
-serve un sito Polylang **e** uno WPML in **modalità directory**, ≥2 lingue.
-Usare uno User-Agent browser (il WAF può bloccare curl).
-- `GET /llms.txt` → indice lingua default + sezione `## Translations` con i link.
-- `GET /it/llms.txt`, `/en/llms.txt` → contenuti della lingua giusta, link `.md`
-  ai permalink tradotti corretti.
-- `GET /xx/llms.txt` (lingua inesistente) → fall-through (404/WP normale).
-- Passare il plugin a modalità sottodominio → i path per-lingua non rispondono,
-  `/llms.txt` invariato.
-- Sito monolingua → output identico a oggi.
-- Modifica di un post → `flush_cache()` azzera tutte le varianti (il fetch
-  successivo riflette la modifica).
+**Staging** (manuale — lo stack ufficiale NON ha WPML/Polylang): un sito Polylang
+**e** uno WPML, ≥2 lingue. User-Agent browser (il WAF può bloccare curl).
+- `GET /llms.txt` → corpo invariato (lingua default) + `## Translations` con
+  sotto-sezioni per lingua e link `.md` ai permalink tradotti corretti.
+- Post con traduzione mancante in una lingua → assente da quella sotto-sezione.
+- Traduzione in bozza/password-protected → esclusa.
+- Sito monolingua / plugin multilingua assente → output identico a oggi.
+- Modifica/aggiunta di una traduzione → `save_post` azzera la cache, il fetch
+  successivo la riflette.
 
 ## Ordine di esecuzione suggerito
 
-1. `MultilingualAdapter` + `resolve_llms_target()` (statico) + relativi test.
-2. Refactor `build_index(?lang)` + routing + sezione Translations.
-3. Cache per-lingua + `flush_cache()` + hook invalidazione.
+1. `MultilingualAdapter` (detection + `languages`/`default_language`/`language_name`/`translations`).
+2. `group_translations()` statico + test.
+3. Sezione `## Translations` in `build()` + iniezione adapter in `Plugin.php`.
 4. Nota admin (opzionale) + docs.
 5. `php -l` + test locali; poi validazione staging.
