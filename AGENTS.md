@@ -549,9 +549,15 @@ development, SVN is distribution only. What goes into SVN is **the content of th
 `system-markdown-alternate/` folder** (not the repo root: no `README.md`,
 `AGENTS.md`, `bin/`, `DIST/`, `.github/`), with **`vendor/` bundled** (runtime
 dependency). The plugin-folder exclusions live in
-`system-markdown-alternate/.distignore` (`tests/`, `composer.lock`). The
-production package intentionally keeps `composer.json` alongside `vendor/`, as
-required for dependency review by WordPress.org Plugin Check.
+`system-markdown-alternate/.distignore` (`tests/`, `composer.lock`, and the
+`league/html-to-markdown` **CLI binaries** — `vendor/bin` and
+`vendor/league/html-to-markdown/bin` — which the wordpress.org Plugin Check
+flags as "not permitted files"; they are never invoked at runtime, the plugin
+uses the library classes only). The same binary exclusions are mirrored in
+`bin/build.sh` and in the deploy workflow's `rsync` (both build a package
+without consulting `.distignore`). The production package intentionally keeps
+`composer.json` alongside `vendor/`, as required for dependency review by
+WordPress.org Plugin Check.
 
 - Manual flow: `bash bin/build.sh`, then copy the content into `svn/trunk` and
   tag it under `svn/tags/x.y.z`.

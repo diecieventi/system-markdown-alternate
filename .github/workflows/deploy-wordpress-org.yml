@@ -52,7 +52,9 @@ jobs:
           rsync -a system-markdown-alternate/ build/system-markdown-alternate/ \
             --exclude=tests \
             --exclude=.distignore \
-            --exclude=composer.lock
+            --exclude=composer.lock \
+            --exclude=vendor/bin \
+            --exclude=vendor/league/html-to-markdown/bin
 
       - name: Resolve plugin version from tag
         id: version

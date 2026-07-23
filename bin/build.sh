@@ -29,6 +29,10 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
 	-x "${PLUGIN_SLUG}/.distignore" \
 	-x "${PLUGIN_SLUG}/composer.lock" \
+	-x "${PLUGIN_SLUG}/vendor/bin/*" \
+	-x "${PLUGIN_SLUG}/vendor/bin/" \
+	-x "${PLUGIN_SLUG}/vendor/league/html-to-markdown/bin/*" \
+	-x "${PLUGIN_SLUG}/vendor/league/html-to-markdown/bin/" \
 	-x "*/tests/*" \
 	-x "*/tests/" \
 	-x "*/.git/*" \
