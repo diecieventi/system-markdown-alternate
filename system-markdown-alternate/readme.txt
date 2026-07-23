@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.23.0
+Stable tag: 0.23.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -182,6 +182,13 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.23.1 =
+* Packaging: exclude the bundled `league/html-to-markdown` command-line
+  binaries (`vendor/bin` and `vendor/league/html-to-markdown/bin`) from the
+  distributed plugin. They are never used at runtime (the plugin calls the
+  library classes directly) and are flagged as not-permitted files by the
+  WordPress.org Plugin Check. No functional change.
 
 = 0.23.0 =
 * New "Settings" action link on the plugin row in the Plugins list, pointing

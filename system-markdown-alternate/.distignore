@@ -8,3 +8,10 @@
 /tests
 /.distignore
 composer.lock
+
+# CLI binaries shipped by league/html-to-markdown. They are never invoked at
+# runtime (the plugin uses the library classes only) and the wordpress.org
+# Plugin Check flags them as "not permitted files", so keep them out of the
+# distributed package while still shipping the rest of vendor/.
+vendor/bin
+vendor/league/html-to-markdown/bin
