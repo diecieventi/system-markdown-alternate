@@ -41,7 +41,8 @@
 **Why first:** it is a concrete wordpress.org Plugin Check finding that blocks a
 clean validation — higher priority than any strategic feature below.
 
-**Implemented** per `FIX-PLAN-sanitize-register-setting-revised.md` (repo root):
+**Implemented** in v0.23.2 (see the `readme.txt` changelog; the standalone
+fix-plan note has been removed now that the work is merged):
 
 - `AdminSettings.php:157` registered `sysmda_excluded_classes` with the generic
   `sanitize_lines()` (→ `sanitize_text_field`). CSS classes need the
@@ -61,9 +62,14 @@ one **is** a release). Low risk, output unchanged.
 
 ---
 
-## PR 2 — Plan & documentation corrections (no runtime change, no version bump)
+## PR 2 — Plan & documentation corrections (done — no version bump)
 
 Cross-document factual fixes surfaced by the audit. Cheap, high credibility ROI.
+**Done** (this branch): AGENTS.md label bumped `v0.22.x → v0.23.x`; the noindex
+claim was already corrected in the strategy doc; README/readme softened the
+`Vary` "never mix" wording, corrected "transient cache" → persistent object
+cache with transient fallback, and aligned the menu label on "Markdown
+Alternate".
 
 1. **False noindex-gating claim.** `docs/strategy-review-2026-07.md` said
    protected/private/password/**noindex** gating is done via
@@ -91,7 +97,13 @@ version bump.
 
 ---
 
-## PR 3 — Documented, stable output format (F1)
+## PR 3 — Documented, stable output format (F1) — done
+
+**Done** (this branch): `docs/output-format.md` written; golden conformance
+tests added to `tests/run-tests.php` (full + minimal front-matter fixtures and
+scalar-escaping cases — 116 → 124 assertions); `readme.txt` FAQ entry + a
+`README.md` "Output format" section link the doc; AGENTS.md *Current state*
+notes it. No `src/` change, no version bump.
 
 **Goal:** turn "it converts to Markdown" into a versioned, testable contract.
 No code behaviour change — documentation + conformance tests that pin current
@@ -241,9 +253,9 @@ cases are known.
 ## Suggested sequencing
 
 1. **PR 1 = sanitize fix** — ✅ done (v0.23.2, wordpress.org blocker).
-2. **PR 2 = plan/doc corrections** — no version bump.
-3. **PR 3 = F1** (output-format doc + golden tests) — no version bump.
-4. **PR 4 = F3.1** (custom taxonomies + cache invalidation) — minor/patch release.
+2. **PR 2 = plan/doc corrections** — ✅ done (no version bump).
+3. **PR 3 = F1** (output-format doc + golden tests) — ✅ done (no version bump).
+4. **PR 4 = F3.1** (custom taxonomies + cache invalidation) — minor/patch release. ← **next**
 5. **Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) —
    independent; requires the WPML/Polylang staging reconnaissance first.
 6. **ACF structured (F3.2)** — later, case-driven only.

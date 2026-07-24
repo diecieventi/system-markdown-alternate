@@ -19,8 +19,13 @@ the residual real value is a niche-quality play. Full reasoning and the eliminat
 - **`docs/llms-txt-multilingual-plan.md`** — user-approved plan to list
   WPML/Polylang translations in the single `/llms.txt` (`## Translations`
   section). Independent; needs a staging reconnaissance pass first.
-- `FIX-PLAN-sanitize-register-setting-revised.md` (repo root) — the sanitize fix
-  detail (supersedes the original plan; implemented in v0.23.2).
+- **`docs/output-format.md`** — the F1 output-format contract (front-matter
+  keys/order, scalar escaping, body pipeline, HTTP contract), enforced by golden
+  tests in `tests/run-tests.php`.
+
+(The standalone `FIX-PLAN-sanitize-register-setting-revised.md` note was removed
+once its fix shipped in v0.23.2 — the detail lives in the `readme.txt`
+changelog.)
 
 Current `main` is **0.23.2**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
@@ -49,15 +54,17 @@ These come from `AGENTS.md` *Product decisions* and were re-confirmed here:
 Ordered work (`docs/tier1-implementation-plan.md`), each an independent PR to
 `main`:
 
-1. **Sanitize fix** for `register_setting()` — ✅ **done in v0.23.2**
-   (`FIX-PLAN-sanitize-register-setting-revised.md`). Was the wordpress.org
-   Plugin Check blocker.
-2. **Plan & doc corrections** — noindex claim, `AGENTS.md` version label,
-   `Vary`/cache-backend/menu wording. No version bump.
-3. **F1 — Documented, stable output format** (`docs/output-format.md` + golden
-   conformance tests). No `src/` change, no version bump.
+1. **Sanitize fix** for `register_setting()` — ✅ **done in v0.23.2**. Was the
+   wordpress.org Plugin Check blocker.
+2. **Plan & doc corrections** — ✅ **done**: noindex claim (already fixed in the
+   strategy doc), `AGENTS.md` version label (`v0.22.x → v0.23.x`),
+   `Vary`/cache-backend/menu wording in README/readme. No version bump.
+3. **F1 — Documented, stable output format** — ✅ **done**: `docs/output-format.md`
+   + golden conformance tests (116 → 124 assertions) + readme FAQ / README link.
+   No `src/` change, no version bump.
 4. **F3.1 — Custom taxonomies in front matter** (nested collision-safe
-   `taxonomies:` mapping + term-change cache invalidation). Runtime release.
+   `taxonomies:` mapping + term-change cache invalidation). ← **next up.**
+   Runtime release.
 5. **ACF structured extraction (F3.2)** — later, case-driven only; not now.
 
 **Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — independent:
