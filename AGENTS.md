@@ -38,8 +38,15 @@ php system-markdown-alternate/tests/run-tests.php
 # Lint a touched file
 php -l system-markdown-alternate/src/<File>.php
 
-# Install Composer dependencies locally (creates vendor/, required to run the plugin)
+# Install Composer dependencies locally (creates vendor/, required to run the plugin;
+# also installs the PHPCS/WPCS dev tooling — the build uses --no-dev, so it never ships)
 composer install --working-dir=system-markdown-alternate
+
+# Coding standards (PHPCS + WordPress Coding Standards); run from the plugin folder
+composer --working-dir=system-markdown-alternate phpcs    # report
+composer --working-dir=system-markdown-alternate phpcbf   # auto-fix what is fixable
+# NOTE: bin/build.sh runs `composer install --no-dev`, which REMOVES the tooling;
+# re-run the plain `composer install` above to get it back after a build.
 
 # Build the distributable zip with vendor/ bundled → DIST/system-markdown-alternate.zip
 bash bin/build.sh
@@ -410,7 +417,8 @@ running code at the WP level.
     ├── readme.txt                      ← wordpress.org format + changelog
     ├── uninstall.php                   ← options + transients cleanup
     ├── .distignore                     ← exclusions for the WP.org package (SVN)
-    ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4
+    ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4 (+ PHPCS dev tooling)
+    ├── phpcs.xml.dist                  ← WPCS ruleset (dev only, excluded from the package)
     ├── vendor/                         ← NOT versioned, zip only
     ├── assets/admin-settings.css       ← panel style (loaded only there)
     ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
@@ -452,6 +460,17 @@ running code at the WP level.
 - After changes: `php -l` on the touched files and
   `php system-markdown-alternate/tests/run-tests.php` (pure-logic tests, no WP;
   CI runs them on PHP 7.4 and 8.4).
+- **Coding standards (PHPCS + WPCS)**: `composer phpcs` from the plugin folder;
+  `composer phpcbf` auto-fixes the mechanical ones. Config in
+  `system-markdown-alternate/phpcs.xml.dist` — `WordPress-Core` +
+  `WordPress-Extra` + `PHPCompatibilityWP` (target `7.4-`, min WP 6.1).
+  Deliberately **not** enabled: `WordPress-Docs` (its mandatory `@param` tags
+  are redundant with the native type declarations used here) and
+  `WordPress.Files.FileName` (conflicts with PSR-4 class filenames). CI gates on
+  **errors**; warnings are annotated but do not fail the build. Genuine
+  third-party names (`DONOTCACHEPAGE`, LiteSpeed hooks) carry an inline
+  `phpcs:ignore` with the reason — use that mechanism, with a justification,
+  rather than widening the ruleset.
 
 ## Filters (public contract)
 

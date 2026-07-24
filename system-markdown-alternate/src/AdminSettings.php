@@ -24,9 +24,9 @@ class AdminSettings {
 	const OPTION_GROUP = 'sysmda_options';
 
 	/** Exclusion defaults (displayed in the panel for reference only). */
-	const DEFAULT_SHORTCODES   = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
-	const DEFAULT_BLOCK_NAMES  = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
-	const DEFAULT_CSS_CLASSES  = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
+	const DEFAULT_SHORTCODES  = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
+	const DEFAULT_BLOCK_NAMES = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
+	const DEFAULT_CSS_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
 	/** @var string Settings page hook (used to load assets only on that page). */
 	private $hook = '';
@@ -151,26 +151,131 @@ class AdminSettings {
 
 	public function register_settings(): void {
 		// ── Opzioni sempre registrate ──────────────────────────────────────────
-		register_setting( self::OPTION_GROUP, 'sysmda_cache_ttl', array( 'type' => 'integer', 'sanitize_callback' => 'absint' ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_excluded_shortcodes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_excluded_block_names', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_class_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_enriched', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_lastmod', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_summary', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_key_content', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_litespeed_htaccess', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_md_hits_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_cache_ttl',
+			array(
+				'type'              => 'integer',
+				'sanitize_callback' => 'absint',
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_excluded_shortcodes',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_excluded_block_names',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_excluded_classes',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_class_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_supported_post_types',
+			array(
+				'type'              => 'array',
+				'sanitize_callback' => array( $this, 'sanitize_post_types' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_robots_header',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_llms_txt_enabled',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_llms_txt_enriched',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_llms_txt_lastmod',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_llms_txt_summary',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_textarea_field',
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_llms_txt_key_content',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_litespeed_htaccess',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_md_hits_enabled',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
 
 		// ACF options are registered ONLY when ACF is active. This prevents saving
 		// the form from clearing them when ACF is inactive and its fields are absent
 		// (options.php writes only options registered in the group).
 		if ( $this->acf_active() ) {
-			register_setting( self::OPTION_GROUP, 'sysmda_acf_subtitle_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
-			register_setting( self::OPTION_GROUP, 'sysmda_acf_tldr_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
+			register_setting(
+				self::OPTION_GROUP,
+				'sysmda_acf_subtitle_key',
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				)
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				'sysmda_acf_tldr_key',
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				)
+			);
 		}
 
 		// ── Generale ───────────────────────────────────────────────────────────
@@ -727,8 +832,8 @@ class AdminSettings {
 
 		$today   = gmdate( 'Y-m-d' );
 		$windows = array(
-			__( 'Today', 'system-markdown-alternate' )        => HitCounter::totals( $hits, $today, 1 ),
-			__( 'Last 7 days', 'system-markdown-alternate' )  => HitCounter::totals( $hits, $today, 7 ),
+			__( 'Today', 'system-markdown-alternate' ) => HitCounter::totals( $hits, $today, 1 ),
+			__( 'Last 7 days', 'system-markdown-alternate' ) => HitCounter::totals( $hits, $today, 7 ),
 			__( 'Last 30 days', 'system-markdown-alternate' ) => HitCounter::totals( $hits, $today, 30 ),
 		);
 

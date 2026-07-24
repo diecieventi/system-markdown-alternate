@@ -29,6 +29,8 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "${PLUGIN_SLUG}/.gitignore" \
 	-x "${PLUGIN_SLUG}/.distignore" \
 	-x "${PLUGIN_SLUG}/composer.lock" \
+	-x "${PLUGIN_SLUG}/phpcs.xml.dist" \
+	-x "${PLUGIN_SLUG}/phpcs.xml" \
 	-x "${PLUGIN_SLUG}/vendor/bin/*" \
 	-x "${PLUGIN_SLUG}/vendor/bin/" \
 	-x "${PLUGIN_SLUG}/vendor/league/html-to-markdown/bin/*" \

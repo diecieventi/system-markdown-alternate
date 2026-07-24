@@ -113,6 +113,25 @@ so it installs straight into WordPress without Composer on the server.
 
 Build environment: PHP ≥ 7.4, Composer and `zip`.
 
+## Coding standards
+
+The plugin follows the WordPress Coding Standards, checked with PHP_CodeSniffer
+(installed as a Composer dev dependency, so it is never shipped in the zip):
+
+```bash
+composer install --working-dir=system-markdown-alternate   # includes the dev tooling
+cd system-markdown-alternate
+composer phpcs     # report violations
+composer phpcbf    # auto-fix the mechanical ones
+```
+
+The ruleset lives in [`system-markdown-alternate/phpcs.xml.dist`](system-markdown-alternate/phpcs.xml.dist):
+`WordPress-Core` + `WordPress-Extra` plus `PHPCompatibilityWP` targeting PHP 7.4+.
+`WordPress.Files.FileName` is disabled because it conflicts with PSR-4 class
+filenames, and `WordPress-Docs` is not enabled because its mandatory `@param`
+tags are redundant with the native type declarations used throughout. CI fails
+on errors; warnings are reported as annotations.
+
 ## Requirements
 
 - WordPress ≥ 6.1

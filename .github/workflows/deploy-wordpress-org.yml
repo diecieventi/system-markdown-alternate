@@ -53,6 +53,8 @@ jobs:
             --exclude=tests \
             --exclude=.distignore \
             --exclude=composer.lock \
+            --exclude=phpcs.xml.dist \
+            --exclude=phpcs.xml \
             --exclude=vendor/bin \
             --exclude=vendor/league/html-to-markdown/bin
 
