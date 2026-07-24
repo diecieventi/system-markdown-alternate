@@ -15,12 +15,13 @@
 - Prefix everything `sysmda_` / `SYSMDA_`. `defined('ABSPATH') || exit;` on every
   file. Small single-responsibility classes. Escape output (YAML: quote/escape).
 - Every new filter gets a docblock and an entry in the *Filters (public
-  contract)* list in `AGENTS.md` (+ `AGENTS.it.md`).
+  contract)* list in `AGENTS.md`.
 - After changes: `php -l` on touched files + `php system-markdown-alternate/tests/run-tests.php`.
 - Per release/PR: bump `system-markdown-alternate.php` (`Version:` **and**
   `SYSMDA_VERSION`), update `readme.txt` (`Stable tag` + changelog), run
-  `bash bin/build.sh`, keep `README.md`/`README.it.md` + `AGENTS.md`/`AGENTS.it.md`
-  in sync in the same commit.
+  `bash bin/build.sh`, keep `README.md` + `AGENTS.md` up to date.
+- The repository is **English-only** (Italian docs removed in #5): do not create
+  `.it.md` files.
 
 ---
 
@@ -31,8 +32,7 @@ No code behaviour change — documentation + conformance tests that pin current
 output so future changes are deliberate.
 
 **Deliverables**
-1. `docs/output-format.md` (English, source of truth) + `docs/output-format.it.md`.
-   Document, from the code as it is today:
+1. `docs/output-format.md` (English). Document, from the code as it is today:
    - **Front matter** keys and order, exactly as emitted by
      `MetadataBuilder::build_front_matter()`: `title`, `url`, `markdown_url`,
      `date_published`, `date_modified`, `author` (if any), `featured_image` +
@@ -114,8 +114,8 @@ unit-tested (WP-dependent) — verify at WP level.
 
 **Touched:** `src/Diagnostics.php` (new), `src/AdminSettings.php`,
 possibly `src/ContentRenderer.php` / `src/BlockCleaner.php` (report hook),
-`tests/run-tests.php`, `AGENTS.md`/`AGENTS.it.md` (Current state + structure),
-`readme.txt` (changelog + FAQ), `README*.md`.
+`tests/run-tests.php`, `AGENTS.md` (Current state + structure),
+`readme.txt` (changelog + FAQ), `README.md`.
 
 **Acceptance:** no loopback anywhere (grep for `wp_remote_`/`curl` in the new
 code → none); panel renders for a servable post and correctly reports a
@@ -163,8 +163,8 @@ fixtures, and verify the wiring at WP level on the staging stack (GeneratePress/
 GenerateBlocks + ACF).
 
 **Touched:** `src/MetadataBuilder.php`, `src/AcfIntegration.php`,
-`tests/run-tests.php`, `AGENTS.md`/`AGENTS.it.md` (Current state + Filters),
-`readme.txt`, `README*.md`.
+`tests/run-tests.php`, `AGENTS.md` (Current state + Filters),
+`readme.txt`, `README.md`.
 
 **Acceptance:** custom taxonomy appears in front matter for a CPT with a custom
 taxonomy; a Repeater/Flexible/Gallery/Relationship field renders as readable

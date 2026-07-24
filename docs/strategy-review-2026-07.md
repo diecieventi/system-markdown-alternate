@@ -117,7 +117,10 @@ screenshot recapture.
    verification + fixes when they surface, not a standalone project.
 5. **C — WooCommerce** and **D — WPML/Polylang.** Valid but heavy, audience
    unconfirmed. Gate on the signal the analysis itself names as decisive: real,
-   recurring `.md` requests in the logs.
+   recurring `.md` requests in the logs. **Exception:** the WPML/Polylang slice
+   that lists translations in the single `/llms.txt` already has a scoped,
+   user-approved plan (`docs/llms-txt-multilingual-plan.md`) and can be built
+   independently of the log gate.
 
 ### Tier 3 — Skip / not now
 

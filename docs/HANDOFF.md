@@ -13,6 +13,13 @@ the residual real value is a niche-quality play. Full reasoning and the eliminat
 
 - **`docs/strategy-review-2026-07.md`** — the evaluation and priorities.
 - **`docs/tier1-implementation-plan.md`** — the concrete, ordered Tier 1 plan.
+- **`docs/llms-txt-multilingual-plan.md`** — pre-existing, user-approved plan to
+  list WPML/Polylang translations in the single `/llms.txt` (`## Translations`
+  section). This is the ready-to-build slice of the Tier 2 "multilingual" item.
+
+Current `main` is **0.23.1**. The repository is **English-only** (the Italian
+`AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
+`.it.md` files.
 
 ## The three durable constraints not to trip over
 
@@ -40,8 +47,10 @@ Tier 1, each an independent PR to `main` (see the plan for full detail):
    the front matter — only custom taxonomies + ACF complex types remain).
 
 Tier 2 (gate on real, recurring `.md` request logs before starting): WooCommerce,
-WPML/Polylang, `HEAD`/multisite/Varnish hardening. Tier 3 (skip): MCP/WebMCP/GEO
-score/AI-generation, loopback self-test, benchmark-as-feature.
+`HEAD`/multisite/Varnish hardening. The **WPML/Polylang** slice already has a
+scoped, user-approved plan in `docs/llms-txt-multilingual-plan.md` (translations
+in `/llms.txt`) — it can be built independently of the log gate. Tier 3 (skip):
+MCP/WebMCP/GEO score/AI-generation, loopback self-test, benchmark-as-feature.
 
 ## Positioning reminder
 
@@ -54,7 +63,8 @@ requests from important clients in the logs.
 
 - Branch → push → open PR to `main`; **user** squash-merges; **user** runs
   `bash bin/release-tag.sh` from the Mac. Agents never push `main` or tags.
-- English is the source of truth; update `*.it.md` in the **same commit**.
+- The repository is **English-only** — do not create `.it.md` translations
+  (removed in #5).
 - After changes: `php -l` on touched files + `php system-markdown-alternate/tests/run-tests.php`.
 - On release: bump `Version:` + `SYSMDA_VERSION`, `readme.txt` (`Stable tag` +
   changelog), `bash bin/build.sh`.
