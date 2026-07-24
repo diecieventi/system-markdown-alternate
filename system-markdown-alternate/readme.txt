@@ -29,8 +29,10 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **Content negotiation**: the same Markdown is returned for `Accept: text/markdown`
   or `?format=markdown` requests. The `Accept` header is parsed with q-values, so
   a client that prefers HTML (higher q) still gets HTML.
-* **`Vary: Accept`** on negotiable URLs, so caches and CDNs never mix the HTML and
-  Markdown representations of the same address.
+* **`Vary: Accept`** on negotiable URLs, so caches and CDNs that honour it keep the
+  HTML and Markdown representations of the same address apart. Because some page
+  caches key by URL only and ignore `Vary`, the negotiated Markdown (and `406`)
+  responses are also sent non-cacheable, so safety never depends on `Vary` alone.
 * **`rel="alternate"` link** in the `<head>` of supported singular content.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag`
   (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
@@ -43,8 +45,9 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   section for older posts. Another optional toggle appends the **last modified
   date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed
   content without re-fetching each URL.
-* **Transient cache** with proactive invalidation on post edit, plugin update
-  and settings change.
+* **Object cache** with proactive invalidation on post edit, plugin update and
+  settings change: a persistent object cache is used when one is available,
+  falling back to transients otherwise.
 * **Optional `.md` hit counter** (off by default): counts how many times the
   Markdown endpoint is served, split bot vs human. Privacy by design: only
   aggregate daily totals are stored — no IP addresses, no user-agent strings,
@@ -108,6 +111,15 @@ No rewrite rules are added, so no permalink flush is required.
 By default no post type is enabled. Open **Settings → Markdown Alternate** and
 tick at least one post type under **Supported post types**.
 
+= What does the Markdown output look like? =
+
+Each `.md` response is a UTF-8 document with a YAML front-matter block (title,
+URL, Markdown URL, published/modified dates, and — when available — author,
+featured image, categories, tags and a description), followed by the `# Title`
+heading and the post body converted to clean Markdown. The exact keys, their
+order and the escaping rules are documented as a stable contract, with
+conformance tests, in `docs/output-format.md` in the source repository.
+
 = How do I exclude part of a post from the Markdown? =
 
 Add one of the CSS classes `no-md`, `md-exclude` or `exclude-from-markdown` to a
@@ -130,7 +142,8 @@ link.
 
 = Is the .md content cached? =
 
-Yes, in a transient (default 24h). The cache is regenerated automatically when
+Yes (default 24h). It uses a persistent object cache when one is available and
+falls back to transients otherwise. The cache is regenerated automatically when
 the post is edited, when the plugin is updated, or when you save the settings.
 
 = Can I customize the plugin from my own code? =

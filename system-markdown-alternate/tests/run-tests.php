@@ -5,7 +5,8 @@
  * Usage:  php tests/run-tests.php
  *
  * Covers independently testable classes (AcceptNegotiator, BlockCleaner,
- * MetadataBuilder::markdown_url/description) through minimal stubs of the used WordPress functions.
+ * MetadataBuilder::markdown_url/description/build_front_matter) through minimal
+ * stubs of the used WordPress functions.
  * Exits with code 1 when at least one assertion fails.
  *
  * @package Diecieventi\SystemMarkdownAlternate
@@ -21,10 +22,13 @@ ini_set( 'display_errors', '1' );
 
 // ─── WordPress stubs (only what the tested classes need) ─────────────
 
-$GLOBALS['sysmda_test_posts']   = array(); // id → WP_Post
-$GLOBALS['sysmda_test_parsed']  = array(); // content → blocks
-$GLOBALS['sysmda_test_options'] = array(); // option → value
-$GLOBALS['sysmda_test_meta']    = array(); // post ID => meta key => value
+$GLOBALS['sysmda_test_posts']       = array(); // id → WP_Post
+$GLOBALS['sysmda_test_parsed']      = array(); // content → blocks
+$GLOBALS['sysmda_test_options']     = array(); // option → value
+$GLOBALS['sysmda_test_meta']        = array(); // post ID => meta key => value
+$GLOBALS['sysmda_test_authors']     = array(); // user ID => display name
+$GLOBALS['sysmda_test_attachments'] = array(); // attachment ID => image URL
+$GLOBALS['sysmda_test_terms']       = array(); // post ID => taxonomy => term objects
 
 /** Stub: filters return the default value. */
 function apply_filters( $tag, $value ) {
@@ -109,14 +113,69 @@ function sanitize_text_field( $str ) {
 	return trim( $str );
 }
 
+/** Stub: title from the post object. */
+function get_the_title( $post ) {
+	return $post->post_title;
+}
+
+/** Stub: published/modified time; the tests preset ISO strings on the post. */
+function get_post_time( $format, $gmt, $post ) {
+	return $post->sysmda_published;
+}
+
+function get_post_modified_time( $format, $gmt, $post ) {
+	return $post->sysmda_modified;
+}
+
+/** Stub: author display name from the authors map (missing => empty string). */
+function get_the_author_meta( $field, $user_id ) {
+	return isset( $GLOBALS['sysmda_test_authors'][ $user_id ] ) ? $GLOBALS['sysmda_test_authors'][ $user_id ] : '';
+}
+
+/** Stub: featured-image attachment ID from the post (0 => none). */
+function get_post_thumbnail_id( $post ) {
+	return $post->sysmda_thumb_id;
+}
+
+/** Stub: attachment URL from the attachments map (missing => false). */
+function wp_get_attachment_image_url( $id, $size = 'thumbnail' ) {
+	return isset( $GLOBALS['sysmda_test_attachments'][ $id ] ) ? $GLOBALS['sysmda_test_attachments'][ $id ] : false;
+}
+
+/** Stub: post terms from the terms map (missing => false, like core). */
+function get_the_terms( $post, $taxonomy ) {
+	return isset( $GLOBALS['sysmda_test_terms'][ $post->ID ][ $taxonomy ] )
+		? $GLOBALS['sysmda_test_terms'][ $post->ID ][ $taxonomy ]
+		: false;
+}
+
+/** Stub: pluck a field from a list of objects/arrays. */
+function wp_list_pluck( $list, $field ) {
+	$out = array();
+	foreach ( (array) $list as $item ) {
+		if ( is_object( $item ) ) {
+			$out[] = $item->$field;
+		} elseif ( is_array( $item ) ) {
+			$out[] = $item[ $field ];
+		}
+	}
+	return $out;
+}
+
 /** Minimal WP_Post stub (in the global namespace, as in WordPress). */
 class WP_Post {
 	public $ID           = 0;
 	public $post_type    = 'post';
 	public $post_status  = 'publish';
+	public $post_title   = '';
+	public $post_author  = 0;
 	public $post_content = '';
 	public $post_excerpt = '';
 	public $permalink    = '';
+	/** Test-only presets read by the get_post_time/thumbnail stubs above. */
+	public $sysmda_published = '';
+	public $sysmda_modified  = '';
+	public $sysmda_thumb_id  = 0;
 
 	public function __construct( array $props = array() ) {
 		foreach ( $props as $k => $v ) {
@@ -322,6 +381,107 @@ $p = new WP_Post(
 	)
 );
 check( 'description: style and iframe content removed', 'Introduction Conclusion', $metadata->description( $p ) );
+
+// ─── MetadataBuilder::build_front_matter (F1 golden conformance) ─────
+//
+// These golden strings pin the documented output format (docs/output-format.md):
+// the exact front-matter keys, their order, which keys are conditional, and the
+// YAML scalar escaping rules. An accidental reorder/removal/format change breaks
+// them on purpose, so the contract cannot drift silently.
+
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
+
+// (1) Full fixture: every conditional key present.
+$GLOBALS['sysmda_test_authors'][7]      = 'Jane Doe';
+$GLOBALS['sysmda_test_attachments'][55] = 'https://example.com/img.jpg';
+$GLOBALS['sysmda_test_meta'][55]['_wp_attachment_image_alt'] = 'Cover alt';
+$GLOBALS['sysmda_test_meta'][30]['rank_math_description']    = 'A concise summary.';
+$GLOBALS['sysmda_test_terms'][30]['category'] = array( (object) array( 'name' => 'News' ), (object) array( 'name' => 'Updates' ) );
+$GLOBALS['sysmda_test_terms'][30]['post_tag'] = array( (object) array( 'name' => 'alpha' ), (object) array( 'name' => 'beta' ) );
+
+$sysmda_full_post = new WP_Post(
+	array(
+		'ID'              => 30,
+		'post_title'      => 'Hello World',
+		'post_author'     => 7,
+		'permalink'       => 'https://example.com/hello-world/',
+		'sysmda_published' => '2026-07-01T08:30:00+00:00',
+		'sysmda_modified'  => '2026-07-10T12:00:00+00:00',
+		'sysmda_thumb_id'  => 55,
+	)
+);
+$sysmda_full_expected = implode(
+	"\n",
+	array(
+		'---',
+		'title: "Hello World"',
+		'url: "https://example.com/hello-world/"',
+		'markdown_url: "https://example.com/hello-world.md"',
+		'date_published: "2026-07-01T08:30:00+00:00"',
+		'date_modified: "2026-07-10T12:00:00+00:00"',
+		'author: "Jane Doe"',
+		'featured_image: "https://example.com/img.jpg"',
+		'featured_image_alt: "Cover alt"',
+		'categories:',
+		'  - "News"',
+		'  - "Updates"',
+		'tags:',
+		'  - "alpha"',
+		'  - "beta"',
+		'description: "A concise summary."',
+		'---',
+	)
+) . "\n";
+check( 'front matter: full fixture, keys and order', $sysmda_full_expected, $metadata->build_front_matter( $sysmda_full_post ) );
+
+// (2) Minimal fixture: every conditional key absent (no author, thumbnail,
+// terms or description) — proves the conditional presence of those keys.
+$sysmda_min_post = new WP_Post(
+	array(
+		'ID'              => 31,
+		'post_title'      => 'Bare',
+		'post_author'     => 0,
+		'permalink'       => 'https://example.com/bare/',
+		'sysmda_published' => '2026-01-01T00:00:00+00:00',
+		'sysmda_modified'  => '2026-01-01T00:00:00+00:00',
+		'sysmda_thumb_id'  => 0,
+	)
+);
+$sysmda_min_expected = implode(
+	"\n",
+	array(
+		'---',
+		'title: "Bare"',
+		'url: "https://example.com/bare/"',
+		'markdown_url: "https://example.com/bare.md"',
+		'date_published: "2026-01-01T00:00:00+00:00"',
+		'date_modified: "2026-01-01T00:00:00+00:00"',
+		'---',
+	)
+) . "\n";
+check( 'front matter: minimal fixture, conditional keys absent', $sysmda_min_expected, $metadata->build_front_matter( $sysmda_min_post ) );
+
+// (3) Scalar escaping: the title line exercises MetadataBuilder::scalar()
+// (entity-decode → strip tags → collapse whitespace → escape \ then ").
+$sysmda_title_line = function ( $title ) use ( $metadata ) {
+	$p = new WP_Post(
+		array(
+			'ID'              => 40,
+			'post_title'      => $title,
+			'post_author'     => 0,
+			'permalink'       => 'https://example.com/x/',
+			'sysmda_published' => '2026-01-01T00:00:00+00:00',
+			'sysmda_modified'  => '2026-01-01T00:00:00+00:00',
+		)
+	);
+	return explode( "\n", $metadata->build_front_matter( $p ) )[1]; // The `title:` line.
+};
+check( 'scalar: double quotes escaped', 'title: "He said \\"hi\\""', $sysmda_title_line( 'He said "hi"' ) );
+check( 'scalar: backslash doubled', 'title: "a\\\\b"', $sysmda_title_line( 'a\\b' ) );
+check( 'scalar: entities decoded', 'title: "Tom & Jerry"', $sysmda_title_line( 'Tom &amp; Jerry' ) );
+check( 'scalar: entity quote decoded then escaped', 'title: "AT&T \\"deal\\""', $sysmda_title_line( 'AT&amp;T &quot;deal&quot;' ) );
+check( 'scalar: embedded tags stripped', 'title: "Bold move"', $sysmda_title_line( '<strong>Bold</strong> move' ) );
+check( 'scalar: whitespace collapsed and trimmed', 'title: "Line one Line two"', $sysmda_title_line( "  Line one\n\n\tLine   two  " ) );
 
 // ─── LlmsTxtController: line escaping ─────────────────────────────────
 

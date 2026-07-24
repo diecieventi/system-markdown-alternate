@@ -49,7 +49,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.22.x)
+## Current state (v0.23.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -142,6 +142,12 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
+- **Documented output format** (`docs/output-format.md`): the front-matter keys,
+  their order, the YAML scalar-escaping rules, the body pipeline and the HTTP
+  contract, stated as a stable append-only contract (compatibility policy from
+  `0.24.0`). Enforced by golden conformance tests in `tests/run-tests.php`
+  (full + minimal fixtures, scalar-escaping cases); a `readme.txt` FAQ and a
+  `README.md` section link it. Docs/tests only — no runtime change.
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
   `SYSMDA_VERSION`; salt bump on settings save; cleanup on `save_post`/
