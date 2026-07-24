@@ -162,6 +162,12 @@ post captured at WP level; existing assertions stay green.
 
 ## PR 4 — Custom taxonomies in front matter (F3.1)
 
+> **The detailed, current plan lives in `docs/f3-1-taxonomies-plan.md`** — it
+> supersedes this sketch, resolves the two open questions (**opt-in**, default
+> off; **alphabetical** ordering) and documents the cache/ETag work this section
+> underestimated. Read that file before implementing; what follows is kept as
+> the original context.
+
 **Goal:** raise output quality above a plain HTML→MD conversion — the
 origin-native edge. Small, self-contained. Only worth doing if target sites use
 CPTs with custom taxonomies.
