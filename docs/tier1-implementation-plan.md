@@ -36,24 +36,24 @@
 
 ---
 
-## PR 1 — Sanitize fix for `register_setting()` (do first)
+## PR 1 — Sanitize fix for `register_setting()` (done — v0.23.2)
 
 **Why first:** it is a concrete wordpress.org Plugin Check finding that blocks a
 clean validation — higher priority than any strategic feature below.
 
-Full detail in `FIX-PLAN-sanitize-register-setting.md` (repo root). Summary:
+**Implemented** per `FIX-PLAN-sanitize-register-setting-revised.md` (repo root):
 
-- `AdminSettings.php:157` registers `sysmda_excluded_classes` with the generic
+- `AdminSettings.php:157` registered `sysmda_excluded_classes` with the generic
   `sanitize_lines()` (→ `sanitize_text_field`). CSS classes need the
   class-specific `sanitize_html_class`.
-- Add a dedicated `sanitize_class_lines()` sanitizer (splits lines, applies
-  `sanitize_html_class` per entry, drops empties, deduplicates) and switch **only**
-  line 157's callback. The block/shortcode/key_content options keep
-  `sanitize_lines()` (they legitimately contain `/`, `:`).
-- Open decision to confirm: split on whitespace (robust for multi-class lines)
-  vs strict one-class-per-line.
-- Add a `sanitize_class_lines` case to `tests/run-tests.php` (sanitizers have no
-  coverage today).
+- Added a dedicated `sanitize_class_lines()` sanitizer — splits on whitespace
+  (`\s+`, `PREG_SPLIT_NO_EMPTY`), normalizes each token with
+  `sanitize_html_class` (normalizes, does not reject), drops empties,
+  deduplicates first-seen — and switched **only** line 157's callback. The
+  block/shortcode/key_content options keep `sanitize_lines()` (they legitimately
+  contain `/`, `:`).
+- Added `sanitize_class_lines` cases + a `sanitize_lines` regression to
+  `tests/run-tests.php` (was 108 assertions, now 116).
 
 **Touched:** `src/AdminSettings.php`, `tests/run-tests.php`, `readme.txt`
 (changelog + `Stable tag`), `system-markdown-alternate.php` (patch bump — this
@@ -240,7 +240,7 @@ cases are known.
 
 ## Suggested sequencing
 
-1. **PR 1 = sanitize fix** — patch release (wordpress.org blocker).
+1. **PR 1 = sanitize fix** — ✅ done (v0.23.2, wordpress.org blocker).
 2. **PR 2 = plan/doc corrections** — no version bump.
 3. **PR 3 = F1** (output-format doc + golden tests) — no version bump.
 4. **PR 4 = F3.1** (custom taxonomies + cache invalidation) — minor/patch release.
