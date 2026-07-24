@@ -209,6 +209,14 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
   mode, consider what else is worth adding (candidates TBD, see also the LLM
   signals idea above).
+- **Server-side diagnostics** (parked, *future thought* — we will revisit):
+  a read-only, in-process admin view of per-post servability, `.md` preview,
+  size/token estimates, stripped/unconverted markup and unresolved internal
+  links. Removed from the active plan (July 2026); rationale, the brittle-signal
+  caveats and the MVP shape are in `docs/strategy-review-2026-07.md` →
+  *Future thoughts*. Do not promote it back to a plan without that decision. (The
+  only shipped request-side telemetry stays the count-only `.md` hit counter
+  above.)
 
 ## Product decisions (durable)
 

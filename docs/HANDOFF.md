@@ -11,11 +11,15 @@ against the plugin's actual state. Outcome: the **core serving path is mature**;
 the residual real value is a niche-quality play. Full reasoning and the eliminated
 (already-done / already-decided / colliding) items are in:
 
-- **`docs/strategy-review-2026-07.md`** — the evaluation and priorities.
-- **`docs/tier1-implementation-plan.md`** — the concrete, ordered Tier 1 plan.
-- **`docs/llms-txt-multilingual-plan.md`** — pre-existing, user-approved plan to
-  list WPML/Polylang translations in the single `/llms.txt` (`## Translations`
-  section). This is the ready-to-build slice of the Tier 2 "multilingual" item.
+- **`docs/strategy-review-2026-07.md`** — the evaluation, priorities and the
+  parked *Future thoughts* (server-side diagnostics now lives there).
+- **`docs/tier1-implementation-plan.md`** — the concrete, ordered work plan
+  (sanitize fix → doc corrections → F1 → custom taxonomies → ACF later),
+  incorporating the 2026-07-24 audit corrections.
+- **`docs/llms-txt-multilingual-plan.md`** — user-approved plan to list
+  WPML/Polylang translations in the single `/llms.txt` (`## Translations`
+  section). Independent; needs a staging reconnaissance pass first.
+- `FIX-PLAN-sanitize-register-setting.md` (repo root) — the sanitize fix detail.
 
 Current `main` is **0.23.1**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
@@ -25,39 +29,47 @@ Current `main` is **0.23.1**. The repository is **English-only** (the Italian
 
 These come from `AGENTS.md` *Product decisions* and were re-confirmed here:
 
-1. **No HTTP loopback** in any diagnostic (the "NO Vary self-test" decision).
-   Diagnostics run **in-process**; the live "is the cache serving HTML?" check
-   stays a **manual curl** in the readme FAQ.
-2. **`.md` hit counter is count-only** — no IP, no raw UA, no per-visitor, no
-   sub-daily timestamps. Do not enrich request logging beyond the aggregate
-   bot/human buckets.
+1. **`.md` hit counter is count-only** — no IP, no raw UA, no per-visitor, no
+   sub-daily timestamps. This is the **only** shipped request-side telemetry and
+   the plan adds nothing to it. Do not enrich request logging beyond the
+   aggregate bot/human buckets.
+2. **No HTTP loopback** (the "NO Vary self-test" decision): any content analysis
+   runs **in-process**; the live "is the cache serving HTML?" check stays a
+   **manual curl** in the readme FAQ.
 3. Already decided **NO**: rate limiting, `.md` XML sitemap, synthesized homepage
    index, auto-yield of `/llms.txt`.
 
+> **Server-side diagnostics (old "F2") is parked**, not planned — moved to
+> *Future thoughts* in `docs/strategy-review-2026-07.md`. We will revisit it
+> later. Do not start it.
+
 ## What to do next — active plans
 
-Two committed plans, each an independent PR to `main`:
+Ordered work (`docs/tier1-implementation-plan.md`), each an independent PR to
+`main`:
 
-**Tier 1** (`docs/tier1-implementation-plan.md`) — do in order:
+1. **Sanitize fix** for `register_setting()` — do first, it is a wordpress.org
+   Plugin Check blocker (`FIX-PLAN-sanitize-register-setting.md`). Patch release.
+2. **Plan & doc corrections** — noindex claim, `AGENTS.md` version label,
+   `Vary`/cache-backend/menu wording. No version bump.
+3. **F1 — Documented, stable output format** (`docs/output-format.md` + golden
+   conformance tests). No `src/` change, no version bump.
+4. **F3.1 — Custom taxonomies in front matter** (nested collision-safe
+   `taxonomies:` mapping + term-change cache invalidation). Runtime release.
+5. **ACF structured extraction (F3.2)** — later, case-driven only; not now.
 
-1. **F1 — Documented, stable output format** (`docs/output-format.md` + golden
-   conformance tests in `tests/run-tests.php`). Do this first; no `src/` change.
-2. **F2 — Server-side diagnostics** (new `src/Diagnostics.php` + read-only
-   Diagnostics admin tab; in-process only).
-3. **F3 — ACF structured extraction + custom taxonomies in front matter**
-   (note: `author`/dates/`categories`/`tags`/`featured_image` are **already** in
-   the front matter — only custom taxonomies + ACF complex types remain).
-
-**Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — greenlit,
-independent: list WPML/Polylang translations in the single `/llms.txt`.
+**Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — independent:
+list WPML/Polylang translations in the single `/llms.txt`. Requires a
+WPML/Polylang **staging reconnaissance** pass before coding (the main query's
+default-language assumption is not reliable — see the plan).
 
 ## Not planned — future thoughts
 
-Everything else (WooCommerce, `HEAD`/multisite/Varnish hardening, broader
-multilingual, benchmarks; plus the explicit "do not build" list) is parked as
-**future thoughts, not plans** in `docs/strategy-review-2026-07.md`. Do not
-promote any of it to a plan until real, recurring `.md` requests show up in the
-logs.
+Everything else (**server-side diagnostics**, WooCommerce, `HEAD`/multisite/
+Varnish hardening, broader multilingual, benchmarks; plus the explicit "do not
+build" list) is parked as **future thoughts, not plans** in
+`docs/strategy-review-2026-07.md`. Do not promote any of it to a plan until real,
+recurring `.md` requests show up in the logs.
 
 ## Positioning reminder
 
