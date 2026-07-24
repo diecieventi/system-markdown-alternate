@@ -236,9 +236,12 @@ class ContentRenderer {
 			return $url;
 		}
 
-		// Schemes/anchors that must remain unchanged.
+		// Schemes/anchors that must remain unchanged. Scheme names are
+		// case-insensitive (RFC 3986 §3.1) — as the absolute check above already
+		// assumes for http/https — so `MAILTO:` must be preserved too, otherwise
+		// it would be mistaken for a document-relative path and mangled.
 		foreach ( array( 'data:', 'mailto:', 'tel:', '#' ) as $prefix ) {
-			if ( 0 === strpos( $url, $prefix ) ) {
+			if ( 0 === stripos( $url, $prefix ) ) {
 				return $url;
 			}
 		}
