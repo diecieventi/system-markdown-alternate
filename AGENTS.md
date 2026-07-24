@@ -429,7 +429,7 @@ running code at the WP level.
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
         ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs); render_fragment()
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
-        ├── PostSupport.php         ← post eligibility (is_servable, supported types)
+        ├── PostSupport.php         ← post eligibility (is_servable, supported types, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url() (static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
@@ -475,7 +475,7 @@ running code at the WP level.
 ## Filters (public contract)
 
 ```php
-apply_filters( 'sysmda_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected
+apply_filters( 'sysmda_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected; the result is normalized and `attachment` is always stripped (PostSupport::sanitize_types)
 apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header
 apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
 apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical

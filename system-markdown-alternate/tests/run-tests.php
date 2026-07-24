@@ -82,6 +82,11 @@ function untrailingslashit( $value ) {
 	return rtrim( $value, '/' );
 }
 
+/** Stub: site origin used as the fallback base for unparseable permalinks. */
+function home_url( $path = '' ) {
+	return 'https://example.com' . $path;
+}
+
 function add_query_arg( $key, $value, $url ) {
 	$sep = ( false === strpos( $url, '?' ) ) ? '?' : '&';
 	return $url . $sep . $key . '=' . $value;
@@ -189,6 +194,8 @@ class WP_Post {
 require __DIR__ . '/../src/AcceptNegotiator.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
+require __DIR__ . '/../src/ContentRenderer.php';
+require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
@@ -199,6 +206,8 @@ require __DIR__ . '/../src/AdminSettings.php';
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\ContentRenderer;
+use Diecieventi\SystemMarkdownAlternate\PostSupport;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
@@ -334,6 +343,59 @@ $GLOBALS['sysmda_test_posts'][13] = new WP_Post( array( 'ID' => 13, 'post_type' 
 $out = $cleaner->clean( array( make_block( 'core/group', array( make_block( 'core/block', array(), array( 'ref' => 13 ) ) ) ) ) );
 check( 'nested reusable: 2 innerBlocks', 2, count( $out[0]['innerBlocks'] ) );
 check( 'nested reusable: 2 placeholders', 2, count( $out[0]['innerContent'] ) );
+
+// ─── ContentRenderer::absolutize ─────────────────────────────────────────────
+//
+// absolutize() is private (an internal step of the render pipeline); it is
+// exercised through reflection rather than widening the public API for tests.
+
+$sysmda_renderer   = new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner() );
+$sysmda_abs_method = new ReflectionMethod( ContentRenderer::class, 'absolutize' );
+$sysmda_abs_method->setAccessible( true );
+
+$sysmda_abs = function ( $url ) use ( $sysmda_abs_method, $sysmda_renderer ) {
+	return $sysmda_abs_method->invoke( $sysmda_renderer, $url, 'https://example.com/blog/my-post/' );
+};
+
+// Relative URLs are resolved against the permalink. The base ends with a
+// slash (pretty permalinks do), so the permalink itself is the directory.
+check( 'absolutize: document-relative', 'https://example.com/blog/my-post/other', $sysmda_abs( 'other' ) );
+check( 'absolutize: root-relative', 'https://example.com/about', $sysmda_abs( '/about' ) );
+check( 'absolutize: parent segment', 'https://example.com/blog/other', $sysmda_abs( '../other' ) );
+
+// Absolute and protocol-relative URLs are left untouched (any case).
+check( 'absolutize: absolute https', 'https://other.test/x', $sysmda_abs( 'https://other.test/x' ) );
+check( 'absolutize: uppercase scheme', 'HTTPS://other.test/x', $sysmda_abs( 'HTTPS://other.test/x' ) );
+check( 'absolutize: protocol-relative', '//cdn.test/x.png', $sysmda_abs( '//cdn.test/x.png' ) );
+
+// Non-hierarchical schemes and fragments must survive verbatim. Scheme names
+// are case-insensitive (RFC 3986), so the uppercase spellings must not be
+// mistaken for relative paths and rewritten.
+check( 'absolutize: mailto', 'mailto:info@example.com', $sysmda_abs( 'mailto:info@example.com' ) );
+check( 'absolutize: MAILTO uppercase', 'MAILTO:info@example.com', $sysmda_abs( 'MAILTO:info@example.com' ) );
+check( 'absolutize: Mailto mixed case', 'Mailto:info@example.com', $sysmda_abs( 'Mailto:info@example.com' ) );
+check( 'absolutize: tel', 'tel:+390212345', $sysmda_abs( 'tel:+390212345' ) );
+check( 'absolutize: TEL uppercase', 'TEL:+390212345', $sysmda_abs( 'TEL:+390212345' ) );
+check( 'absolutize: data', 'data:image/png;base64,AAA', $sysmda_abs( 'data:image/png;base64,AAA' ) );
+check( 'absolutize: DATA uppercase', 'DATA:image/png;base64,AAA', $sysmda_abs( 'DATA:image/png;base64,AAA' ) );
+check( 'absolutize: fragment', '#section-2', $sysmda_abs( '#section-2' ) );
+
+// ─── PostSupport::sanitize_types ─────────────────────────────────────────────
+//
+// `attachment` must never be servable, whatever the filter returns — the
+// settings page is not the only way into the supported-types list.
+
+check( 'types: attachment removed', array( 'post', 'page' ), PostSupport::sanitize_types( array( 'post', 'attachment', 'page' ) ) );
+check( 'types: attachment only => empty', array(), PostSupport::sanitize_types( array( 'attachment' ) ) );
+check( 'types: normal list untouched', array( 'post', 'page', 'product' ), PostSupport::sanitize_types( array( 'post', 'page', 'product' ) ) );
+check( 'types: empty input', array(), PostSupport::sanitize_types( array() ) );
+check( 'types: duplicates dropped', array( 'post' ), PostSupport::sanitize_types( array( 'post', 'post' ) ) );
+check( 'types: surrounding whitespace trimmed', array( 'post' ), PostSupport::sanitize_types( array( '  post  ' ) ) );
+check( 'types: empty and non-string entries skipped', array( 'post' ), PostSupport::sanitize_types( array( 'post', '', '   ', 42, null, array( 'x' ) ) ) );
+// The exclusion is exact: a CPT whose name merely contains "attachment" stays.
+check( 'types: lookalike CPT preserved', array( 'attachment_note' ), PostSupport::sanitize_types( array( 'attachment_note' ) ) );
+// Keys are not preserved: consumers use in_array(), a list is expected.
+check( 'types: reindexed list', array( 0, 1 ), array_keys( PostSupport::sanitize_types( array( 5 => 'post', 9 => 'page' ) ) ) );
 
 // ─── MetadataBuilder::markdown_url ───────────────────────────────────────────
 

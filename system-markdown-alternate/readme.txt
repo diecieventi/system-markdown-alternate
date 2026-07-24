@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.23.2
+Stable tag: 0.23.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -195,6 +195,17 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.23.3 =
+* Fixed: links using an uppercase or mixed-case scheme (`MAILTO:`, `TEL:`,
+  `DATA:`) are now preserved instead of being mistaken for relative paths and
+  rewritten into a broken absolute URL. Scheme names are case-insensitive per
+  RFC 3986, which the absolute `http`/`https` check already assumed.
+* Fixed: `attachment` is now excluded from the servable post types inside the
+  shared eligibility logic, so the "media is never served" rule also holds when
+  a post type list is injected through the `sysmda_markdown_supported_post_types`
+  filter, not only when it comes from the settings page. The filtered list is
+  also normalized (entries trimmed, empty and duplicate values dropped).
 
 = 0.23.2 =
 * Fixed: normalize excluded CSS-class entries with WordPress's class-specific
