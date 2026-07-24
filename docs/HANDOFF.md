@@ -22,7 +22,7 @@ the residual real value is a niche-quality play. Full reasoning and the eliminat
 - `FIX-PLAN-sanitize-register-setting-revised.md` (repo root) — the sanitize fix
   detail (supersedes the original plan; implemented in v0.23.2).
 
-Current `main` is **0.23.1**. The repository is **English-only** (the Italian
+Current `main` is **0.23.2**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
 `.it.md` files.
 
