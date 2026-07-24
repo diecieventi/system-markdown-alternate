@@ -18,8 +18,9 @@
   no-cache invariant, permalinks, 404 gating, canonical redirects). The external
   analysis adds little here.
 - The **residual, genuinely new value** is, in priority order:
-  **(F) documented/stable output format → (A) server-side diagnostics →
-  (B) origin-native semantic extraction**.
+  **(F) documented/stable output format → (B) origin-native semantic
+  extraction** (custom taxonomies, then ACF). Server-side diagnostics was
+  considered and **parked** — see *Future thoughts*.
 - Positioning is already right: *"clean, predictable, structured representation
   of WordPress content"*, **not** *"install this and gain AI visibility"*. Do not
   reposition as a "free Cloudflare alternative" (fragile).
@@ -52,7 +53,7 @@ Already implemented (see `AGENTS.md` *Current state*):
 | q-values, HTML>Markdown preference, `Vary: Accept`, configurable 406 | Done — `AcceptNegotiator`, `sysmda_markdown_strict_406` |
 | LiteSpeed / cache-plugin compatibility | Done — `LiteSpeedCompat` + server-agnostic no-cache invariant on negotiated responses |
 | Odd/plain permalinks | Done — `?format=markdown` fallback |
-| Protected / private / password / noindex gating | Done — `PostSupport::is_servable` |
+| Protected / private / password gating | Done — `PostSupport::is_servable` (supported type + `publish` + not password-protected). **Note:** it does **not** inspect source-page `noindex`; the Markdown response carries its own `X-Robots-Tag: noindex, follow`, which is a different thing. Source-`noindex` gating is intentionally **not** implemented (SEO metadata is not an access boundary). |
 | Canonical redirects (`/slug.md/` → 301 → `/slug.md`) | Done |
 | Gutenberg rendered semantically; builder visual-only exclusion | Done — `render_block()` on cleaned blocks |
 | Source authority (post_content / rendered / ACF field / custom callback / exclude promo) | Done — `sysmda_markdown_source_content` + excluded classes/blocks |
@@ -79,10 +80,6 @@ screenshot recapture.
 
 ## What genuinely remains (deduplicated)
 
-- **A. Built-in diagnostics — server-side computable parts only** (no loopback):
-  per-post `.md` preview, bytes/tokens saved vs HTML, list of stripped/
-  unconverted markup, broken internal links in the Markdown, "servable? why not?"
-  badge.
 - **B. Advanced origin-native semantic extraction** (the real edge vs Cloudflare):
   ACF Repeater / Flexible Content / Relationship / Gallery rendered structurally;
   **custom taxonomies + relations** into front matter (author, dates, core
@@ -101,11 +98,13 @@ screenshot recapture.
 These items moved from "ideas" to concrete, ordered plans. They are **not** in
 this file — see their own documents:
 
-- **Tier 1 — the quality/rigor play** → `docs/tier1-implementation-plan.md`.
-  In order: **F1** documented, stable output format → **F2** server-side
-  diagnostics (in-process, no loopback) → **F3** custom taxonomies in front
-  matter + ACF structured extraction. This is the residual real value the
-  analysis points to, and it is coherent with the existing plugin.
+- **Ordered work** → `docs/tier1-implementation-plan.md`. In order:
+  **PR 1** sanitize fix (wordpress.org blocker) → **PR 2** plan/doc corrections
+  → **F1** documented, stable output format → **F3.1** custom taxonomies in
+  front matter (+ cache invalidation) → ACF structured extraction (later,
+  case-driven). Server-side diagnostics was dropped from this plan (parked; see
+  *Future thoughts*). This is the residual real value the analysis points to,
+  coherent with the existing plugin.
 - **Multilingual `/llms.txt`** → `docs/llms-txt-multilingual-plan.md`. Greenlit,
   scoped: list WPML/Polylang translations in the single `/llms.txt`
   (`## Translations` section). Independent of everything else.
@@ -118,6 +117,20 @@ Parked on purpose. **Do not turn these into plans** until the decisive signal
 appears: real, recurring `.md` requests from important clients in the logs. Kept
 here so the reasoning is not lost, nothing more.
 
+- **Server-side diagnostics** (in-process, no loopback) — a read-only admin view
+  of per-post servability, `.md` preview, size/token estimates, stripped/
+  unconverted markup and unresolved internal links. Was scoped as "F2" and
+  **removed from the active plan** (July 2026): competitors already ship
+  previews/dashboards, the useful differentiator is origin-aware output not a
+  diagnostics tab, and the audit found several of its signals brittle
+  (`strip_tags` means no raw tags "survive" into the Markdown;
+  `url_to_postid()===0` is not a broken-link proof; token/byte "savings" can't be
+  measured in-process against the real public page). If revisited, build only a
+  small MVP (servability reason, `.md` URL/mode, exact preview via a **shared,
+  side-effect-free** builder, labelled size estimates) on a **separate admin
+  page** — the settings panel is a single `options.php` form and cannot host a
+  nested picker form. **We will revisit this later.** Do not promote it back to a
+  plan without that decision.
 - **WooCommerce** (products → structured Markdown). Real potential but heavy, and
   the audience is unconfirmed. Revisit when the logs justify it.
 - **Technical hardening** — `HEAD` requests, multisite / subdirectory,
@@ -145,8 +158,9 @@ here so the reasoning is not lost, nothing more.
 
 ## One-line summary
 
-The core serving is mature. The committed work is **Tier 1**
-(documented output format → diagnostics → semantic extraction) and the
-**multilingual `/llms.txt`** slice, each in its own plan. Everything else —
-WooCommerce, broad hardening, wider multilingual — is a **future thought**, not a
+The core serving is mature. The committed work is, in order, the **sanitize
+fix**, **plan/doc corrections**, the **documented output format**, **custom
+taxonomies**, and the **multilingual `/llms.txt`** slice, each in its own plan.
+Everything else — **server-side diagnostics**, WooCommerce, broad hardening,
+wider multilingual, ACF structured extraction — is a **future thought**, not a
 plan, gated on real `.md` traffic in the logs.
