@@ -34,9 +34,11 @@ These come from `AGENTS.md` *Product decisions* and were re-confirmed here:
 3. Already decided **NO**: rate limiting, `.md` XML sitemap, synthesized homepage
    index, auto-yield of `/llms.txt`.
 
-## What to do next (priority order)
+## What to do next — active plans
 
-Tier 1, each an independent PR to `main` (see the plan for full detail):
+Two committed plans, each an independent PR to `main`:
+
+**Tier 1** (`docs/tier1-implementation-plan.md`) — do in order:
 
 1. **F1 — Documented, stable output format** (`docs/output-format.md` + golden
    conformance tests in `tests/run-tests.php`). Do this first; no `src/` change.
@@ -46,11 +48,16 @@ Tier 1, each an independent PR to `main` (see the plan for full detail):
    (note: `author`/dates/`categories`/`tags`/`featured_image` are **already** in
    the front matter — only custom taxonomies + ACF complex types remain).
 
-Tier 2 (gate on real, recurring `.md` request logs before starting): WooCommerce,
-`HEAD`/multisite/Varnish hardening. The **WPML/Polylang** slice already has a
-scoped, user-approved plan in `docs/llms-txt-multilingual-plan.md` (translations
-in `/llms.txt`) — it can be built independently of the log gate. Tier 3 (skip):
-MCP/WebMCP/GEO score/AI-generation, loopback self-test, benchmark-as-feature.
+**Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — greenlit,
+independent: list WPML/Polylang translations in the single `/llms.txt`.
+
+## Not planned — future thoughts
+
+Everything else (WooCommerce, `HEAD`/multisite/Varnish hardening, broader
+multilingual, benchmarks; plus the explicit "do not build" list) is parked as
+**future thoughts, not plans** in `docs/strategy-review-2026-07.md`. Do not
+promote any of it to a plan until real, recurring `.md` requests show up in the
+logs.
 
 ## Positioning reminder
 

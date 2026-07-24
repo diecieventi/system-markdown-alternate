@@ -1,10 +1,16 @@
-# Strategy review — Markdown serving as a niche technical product (July 2026)
+# Strategy & future thoughts — Markdown serving as a niche technical product (July 2026)
 
 > Working note, not shipped in the plugin. Evaluation of an external strategic
 > analysis of the "WordPress → Markdown" plugin category, cross-referenced
 > against this project's actual state (`AGENTS.md`: *Current state*, *Open / to
 > do*, *Product decisions*). Written to preserve the reasoning for future
 > sessions and for other agents (Codex included).
+>
+> **Scope of this file:** the *reasoning* plus the **future thoughts** (parked,
+> not planned). The work that has actually been committed to lives in its own
+> plan documents — `docs/tier1-implementation-plan.md` and
+> `docs/llms-txt-multilingual-plan.md`. Nothing below the "Future thoughts"
+> heading is an implementation plan; do not treat it as one.
 
 ## TL;DR
 
@@ -90,50 +96,57 @@ screenshot recapture.
 - **F. Documented, stable Markdown output format** + optional benchmark
   (HTML vs Cloudflare vs origin-native).
 
-## Recommendation (if / what / how)
+## What is actually being planned (separate documents)
 
-### Tier 1 — Do (high leverage, defensible, coherent with the existing plugin)
+These items moved from "ideas" to concrete, ordered plans. They are **not** in
+this file — see their own documents:
 
-1. **F — Documented, stable output format.** Cheapest, highest trust value.
-   `docs/output-format.md` (guaranteed front matter, conversion rules,
-   exclusions) turns "it converts to Markdown" into a verifiable contract, and is
-   the base for benchmarks. How: documentation + a few conformance tests in
-   `tests/run-tests.php` that pin the format.
-2. **A (no-loopback subset) — Server-side diagnostics.** Strongest
-   differentiator per the analysis, and the safe subset avoids the loopback ban.
-   How: a `Diagnostics` class + admin tab that runs the pipeline **in-process**
-   for a given post and shows: HTML vs MD bytes, stripped/unconverted elements,
-   unresolved internal links. No loopback → no conflict. The "is the cache
-   serving HTML?" check stays a documented manual curl.
-3. **B (incremental) — ACF structured extraction + richer front matter.** The
-   "new competitive minimum". Start with **custom taxonomies** in front matter
-   (author/dates/core categories/tags are already present — easy remaining win),
-   then ACF Repeater/Flexible/Gallery (build on `sysmda_acf_field_keys`). Per-type
-   template is a later step, behind a filter, to avoid bloating the UI.
+- **Tier 1 — the quality/rigor play** → `docs/tier1-implementation-plan.md`.
+  In order: **F1** documented, stable output format → **F2** server-side
+  diagnostics (in-process, no loopback) → **F3** custom taxonomies in front
+  matter + ACF structured extraction. This is the residual real value the
+  analysis points to, and it is coherent with the existing plugin.
+- **Multilingual `/llms.txt`** → `docs/llms-txt-multilingual-plan.md`. Greenlit,
+  scoped: list WPML/Polylang translations in the single `/llms.txt`
+  (`## Translations` section). Independent of everything else.
 
-### Tier 2 — Only if data/demand justifies (gate on real `.md` request logs)
+---
 
-4. **E — HEAD / multisite / Varnish gaps.** Real hardening, low visibility. Do
-   `HEAD` anyway (HTTP correctness, minimal cost). Multisite/Varnish: targeted
-   verification + fixes when they surface, not a standalone project.
-5. **C — WooCommerce** and **D — WPML/Polylang.** Valid but heavy, audience
-   unconfirmed. Gate on the signal the analysis itself names as decisive: real,
-   recurring `.md` requests in the logs. **Exception:** the WPML/Polylang slice
-   that lists translations in the single `/llms.txt` already has a scoped,
-   user-approved plan (`docs/llms-txt-multilingual-plan.md`) and can be built
-   independently of the log gate.
+## Future thoughts (NOT implementation plans)
 
-### Tier 3 — Skip / not now
+Parked on purpose. **Do not turn these into plans** until the decisive signal
+appears: real, recurring `.md` requests from important clients in the logs. Kept
+here so the reasoning is not lost, nothing more.
 
-- Loopback-based live cache self-test → collides with a durable decision; keep as
-  manual curl.
-- Rich per-client logging → collides with count-only.
-- Benchmark as a plugin *feature* → do it as a marketing article/asset, not code.
-- MCP / WebMCP / GEO score / AI content generation → avoid (analysis agrees).
+- **WooCommerce** (products → structured Markdown). Real potential but heavy, and
+  the audience is unconfirmed. Revisit when the logs justify it.
+- **Technical hardening** — `HEAD` requests, multisite / subdirectory,
+  explicit Varnish / generic reverse-proxy compatibility. Low visibility; `HEAD`
+  is cheap HTTP correctness and could be pulled forward on its own if ever
+  needed, the rest is "fix when it surfaces", not a project.
+- **Broader multilingual** beyond the `/llms.txt` slice — a per-language `.md`
+  correctness audit and cross-language alternates. The scoped `/llms.txt` piece
+  already covers the immediate need; this is only if multilingual becomes a real
+  use case.
+- **Per-post-type Markdown template** and controlled textual substitution of
+  complex components — only if real content demands it (parked inside the F3 plan
+  as a later, filter-only step).
+- **Benchmark** HTML vs Cloudflare vs origin-native — worth doing as a
+  **marketing article/asset**, not as a plugin feature.
+
+### Explicitly out (do not build)
+
+- **Loopback-based live cache self-test** → collides with the durable "NO Vary
+  self-test" decision; the manual curl in the readme FAQ stays the answer.
+- **Rich per-client request logging** → collides with the count-only hit counter.
+- **MCP / WebMCP / GEO score / AI content generation** → avoid (the analysis
+  agrees); would turn a clear technical plugin into yet another "AI optimization"
+  package with no verifiable promise.
 
 ## One-line summary
 
-The core serving is mature; residual real value is
-**(F) documented output format → (A) server-side diagnostics →
-(B) origin-native semantic extraction**, in that order. WooCommerce/multilingual
-are Tier 2, gated by the logs.
+The core serving is mature. The committed work is **Tier 1**
+(documented output format → diagnostics → semantic extraction) and the
+**multilingual `/llms.txt`** slice, each in its own plan. Everything else —
+WooCommerce, broad hardening, wider multilingual — is a **future thought**, not a
+plan, gated on real `.md` traffic in the logs.
