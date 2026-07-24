@@ -79,7 +79,8 @@ screenshot recapture.
   badge.
 - **B. Advanced origin-native semantic extraction** (the real edge vs Cloudflare):
   ACF Repeater / Flexible Content / Relationship / Gallery rendered structurally;
-  taxonomies / author / dates / relations into front matter; per-post-type
+  **custom taxonomies + relations** into front matter (author, dates, core
+  categories/tags are **already emitted** by `MetadataBuilder`); per-post-type
   Markdown template; controlled textual substitution of complex components.
 - **C. WooCommerce** (products → structured Markdown).
 - **D. Multilingual** WPML / Polylang (correct per-language `.md` + cross-language
@@ -105,10 +106,10 @@ screenshot recapture.
    unresolved internal links. No loopback → no conflict. The "is the cache
    serving HTML?" check stays a documented manual curl.
 3. **B (incremental) — ACF structured extraction + richer front matter.** The
-   "new competitive minimum". Start with taxonomies/author/dates in front matter
-   (easy, high value), then ACF Repeater/Flexible/Gallery (build on
-   `sysmda_acf_field_keys`). Per-type template is a later step, behind a filter,
-   to avoid bloating the UI.
+   "new competitive minimum". Start with **custom taxonomies** in front matter
+   (author/dates/core categories/tags are already present — easy remaining win),
+   then ACF Repeater/Flexible/Gallery (build on `sysmda_acf_field_keys`). Per-type
+   template is a later step, behind a filter, to avoid bloating the UI.
 
 ### Tier 2 — Only if data/demand justifies (gate on real `.md` request logs)
 

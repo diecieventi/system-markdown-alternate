@@ -60,7 +60,7 @@ output so future changes are deliberate.
 3. `readme.txt` FAQ entry: "What does the Markdown output look like?" pointing at
    the documented format.
 
-**Touched:** `docs/*` (new), `tests/run-tests.php`, `readme.txt`, `README*.md`
+**Touched:** `docs/*` (new), `tests/run-tests.php`, `readme.txt`, `README.md`
 (link the doc). No `src/` change → low risk.
 
 **Acceptance:** tests green on PHP 7.4/8.4; doc matches actual output for a
