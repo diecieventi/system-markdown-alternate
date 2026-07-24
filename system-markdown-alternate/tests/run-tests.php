@@ -89,6 +89,26 @@ function get_shortcode_regex( $tags = null ) {
 	return '(\\[)(' . $tagregexp . ')(?![\\w-])([^\\]\\/]*(?:\\/(?!\\])[^\\]\\/]*)*?)(?:(\\/)\\]|\\](?:([^\\[]*+(?:\\[(?!\\/\\2\\])[^\\[]*+)*+)\\[\\/\\2\\])?)(\\]?)';
 }
 
+/**
+ * Stub matching WordPress core `sanitize_html_class()` for the relevant subset:
+ * strip %-octets, then keep only A-Z a-z 0-9 _ - (normalizes, does not reject).
+ */
+function sanitize_html_class( $class, $fallback = '' ) {
+	$sanitized = preg_replace( '|%[a-fA-F0-9][a-fA-F0-9]|', '', (string) $class );
+	$sanitized = preg_replace( '/[^A-Za-z0-9_-]/', '', $sanitized );
+	if ( '' === $sanitized && '' !== (string) $fallback ) {
+		return sanitize_html_class( $fallback );
+	}
+	return $sanitized;
+}
+
+/** Stub: strip tags, collapse whitespace, trim (keeps slashes/colons/URLs). */
+function sanitize_text_field( $str ) {
+	$str = strip_tags( (string) $str );
+	$str = preg_replace( '/[\r\n\t ]+/', ' ', $str );
+	return trim( $str );
+}
+
 /** Minimal WP_Post stub (in the global namespace, as in WordPress). */
 class WP_Post {
 	public $ID           = 0;
@@ -115,8 +135,10 @@ require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
 require __DIR__ . '/../src/LiteSpeedCompat.php';
 require __DIR__ . '/../src/HitCounter.php';
+require __DIR__ . '/../src/AdminSettings.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
+use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
@@ -479,6 +501,47 @@ check( 'hits totals: today only', array( 'bot' => 1, 'human' => 2 ), HitCounter:
 check( 'hits totals: last 7 days', array( 'bot' => 11, 'human' => 22 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 7 ) );
 check( 'hits totals: last 30 days', array( 'bot' => 1111, 'human' => 2222 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 30 ) );
 check( 'hits totals: zero-day window', array( 'bot' => 0, 'human' => 0 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 0 ) );
+
+// ─── AdminSettings sanitizers ──────────────────────────────────────────────────
+
+$sysmda_admin = new AdminSettings(); // No boot(): sanitizers are pure, no hooks needed.
+
+// sanitize_class_lines: normalizes CSS-class tokens (does NOT reject/validate).
+check(
+	'class_lines: valid defaults unchanged',
+	"no-md\nmd-exclude\nexclude-from-markdown",
+	$sysmda_admin->sanitize_class_lines( "no-md\nmd-exclude\nexclude-from-markdown" )
+);
+check(
+	'class_lines: whitespace-separated tokens split',
+	"foo\nbar\nbaz",
+	$sysmda_admin->sanitize_class_lines( "foo bar\tbaz" )
+);
+check(
+	'class_lines: dedupe across lines/spaces',
+	"foo\nbar",
+	$sysmda_admin->sanitize_class_lines( "foo\r\nfoo\nbar" )
+);
+check(
+	'class_lines: punctuation normalized, not rejected',
+	"notice\ncustom",
+	$sysmda_admin->sanitize_class_lines( ".notice\n<custom>" )
+);
+check(
+	'class_lines: punctuation-only dropped, hyphen/underscore kept',
+	"---\n___",
+	$sysmda_admin->sanitize_class_lines( "...\n---\n___" )
+);
+check( 'class_lines: empty input', '', $sysmda_admin->sanitize_class_lines( '' ) );
+check( 'class_lines: whitespace-only input', '', $sysmda_admin->sanitize_class_lines( "  \t\n " ) );
+
+// Regression: the generic multiline sanitizer was NOT replaced globally — it must
+// still preserve values with slashes/colons/URLs (block names, key content, …).
+check(
+	'lines: slashes/colons/URL preserved',
+	"gravityforms/form\nhttps://example.com/a:b",
+	$sysmda_admin->sanitize_lines( "gravityforms/form\nhttps://example.com/a:b" )
+);
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

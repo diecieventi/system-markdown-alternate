@@ -19,7 +19,8 @@ the residual real value is a niche-quality play. Full reasoning and the eliminat
 - **`docs/llms-txt-multilingual-plan.md`** — user-approved plan to list
   WPML/Polylang translations in the single `/llms.txt` (`## Translations`
   section). Independent; needs a staging reconnaissance pass first.
-- `FIX-PLAN-sanitize-register-setting.md` (repo root) — the sanitize fix detail.
+- `FIX-PLAN-sanitize-register-setting-revised.md` (repo root) — the sanitize fix
+  detail (supersedes the original plan; implemented in v0.23.2).
 
 Current `main` is **0.23.1**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
@@ -48,8 +49,9 @@ These come from `AGENTS.md` *Product decisions* and were re-confirmed here:
 Ordered work (`docs/tier1-implementation-plan.md`), each an independent PR to
 `main`:
 
-1. **Sanitize fix** for `register_setting()` — do first, it is a wordpress.org
-   Plugin Check blocker (`FIX-PLAN-sanitize-register-setting.md`). Patch release.
+1. **Sanitize fix** for `register_setting()` — ✅ **done in v0.23.2**
+   (`FIX-PLAN-sanitize-register-setting-revised.md`). Was the wordpress.org
+   Plugin Check blocker.
 2. **Plan & doc corrections** — noindex claim, `AGENTS.md` version label,
    `Vary`/cache-backend/menu wording. No version bump.
 3. **F1 — Documented, stable output format** (`docs/output-format.md` + golden

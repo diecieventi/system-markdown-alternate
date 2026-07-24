@@ -154,7 +154,7 @@ class AdminSettings {
 		register_setting( self::OPTION_GROUP, 'sysmda_cache_ttl', array( 'type' => 'integer', 'sanitize_callback' => 'absint' ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_excluded_shortcodes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_excluded_block_names', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
-		register_setting( self::OPTION_GROUP, 'sysmda_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_lines' ) ) );
+		register_setting( self::OPTION_GROUP, 'sysmda_excluded_classes', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_class_lines' ) ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_supported_post_types', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_post_types' ) ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_robots_header', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( self::OPTION_GROUP, 'sysmda_llms_txt_enabled', array( 'type' => 'string', 'sanitize_callback' => array( $this, 'sanitize_checkbox' ) ) );
@@ -264,6 +264,33 @@ class AdminSettings {
 			$line = sanitize_text_field( trim( $line ) );
 			if ( '' !== $line && ! in_array( $line, $out, true ) ) {
 				$out[] = $line;
+			}
+		}
+
+		return implode( "\n", $out );
+	}
+
+	/**
+	 * Normalizes CSS-class tokens with WordPress's class-specific sanitizer,
+	 * removes empty entries, and deduplicates them (first-seen order preserved).
+	 *
+	 * Whitespace-separated: although the UI asks for one class per line, spaces
+	 * and tabs are accepted so pasted class lists are handled — sanitizing a
+	 * whole line such as "foo bar" would otherwise produce the unintended class
+	 * "foobar". Note this NORMALIZES rather than rejects: `sanitize_html_class()`
+	 * reduces each token to the ASCII letter/digit/hyphen/underscore subset
+	 * (`.notice` → `notice`, `<script>` → `script`, punctuation-only → dropped).
+	 *
+	 * @param mixed $value
+	 */
+	public function sanitize_class_lines( $value ): string {
+		$tokens = preg_split( '/\s+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY );
+		$out    = array();
+
+		foreach ( (array) $tokens as $token ) {
+			$class = sanitize_html_class( $token );
+			if ( '' !== $class && ! in_array( $class, $out, true ) ) {
+				$out[] = $class;
 			}
 		}
 
