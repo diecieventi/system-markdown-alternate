@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<ruleset name="System Markdown Alternate">
+	<description>WordPress coding standards for the plugin (PHPCS + WPCS).</description>
+
+	<!--
+		Run from the plugin directory with no arguments:
+
+			composer phpcs     # report violations
+			composer phpcbf    # auto-fix what can be fixed
+
+		This file is the *.dist default; a local, untracked phpcs.xml overrides
+		it if you need to tweak something on your machine.
+	-->
+
+	<!-- ─── What to scan ─────────────────────────────────────────────── -->
+
+	<file>.</file>
+
+	<!-- Third-party code and the standalone test harness are not ours to style. -->
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/tests/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg name="parallel" value="8"/>
+	<arg name="colors"/>
+	<!-- p = progress, s = show sniff codes (so violations are easy to look up). -->
+	<arg value="ps"/>
+
+	<!-- ─── Standards ────────────────────────────────────────────────── -->
+
+	<!--
+		WordPress-Core (correctness, escaping, security) + WordPress-Extra
+		(recommended best practices).
+
+		`WordPress-Docs` is deliberately NOT enabled: it mandates a full
+		`@param` tag for every argument, which is redundant here because the
+		codebase declares native PHP parameter and return types, and the
+		project already requires a docblock on every filter (see AGENTS.md).
+		Enable it later if the docblock style is ever standardized on WPCS's.
+	-->
+	<rule ref="WordPress-Core"/>
+	<rule ref="WordPress-Extra"/>
+
+	<!--
+		PSR-4 autoloading requires class files named after the class
+		(MarkdownController.php), which conflicts head-on with WPCS's
+		`class-markdown-controller.php` convention. The autoloader wins.
+	-->
+	<rule ref="WordPress.Files.FileName">
+		<severity>0</severity>
+	</rule>
+
+	<!--
+		Globals must carry the plugin prefix (wordpress.org guideline). The
+		namespace covers the PSR-4 classes in src/.
+	-->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="sysmda"/>
+				<element value="SYSMDA"/>
+				<element value="Diecieventi\SystemMarkdownAlternate"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!--
+		Native PHP DOM properties are camelCase by API definition; they are
+		read on \DOMNode objects in ContentRenderer, not defined by us.
+	-->
+	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<properties>
+			<property name="allowed_custom_properties" type="array">
+				<element value="childNodes"/>
+				<element value="parentNode"/>
+				<element value="firstChild"/>
+				<element value="textContent"/>
+				<element value="nodeName"/>
+				<element value="nodeValue"/>
+				<element value="ownerDocument"/>
+				<element value="documentElement"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- The text domain must match the plugin slug. -->
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="system-markdown-alternate"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Flags usage of functions deprecated/unavailable in the supported WP range. -->
+	<config name="minimum_wp_version" value="6.1"/>
+
+	<!-- ─── PHP cross-version compatibility (7.4+) ───────────────────── -->
+
+	<rule ref="PHPCompatibilityWP"/>
+	<config name="testVersion" value="7.4-"/>
+</ruleset>

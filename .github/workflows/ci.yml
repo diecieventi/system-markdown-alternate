@@ -30,3 +30,33 @@ jobs:
 
       - name: Run tests
         run: php system-markdown-alternate/tests/run-tests.php
+
+  phpcs:
+    runs-on: ubuntu-latest
+    name: PHPCS (WordPress standards)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          # Static analysis: the runtime PHP version does not affect the
+          # results (the 7.4+ target is set via `testVersion` in the ruleset).
+          php-version: '8.4'
+          coverage: none
+          tools: cs2pr
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress --working-dir=system-markdown-alternate
+
+      - name: Run PHPCS
+        # Warnings are surfaced as annotations but do not fail the build;
+        # errors do. Keeps the gate meaningful without blocking on style debt.
+        # `--basepath=..` makes the reported paths repo-root-relative so the
+        # inline annotations land on the right lines.
+        working-directory: system-markdown-alternate
+        run: |
+          vendor/bin/phpcs -q \
+            --runtime-set ignore_warnings_on_exit 1 \
+            --basepath=.. \
+            --report=checkstyle \
+            | cs2pr --graceful-warnings

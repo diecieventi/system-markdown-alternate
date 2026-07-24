@@ -43,7 +43,7 @@ class BlockCleaner {
 	public function clean( array $blocks ): array {
 		// Resolve filterable lists once: is_excluded() runs for every block,
 		// including nested blocks, and filters should not run repeatedly.
-		$this->excluded_names   = $this->excluded_block_names();
+		$this->excluded_names = $this->excluded_block_names();
 		/** Filters CSS classes whose blocks are excluded from Markdown output. */
 		$this->excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 		$this->expanding_refs   = array();

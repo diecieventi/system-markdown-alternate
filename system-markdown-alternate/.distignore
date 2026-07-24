@@ -9,6 +9,10 @@
 /.distignore
 composer.lock
 
+# Development tooling config (PHPCS/WPCS): never used at runtime.
+/phpcs.xml.dist
+/phpcs.xml
+
 # CLI binaries shipped by league/html-to-markdown. They are never invoked at
 # runtime (the plugin uses the library classes only) and the wordpress.org
 # Plugin Check flags them as "not permitted files", so keep them out of the

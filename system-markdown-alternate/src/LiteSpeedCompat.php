@@ -73,10 +73,12 @@ class LiteSpeedCompat {
 		}
 
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- De-facto standard constant read by page-cache plugins; prefixing it would defeat its purpose.
 			define( 'DONOTCACHEPAGE', true );
 		}
 
 		// LiteSpeed Cache plugin API (no-op when the plugin is not active).
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook owned by the LiteSpeed Cache plugin; we invoke its API, we do not define it.
 		do_action( 'litespeed_control_set_nocache', 'system-markdown-alternate: negotiated representation' );
 	}
 
@@ -354,6 +356,7 @@ class LiteSpeedCompat {
 	 * produce ghost mixed-representation behaviour that is hard to diagnose.
 	 */
 	public static function purge_litespeed_cache(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook owned by the LiteSpeed Cache plugin; we invoke its API, we do not define it.
 		do_action( 'litespeed_purge_all' );
 	}
 }
