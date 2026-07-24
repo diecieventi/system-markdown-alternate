@@ -22,12 +22,16 @@ the residual real value is a niche-quality play. Full reasoning and the eliminat
 - **`docs/output-format.md`** — the F1 output-format contract (front-matter
   keys/order, scalar escaping, body pipeline, HTTP contract), enforced by golden
   tests in `tests/run-tests.php`.
+- **`docs/f3-1-taxonomies-plan.md`** — the detailed plan for the **next** piece
+  of work (custom taxonomies in the front matter): opt-in, alphabetical, and the
+  cache/ETag invalidation it requires. Supersedes the PR 4 sketch in the tier-1
+  plan.
 
 (The standalone `FIX-PLAN-sanitize-register-setting-revised.md` note was removed
 once its fix shipped in v0.23.2 — the detail lives in the `readme.txt`
 changelog.)
 
-Current `main` is **0.23.2**. The repository is **English-only** (the Italian
+Current `main` is **0.23.3**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
 `.it.md` files.
 
@@ -62,10 +66,17 @@ Ordered work (`docs/tier1-implementation-plan.md`), each an independent PR to
 3. **F1 — Documented, stable output format** — ✅ **done**: `docs/output-format.md`
    + golden conformance tests (116 → 124 assertions) + readme FAQ / README link.
    No `src/` change, no version bump.
-4. **F3.1 — Custom taxonomies in front matter** (nested collision-safe
-   `taxonomies:` mapping + term-change cache invalidation). ← **next up.**
-   Runtime release.
+4. **F3.1 — Custom taxonomies in front matter** — ← **next up, planned and
+   ready to implement**: see `docs/f3-1-taxonomies-plan.md` (opt-in default off,
+   alphabetical ordering, appended after `description`, plus the terms
+   fingerprint in the cache validator that the `ETag` requires). Runtime release
+   → **0.24.0**.
 5. **ACF structured extraction (F3.2)** — later, case-driven only; not now.
+
+Also shipped since this file was last updated: **PHPCS/WPCS tooling + CI gate**
+(#18) and the **0.23.3** fixes (#20: uppercase URI schemes preserved,
+`attachment` exclusion enforced in `PostSupport`). Coding standards are now
+checked with `composer phpcs` — see *Code conventions* in `AGENTS.md`.
 
 **Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — independent:
 list WPML/Polylang translations in the single `/llms.txt`. Requires a
