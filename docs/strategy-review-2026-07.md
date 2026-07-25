@@ -7,8 +7,8 @@
 > sessions and for other agents (Codex included).
 >
 > **Scope of this file:** the *reasoning* plus the **future thoughts** (parked,
-> not planned). The work that has actually been committed to lives in its own
-> plan documents — `docs/tier1-implementation-plan.md` and
+> not planned). The work this review committed to has since shipped — see the
+> table below; the only plan document still open is
 > `docs/llms-txt-multilingual-plan.md`. Nothing below the "Future thoughts"
 > heading is an implementation plan; do not treat it as one.
 
@@ -93,21 +93,29 @@ screenshot recapture.
 - **F. Documented, stable Markdown output format** + optional benchmark
   (HTML vs Cloudflare vs origin-native).
 
-## What is actually being planned (separate documents)
+## What came out of this review — all shipped (July 2026)
 
-These items moved from "ideas" to concrete, ordered plans. They are **not** in
-this file — see their own documents:
+The ordered plan this review produced has been fully executed; its plan
+documents were removed once merged, since the outcome now lives in the code and
+in `AGENTS.md`. For the record:
 
-- **Ordered work** → `docs/tier1-implementation-plan.md`. In order:
-  **PR 1** sanitize fix (wordpress.org blocker) → **PR 2** plan/doc corrections
-  → **F1** documented, stable output format → **F3.1** custom taxonomies in
-  front matter (+ cache invalidation) → ACF structured extraction (later,
-  case-driven). Server-side diagnostics was dropped from this plan (parked; see
-  *Future thoughts*). This is the residual real value the analysis points to,
-  coherent with the existing plugin.
-- **Multilingual `/llms.txt`** → `docs/llms-txt-multilingual-plan.md`. Greenlit,
-  scoped: list WPML/Polylang translations in the single `/llms.txt`
-  (`## Translations` section). Independent of everything else.
+| Item | Shipped in |
+|---|---|
+| Sanitize fix for `register_setting()` (wordpress.org Plugin Check blocker) | `0.23.2` |
+| Plan/doc corrections (`Vary` wording, cache backend, menu label, version label) | docs only |
+| **F1** — documented, stable output format + golden conformance tests | `docs/output-format.md` (contract, still live) |
+| **F3.1** — custom taxonomies in the front matter (+ the cache/ETag fingerprint) | `0.24.0` |
+
+Two side effects worth remembering, both now recorded in `AGENTS.md`: custom
+taxonomies are **opt-in and byte-identical when off**, and anything that can
+change the emitted Markdown **without touching `post_modified_gmt`** must be
+folded into the cache validator — otherwise conditional requests answer `304`
+with stale content.
+
+Still open and greenlit: **multilingual `/llms.txt`** →
+`docs/llms-txt-multilingual-plan.md`, scoped to listing WPML/Polylang
+translations in the single `/llms.txt`. Independent of everything else and not
+started; it needs the staging reconnaissance described in that document first.
 
 ---
 
@@ -131,6 +139,32 @@ here so the reasoning is not lost, nothing more.
   page** — the settings panel is a single `options.php` form and cannot host a
   nested picker form. **We will revisit this later.** Do not promote it back to a
   plan without that decision.
+- **ACF structured extraction (the old "F3.2")** — Repeater / Flexible Content /
+  Relationship / Gallery rendered structurally instead of the current
+  text-only handling. Deferred until there is concrete demand **and real ACF
+  exports to work from**: do not build Repeater/Flexible Content generically
+  without fixtures. Findings from the 2026-07-24 audit, kept because they are
+  easy to get wrong:
+  - The panel configures **only** the subtitle and TL;DR field names. The general
+    `sysmda_acf_field_keys` list is **developer-only via filter**
+    (`AcfIntegration.php`), never a panel field.
+  - Repeater / Flexible Content have **no universal semantic rendering**; a
+    generic dump can be worse than omitting the data. They need an explicit
+    template/callback contract, per site.
+  - ACF **return formats are configurable** (Relationship/Post Object → IDs or
+    `WP_Post`; Gallery → IDs/URLs/arrays; Link/Image → several shapes; nested
+    fields → any of these). Every supported shape needs defined normalization
+    and escaping.
+  - "Unknown types fall back to the current text behaviour" is **false**: the
+    current code accepts only non-empty strings and skips arrays/objects.
+  - Helpers must produce **escaped semantic HTML fragments** (or a structured
+    intermediate consumed by one renderer) — never a Markdown string appended to
+    the HTML source, which would be treated as text rather than parsed.
+  - Sensible order if it ever starts: scalars/links → Relationship/Post Object
+    (title + canonical or `.md` link where servable) → Gallery/Image with `alt`
+    → Repeater **only** with a template contract → Flexible Content **only**
+    with per-layout callbacks. Keep the developer filter as the escape hatch and
+    ship docs/examples before any UI.
 - **WooCommerce** (products → structured Markdown). Real potential but heavy, and
   the audience is unconfirmed. Revisit when the logs justify it.
 - **Technical hardening** — `HEAD` requests, multisite / subdirectory,
@@ -158,9 +192,9 @@ here so the reasoning is not lost, nothing more.
 
 ## One-line summary
 
-The core serving is mature. The committed work is, in order, the **sanitize
-fix**, **plan/doc corrections**, the **documented output format**, **custom
-taxonomies**, and the **multilingual `/llms.txt`** slice, each in its own plan.
-Everything else — **server-side diagnostics**, WooCommerce, broad hardening,
-wider multilingual, ACF structured extraction — is a **future thought**, not a
-plan, gated on real `.md` traffic in the logs.
+The core serving is mature. Everything this review committed to has shipped —
+the sanitize fix, the doc corrections, the documented output format and custom
+taxonomies (`0.24.0`) — leaving the **multilingual `/llms.txt`** slice as the
+only open plan. Everything else — **server-side diagnostics**, **ACF structured
+extraction**, WooCommerce, broad hardening, wider multilingual — is a **future
+thought**, not a plan, gated on real `.md` traffic in the logs.
