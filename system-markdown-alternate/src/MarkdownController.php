@@ -621,9 +621,24 @@ class MarkdownController {
 		setup_postdata( $post );
 
 		try {
+			// The whole assembly runs inside the post context, the filters
+			// included: `sysmda_markdown_preamble` is where the ACF integration
+			// renders the TL;DR through the same shortcode pipeline as the body,
+			// so it needs the loop just as much.
 			$front_matter = $this->metadata->build_front_matter( $post );
 			$html         = $this->renderer->render( $post );
 			$body         = $this->converter->convert( $html );
+
+			$title = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
+			$title = trim( preg_replace( '/\s+/', ' ', $title ) );
+
+			/** Filter: Markdown block between the # Title and body (subtitle, TL;DR, etc.). */
+			$preamble = (string) apply_filters( 'sysmda_markdown_preamble', '', $post );
+
+			$markdown = $front_matter . "\n# " . $title . "\n\n" . $preamble . $body;
+
+			/** Filter: final Markdown (front matter + content). */
+			$markdown = apply_filters( 'sysmda_markdown_output', $markdown, $post );
 		} finally {
 			if ( $previous_post instanceof \WP_Post ) {
 				$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the caller's value.
@@ -633,17 +648,6 @@ class MarkdownController {
 				wp_reset_postdata();
 			}
 		}
-
-		$title = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
-		$title = trim( preg_replace( '/\s+/', ' ', $title ) );
-
-		/** Filter: Markdown block between the # Title and body (subtitle, TL;DR, etc.). */
-		$preamble = (string) apply_filters( 'sysmda_markdown_preamble', '', $post );
-
-		$markdown = $front_matter . "\n# " . $title . "\n\n" . $preamble . $body;
-
-		/** Filter: final Markdown (front matter + content). */
-		$markdown = apply_filters( 'sysmda_markdown_output', $markdown, $post );
 
 		return rtrim( $markdown ) . "\n";
 	}
