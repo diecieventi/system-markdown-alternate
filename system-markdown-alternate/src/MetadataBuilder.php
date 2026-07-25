@@ -171,28 +171,44 @@ class MetadataBuilder {
 	/**
 	 * Custom taxonomies and their term names for a post, ready to emit.
 	 *
-	 * Opt-in: returns an empty array unless `sysmda_front_matter_taxonomies` is
-	 * enabled, so both the front matter and the cache validator that
-	 * fingerprints it stay unchanged for sites that do not want the feature.
+	 * Nothing is emitted implicitly: the list of taxonomies is the **explicit
+	 * selection** made in the settings page, which AdminSettings feeds into
+	 * `sysmda_front_matter_taxonomy_slugs` at priority 5. There is deliberately
+	 * no auto-detection from the taxonomy registry — `public` /
+	 * `publicly_queryable` describe how WordPress routes a taxonomy, not whether
+	 * its terms belong in a machine-readable representation, and auto-detection
+	 * meant every newly registered taxonomy started publishing itself (see
+	 * docs/f3-2-taxonomy-selection-plan.md).
+	 *
+	 * With nothing selected the result is empty, so the front matter and the
+	 * cache validator that fingerprints it stay byte-identical to a site without
+	 * the feature.
 	 *
 	 * @return array<string, string[]> Taxonomy slug => term names, both sorted.
 	 */
 	public static function taxonomy_terms( \WP_Post $post ): array {
-		/** Filters whether custom taxonomies are added to the front matter. */
-		if ( ! apply_filters( 'sysmda_front_matter_taxonomies', false ) ) {
+		/**
+		 * Filters which taxonomy slugs are emitted in the front matter.
+		 *
+		 * The default is the selection saved in the panel (empty until the site
+		 * owner picks something); this filter may narrow it and extend it, and
+		 * naming a non-public taxonomy is a deliberate opt-in. The
+		 * always-excluded set and invalid slugs are stripped afterwards.
+		 */
+		$slugs = (array) apply_filters( 'sysmda_front_matter_taxonomy_slugs', array(), $post );
+
+		/**
+		 * Filters whether custom taxonomies are added to the front matter.
+		 *
+		 * Kill switch: the default is "yes as soon as something is selected", so
+		 * returning false suppresses the block whatever the selection is. Code
+		 * that supplies slugs through the filter above with no saved selection
+		 * needs no special handling — a non-empty list is enough to turn the
+		 * block on.
+		 */
+		if ( ! apply_filters( 'sysmda_front_matter_taxonomies', ! empty( $slugs ) ) ) {
 			return array();
 		}
-
-		$slugs = array();
-
-		foreach ( get_object_taxonomies( $post->post_type, 'objects' ) as $slug => $taxonomy ) {
-			if ( ! empty( $taxonomy->public ) ) {
-				$slugs[] = (string) $slug;
-			}
-		}
-
-		/** Filters which taxonomy slugs are emitted in the front matter. */
-		$slugs = (array) apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );
 
 		$raw = array();
 
@@ -283,6 +299,82 @@ class MetadataBuilder {
 		ksort( $clean, SORT_STRING );
 
 		return $clean;
+	}
+
+	/**
+	 * Taxonomies the settings page may offer for selection.
+	 *
+	 * The union of the taxonomies registered for the given post types, keyed by
+	 * slug and sorted by slug. Used for the checkbox list in the panel and for
+	 * the one-time migration off the 0.24.x checkbox — never to decide what gets
+	 * emitted, which is the saved selection alone.
+	 *
+	 * @param string[] $post_types Post types to collect taxonomies from.
+	 * @return array<string, object> Taxonomy slug => taxonomy object.
+	 */
+	public static function candidate_taxonomies( array $post_types ): array {
+		$found = array();
+
+		foreach ( $post_types as $post_type ) {
+			if ( ! is_string( $post_type ) || '' === $post_type ) {
+				continue;
+			}
+
+			foreach ( get_object_taxonomies( $post_type, 'objects' ) as $slug => $taxonomy ) {
+				$found[ (string) $slug ] = $taxonomy;
+			}
+		}
+
+		return self::filter_candidates( $found );
+	}
+
+	/**
+	 * Keeps the taxonomies that make sense to offer in the panel: emittable slugs
+	 * (so `category`/`post_tag`/`post_format` never show up) that the site owner
+	 * can actually recognize, i.e. public or with an admin UI. Pure, so the rule
+	 * is directly testable.
+	 *
+	 * @param array<string, object> $taxonomies Taxonomy slug => taxonomy object.
+	 * @return array<string, object> Filtered map, sorted by slug (byte order).
+	 */
+	public static function filter_candidates( array $taxonomies ): array {
+		$clean = array();
+
+		foreach ( $taxonomies as $slug => $taxonomy ) {
+			$slug = (string) $slug;
+
+			if ( ! self::is_emittable_taxonomy( $slug ) || ! is_object( $taxonomy ) ) {
+				continue;
+			}
+
+			if ( empty( $taxonomy->public ) && empty( $taxonomy->show_ui ) ) {
+				continue; // Pure plumbing: invisible in wp-admin and on the front end.
+			}
+
+			$clean[ $slug ] = $taxonomy;
+		}
+
+		ksort( $clean, SORT_STRING );
+
+		return $clean;
+	}
+
+	/**
+	 * Whether a taxonomy is public in the full sense: intended for public use
+	 * **and** publicly queryable (it has term archives).
+	 *
+	 * Advisory only — it labels a row in the settings page and seeds the
+	 * migration off the 0.24.x checkbox. It is deliberately NOT a gate on the
+	 * output: `publicly_queryable => false` is the usual shape of an
+	 * editorial-internal taxonomy, but a theme may still print its terms, so the
+	 * decision stays the site owner's.
+	 *
+	 * @param mixed $taxonomy Taxonomy object (WP_Taxonomy).
+	 */
+	public static function is_public_taxonomy( $taxonomy ): bool {
+		return is_object( $taxonomy )
+			&& ! empty( $taxonomy->public )
+			&& ! empty( $taxonomy->publicly_queryable );
 	}
 
 	/**

@@ -155,18 +155,29 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
-- **Custom taxonomies in the front matter** (`sysmda_front_matter_taxonomies`
-  toggle, default **off**; off = front matter and cache validator byte-identical
-  to 0.23.x): appends a nested `taxonomies:` mapping **after `description`**
-  (append-only contract), listing the post type's **public** taxonomies minus
-  `category`/`post_tag` (already emitted) and `post_format` (presentational).
-  Slugs and term names sorted with `SORT_STRING` — **byte order, not locale
-  collation**, so output never depends on the server locale. Curation via
-  `sysmda_front_matter_taxonomy_slugs`, which may narrow **and** extend that
-  default (naming a non-public taxonomy is a deliberate opt-in —
-  `public => false, show_ui => true` is common for editorial-internal ones); the
-  always-excluded set and invalid slugs are stripped *after* the filter, so it
-  can neither duplicate `categories`/`tags` nor break the YAML.
+- **Custom taxonomies in the front matter** (per-taxonomy selection in the panel,
+  option `sysmda_front_matter_taxonomy_slugs`, **nothing selected by default**;
+  empty = front matter and cache validator byte-identical to 0.23.x): appends a
+  nested `taxonomies:` mapping **after `description`** (append-only contract)
+  with the terms of the **selected** taxonomies. Slugs and term names sorted with
+  `SORT_STRING` — **byte order, not locale collation**, so output never depends
+  on the server locale. **No auto-detection** (removed in 0.25.0, see the
+  decision below and `docs/f3-2-taxonomy-selection-plan.md`): the registry cannot
+  say whether a taxonomy belongs in a machine-readable representation, and the
+  0.24.x `public`-only check published editorial-internal taxonomies
+  (`publicly_queryable => false`). `MetadataBuilder::candidate_taxonomies()` /
+  `is_public_taxonomy()` exist only to build the panel list, label the
+  not-publicly-queryable rows and seed the migration — never to gate the output.
+  Curation via `sysmda_front_matter_taxonomy_slugs` (AdminSettings feeds the
+  option in at **priority 5**, so site code at 10 may narrow **and** extend it;
+  naming a non-public taxonomy stays a deliberate opt-in); the always-excluded
+  set and invalid slugs are stripped *after* the filter, so it can neither
+  duplicate `categories`/`tags` nor break the YAML.
+  `sysmda_front_matter_taxonomies` survives as the **kill switch**, its default
+  now being "at least one taxonomy is selected". The 0.24.x checkbox option is
+  migrated on `wp_loaded` (seeded with the public **and** publicly queryable
+  taxonomies, then deleted, with an explicit cache-salt bump) and kept in
+  `uninstall.php` as a legacy key.
   **Cache/ETag**: term changes do not touch `post_modified_gmt`, so
   `MetadataBuilder::taxonomies_fingerprint()` is folded into `cache_version()`
   — without it a conditional request would answer `304` with stale terms even
@@ -287,6 +298,23 @@ The v1 scope is done and widely exceeded. Implemented:
   trade-off (accented names sort last) is accepted and documented. The block is
   appended **after `description`**, honouring the append-only rule in
   `docs/output-format.md`.
+- **NEVER auto-detect which taxonomies to emit** (decided July 2026, amends the
+  decision above after a real defect in 0.24.0 — do not propose auto-detection
+  again, in any form): the emitted list is the site owner's **explicit
+  per-taxonomy selection** in the panel, empty by default, exactly like
+  `sysmda_markdown_supported_post_types`. Rationale: the registry describes how
+  WordPress *routes* a taxonomy, not whether its terms belong in a
+  machine-readable representation. `public => true, publicly_queryable => false`
+  is the usual shape of an editorial-internal classification with no term
+  archive, and the 0.24.x `public`-only check published it; conversely
+  `publicly_queryable => false` does not prove secrecy (a theme may still print
+  the terms), and `public => true` does not prove usefulness (plugin plumbing
+  attached to public post types). Detection therefore stays **advisory**: it
+  builds the candidate list, labels the not-publicly-queryable rows and seeds the
+  one-time migration. Corollary, equally binding: **no taxonomy a plugin
+  registers later may start publishing itself** — new candidates always appear
+  unticked. An internal taxonomy is still selectable on purpose (panel row or
+  filter): the plugin informs, the owner decides.
 - Front matter **description**: Rank Math (`rank_math_description`) → discarded
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
@@ -471,7 +499,7 @@ running code at the WP level.
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── PostSupport.php         ← post eligibility (is_servable, supported types, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
-        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint() (static)
+        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
@@ -527,8 +555,8 @@ apply_filters( 'sysmda_markdown_output', $markdown, $post );
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
-apply_filters( 'sysmda_front_matter_taxonomies', false );                    // true = append the nested `taxonomies:` block (opt-in; panel checkbox feeds this)
-apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // curate the emitted taxonomies: may narrow AND extend the public default (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
+apply_filters( 'sysmda_front_matter_taxonomies', ! empty( $slugs ) );        // kill switch for the nested `taxonomies:` block; default = at least one taxonomy is selected, false = never emit
+apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // $slugs = the selection saved in the panel (fed in at priority 5), NOT auto-detected. May narrow AND extend it (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
 apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
 apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
 apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
