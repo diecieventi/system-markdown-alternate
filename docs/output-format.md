@@ -108,11 +108,18 @@ taxonomies:
     - "Privacy"
 ```
 
-- **Eligible**: the **public** taxonomies registered for the post's type, minus
-  `category` and `post_tag` (already emitted as `categories`/`tags`) and
-  `post_format` (registered public, but a presentational flag). The list can be
-  curated with the `sysmda_front_matter_taxonomy_slugs` filter; slugs that are
-  not valid taxonomy names are ignored, so a filter cannot break the YAML.
+- **Default list**: the **public** taxonomies registered for the post's type,
+  minus `category` and `post_tag` (already emitted as `categories`/`tags`) and
+  `post_format` (registered public, but a presentational flag).
+- **Curation**: `sysmda_front_matter_taxonomy_slugs` receives that default list
+  and may both narrow it (return an empty array to opt out for a post) **and
+  extend it**. Naming a taxonomy that is registered but not public is a
+  deliberate, supported choice — `public => false, show_ui => true` is a common
+  registration for editorial-internal taxonomies a site may legitimately want in
+  its machine-readable output. What the filter can never do is override the
+  always-excluded set above or emit an invalid slug: both are stripped *after*
+  it runs, so a filter can neither duplicate `categories`/`tags` nor break the
+  YAML.
 - **Conditional**: a taxonomy with no terms on the post is omitted, and if no
   eligible taxonomy has terms the `taxonomies:` key is not emitted at all.
 - **Ordering**: taxonomy slugs and term names are both sorted with PHP's
@@ -195,7 +202,11 @@ successful `.md` response carries:
 - `Link: <permalink>; rel="canonical"` back to the HTML
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
 - `ETag` + `Last-Modified`, with conditional `304 Not Modified` support
-  (`If-None-Match` takes priority over `If-Modified-Since`)
+  (`If-None-Match` takes priority over `If-Modified-Since`). When the
+  `taxonomies:` block is emitted, `If-Modified-Since` is **ignored**: the body
+  can then change without `post_modified_gmt` moving, so only the
+  taxonomy-aware `ETag` can prove a cached copy is still current.
+  `Last-Modified` is still sent, as information.
 
 Two request paths reach the same Markdown:
 

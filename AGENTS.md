@@ -58,7 +58,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.23.x)
+## Current state (v0.24.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -83,6 +83,10 @@ The v1 scope is done and widely exceeded. Implemented:
   (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt), so a `304` always means the
   cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
+  `If-Modified-Since` is honoured **only while the date is a strong validator**:
+  when the taxonomy block is emitted the body can change without
+  `post_modified_gmt` moving, so the date check is skipped and the (taxonomy-aware)
+  `ETag` is the sole validator.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
   against the source permalink** (document-relative, `../`, root-relative).
@@ -158,11 +162,19 @@ The v1 scope is done and widely exceeded. Implemented:
   `category`/`post_tag` (already emitted) and `post_format` (presentational).
   Slugs and term names sorted with `SORT_STRING` — **byte order, not locale
   collation**, so output never depends on the server locale. Curation via
-  `sysmda_front_matter_taxonomy_slugs`; invalid slugs are dropped so a filter
-  cannot break the YAML. **Cache/ETag**: term changes do not touch
-  `post_modified_gmt`, so `MetadataBuilder::taxonomies_fingerprint()` is folded
-  into `cache_version()` — without it a conditional request would answer `304`
-  with stale terms even with the body cache off (see "Technical notes" 6).
+  `sysmda_front_matter_taxonomy_slugs`, which may narrow **and** extend that
+  default (naming a non-public taxonomy is a deliberate opt-in —
+  `public => false, show_ui => true` is common for editorial-internal ones); the
+  always-excluded set and invalid slugs are stripped *after* the filter, so it
+  can neither duplicate `categories`/`tags` nor break the YAML.
+  **Cache/ETag**: term changes do not touch `post_modified_gmt`, so
+  `MetadataBuilder::taxonomies_fingerprint()` is folded into `cache_version()`
+  — without it a conditional request would answer `304` with stale terms even
+  with the body cache off (see "Technical notes" 6). For the same reason
+  `If-Modified-Since` is **ignored while the block is emitted**
+  (`date_is_strong_validator()`): `Last-Modified` comes from
+  `post_modified_gmt`, which a term change does not move, so a client sending
+  no `If-None-Match` would otherwise get a stale `304`.
 - **Documented output format** (`docs/output-format.md`): the front-matter keys,
   their order, the YAML scalar-escaping rules, the body pipeline and the HTTP
   contract, stated as a stable append-only contract (compatibility policy from
@@ -513,7 +525,7 @@ apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
 apply_filters( 'sysmda_front_matter_taxonomies', false );                    // true = append the nested `taxonomies:` block (opt-in; panel checkbox feeds this)
-apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // curate the emitted taxonomies; [] opts out. category/post_tag/post_format and invalid slugs are always stripped
+apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // curate the emitted taxonomies: may narrow AND extend the public default (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
 apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
 apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
 apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)

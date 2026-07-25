@@ -32,6 +32,7 @@ $GLOBALS['sysmda_test_attachments'] = array(); // attachment ID => image URL
 $GLOBALS['sysmda_test_terms']       = array(); // post ID => taxonomy => term objects
 $GLOBALS['sysmda_test_taxonomies']  = array(); // post type => taxonomy slug => object
 $GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return value
+$GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -161,6 +162,19 @@ function get_the_terms( $post, $taxonomy ) {
 	return isset( $GLOBALS['sysmda_test_terms'][ $post->ID ][ $taxonomy ] )
 		? $GLOBALS['sysmda_test_terms'][ $post->ID ][ $taxonomy ]
 		: false;
+}
+
+/** Stub: no magic quotes to strip in the tests. */
+function wp_unslash( $value ) {
+	return $value;
+}
+
+/**
+ * Stub: records the status codes the conditional-request logic would send, so a
+ * 304 can be asserted without a real HTTP response ($GLOBALS reset per test).
+ */
+function status_header( $code ) {
+	$GLOBALS['sysmda_test_status'][] = (int) $code;
 }
 
 /** Stub: taxonomies registered for a post type (always called with 'objects'). */
@@ -749,9 +763,56 @@ check( 'cache_version: stable for unchanged terms', $sysmda_cv_on, $sysmda_cv( $
 $GLOBALS['sysmda_test_terms'][61]['genre'] = array( (object) array( 'name' => 'Ambient' ) );
 check( 'cache_version: term rename changes the ETag', true, $sysmda_cv_on !== $sysmda_cv( $sysmda_cv_post ) );
 
+// ─── handle_conditional: If-Modified-Since must not go stale ─────────
+//
+// The ETag carries the taxonomy fingerprint, but Last-Modified is derived from
+// post_modified_gmt, which a term change does NOT touch. A client sending only
+// If-Modified-Since would therefore be told "304 Not Modified" while its copy
+// has outdated terms, so the date is only honoured while it is a strong
+// validator for the representation.
+
+$sysmda_hc_method = new ReflectionMethod( MarkdownController::class, 'handle_conditional' );
+$sysmda_hc_method->setAccessible( true );
+
+/** Runs handle_conditional() with only an If-Modified-Since header set. */
+$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv ) {
+	$GLOBALS['sysmda_test_status'] = array();
+	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+	$_SERVER['HTTP_IF_MODIFIED_SINCE'] = $since;
+	$result = $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ) );
+	unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
+	return $result;
+};
+
+// The client already holds a copy newer than the post's modification date.
+$sysmda_fresh_since = gmdate( 'D, d M Y H:i:s', strtotime( '2026-07-01 08:30:00 GMT' ) ) . ' GMT';
+
+// Feature OFF: the date fully determines the body, so a 304 is correct and the
+// existing behaviour is preserved.
+$GLOBALS['sysmda_test_filters'] = array();
+check( 'conditional: IMS honoured while taxonomies are off', true, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_status'] );
+
+// Feature ON: the date can no longer prove the body is unchanged, so the full
+// response must be served instead of a stale 304.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+check( 'conditional: IMS ignored when taxonomies are emitted', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: no 304 sent', array(), $GLOBALS['sysmda_test_status'] );
+
+// If-None-Match still works with the feature on: the ETag is taxonomy-aware, so
+// it remains a reliable validator (this is the common browser/crawler case).
+$GLOBALS['sysmda_test_status'] = array();
+unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
+$_SERVER['HTTP_IF_NONE_MATCH'] = '"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+$_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
+check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
 $GLOBALS['sysmda_test_taxonomies'] = array();
+$GLOBALS['sysmda_test_status'] = array();
 unset( $GLOBALS['sysmda_test_terms'][60], $GLOBALS['sysmda_test_terms'][61] );
 
 // ─── LlmsTxtController: line escaping ─────────────────────────────────

@@ -385,6 +385,8 @@ class MarkdownController {
 	 *
 	 * If-None-Match takes precedence (RFC 9110): when present, it alone determines
 	 * the result (match → 304, no match → full body), and If-Modified-Since is ignored.
+	 * If-Modified-Since is additionally ignored whenever the date is not a strong
+	 * validator for this representation (see date_is_strong_validator()).
 	 */
 	private function handle_conditional( \WP_Post $post, string $version ): bool {
 		$etag        = '"' . $version . '"';
@@ -406,7 +408,14 @@ class MarkdownController {
 			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_MODIFIED_SINCE'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 			: '';
 
-		if ( '' !== $if_modified_since && $modified_ts > 0 ) {
+		// If-Modified-Since may only be trusted while `post_modified_gmt` fully
+		// determines the representation. With custom taxonomies emitted it does
+		// not: assigning or renaming a term changes the body without touching
+		// that date, so honouring the date here would answer 304 with stale
+		// terms for a client that sends no If-None-Match. The ETag does carry
+		// the taxonomy fingerprint, so it stays the reliable validator and the
+		// date is downgraded to informational (still sent in the response).
+		if ( '' !== $if_modified_since && $modified_ts > 0 && $this->date_is_strong_validator( $post ) ) {
 			$since = strtotime( $if_modified_since );
 			if ( false !== $since && $modified_ts <= $since ) {
 				$this->send_not_modified( $etag, $modified_ts );
@@ -415,6 +424,16 @@ class MarkdownController {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether `post_modified_gmt` alone determines the emitted Markdown.
+	 *
+	 * False as soon as something can change the output without touching the
+	 * post's modification date — today only the optional taxonomy block.
+	 */
+	private function date_is_strong_validator( \WP_Post $post ): bool {
+		return '' === MetadataBuilder::taxonomies_fingerprint( $post );
 	}
 
 	/**
