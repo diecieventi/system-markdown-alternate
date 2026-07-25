@@ -44,8 +44,29 @@ class ConflictDetector {
 	/**
 	 * A physical llms.txt file in the root is served BEFORE WordPress by the web
 	 * server, so every PHP endpoint (ours or another plugin's) is ignored.
+	 *
+	 * Looks in the *home* directory, not ABSPATH: on a subdirectory install
+	 * (WordPress in /wp/, site at /) the file that shadows the endpoint sits next
+	 * to the site root, and checking ABSPATH would miss it.
 	 */
 	public function physical_file_exists(): bool {
-		return file_exists( trailingslashit( ABSPATH ) . 'llms.txt' );
+		return file_exists( trailingslashit( $this->site_root() ) . 'llms.txt' );
+	}
+
+	/**
+	 * Filesystem path of the site root, falling back to ABSPATH when
+	 * get_home_path() is unavailable (it lives in wp-admin).
+	 */
+	private function site_root(): string {
+		if ( ! function_exists( 'get_home_path' ) ) {
+			if ( ! file_exists( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+				return ABSPATH;
+			}
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$home = get_home_path();
+
+		return is_string( $home ) && '' !== $home ? $home : ABSPATH;
 	}
 }

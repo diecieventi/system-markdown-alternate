@@ -53,6 +53,14 @@ ways:
 The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
 
+Not everything gets a Markdown version: drafts, private and password-protected
+content, media attachments, and posts with a **non-standard post format** (aside,
+status, quote, link, gallery, image, video, audio, chat) are excluded — the last
+of these is filterable through `sysmda_markdown_excluded_post_formats`. Markdown
+is also never served at URL *variants* of a post (its feed, oEmbed view,
+trackback endpoint, paged comments or `<!--nextpage-->` sub-pages), only at the
+canonical permalink and its `.md` URL.
+
 ## Extending via filters
 
 Everything the settings page controls — and more — is exposed as WordPress
@@ -69,6 +77,11 @@ add_filter( 'sysmda_markdown_output', function ( $markdown, $post ) {
 add_filter( 'sysmda_markdown_excluded_classes', function ( $classes ) {
     $classes[] = 'my-private-block';
     return $classes;
+} );
+
+// Serve every post format again, including asides and statuses.
+add_filter( 'sysmda_markdown_excluded_post_formats', function () {
+    return array();
 } );
 ```
 

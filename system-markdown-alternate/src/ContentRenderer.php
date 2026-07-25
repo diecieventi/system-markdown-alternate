@@ -15,6 +15,23 @@ class ContentRenderer {
 	/** CSS classes that mark content for exclusion from Markdown. */
 	const EXCLUDED_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
+	/**
+	 * Wrapper element used to parse the fragment in process_dom().
+	 *
+	 * Deliberately NOT a `div`: content carrying an unbalanced `</div>` (custom
+	 * HTML blocks, migrated content, legacy column shortcodes) would close the
+	 * wrapper early, and everything after it — being a sibling of the wrapper
+	 * rather than a child — was silently dropped from the output. An element
+	 * name no real content closes cannot be ended by accident.
+	 */
+	const ROOT_TAG = 'sysmda-root';
+
+	/**
+	 * Tags that may not be nested inside a `<p>`, so a `<figure>` containing one
+	 * is never rewritten into a paragraph (see unwrap_figures()).
+	 */
+	const BLOCK_TAGS = array( 'table', 'pre', 'ul', 'ol', 'dl', 'blockquote', 'div', 'figure', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' );
+
 	/** @var BlockCleaner */
 	private $blocks;
 
@@ -83,18 +100,19 @@ class ContentRenderer {
 		$previous = libxml_use_internal_errors( true );
 
 		$dom     = new \DOMDocument( '1.0', 'UTF-8' );
-		$wrapped = '<?xml encoding="UTF-8"?><div id="sysmda-root">' . $html . '</div>';
+		$wrapped = '<?xml encoding="UTF-8"?><' . self::ROOT_TAG . '>' . $html . '</' . self::ROOT_TAG . '>';
 		$dom->loadHTML( $wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
 
 		libxml_clear_errors();
 		libxml_use_internal_errors( $previous );
 
-		$root = $dom->getElementsByTagName( 'div' )->item( 0 );
+		$root = $dom->getElementsByTagName( self::ROOT_TAG )->item( 0 );
 		if ( ! $root instanceof \DOMElement ) {
 			return $html;
 		}
 
-		$this->remove_excluded_nodes( $dom );
+		$removed = $this->remove_excluded_nodes( $dom );
+		$this->flatten_definition_lists( $dom );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
@@ -104,39 +122,124 @@ class ContentRenderer {
 			$out .= $dom->saveHTML( $child );
 		}
 
+		// Non-empty input that comes back empty means the parse went wrong, and
+		// the unprocessed HTML is a better answer than nothing. Skipped when an
+		// exclusion rule actually removed something: emptying the body is then
+		// the intended outcome, and falling back would republish excluded content.
+		if ( 0 === $removed && '' === trim( $out ) ) {
+			return $html;
+		}
+
 		return $out;
 	}
 
 	/**
 	 * Removes DOM elements carrying an excluded class (including nested elements).
+	 *
+	 * @return int Number of removed elements.
 	 */
-	private function remove_excluded_nodes( \DOMDocument $dom ): void {
+	private function remove_excluded_nodes( \DOMDocument $dom ): int {
 		$xpath = new \DOMXPath( $dom );
 
 		/** Filters CSS classes whose elements are removed from Markdown output. */
 		$excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 
+		$removed = 0;
+
 		foreach ( $excluded_classes as $class ) {
+			$class = is_string( $class ) ? trim( $class ) : '';
+
+			// The class is interpolated into an XPath expression, so anything but
+			// a plain CSS token is rejected: a quote would make query() return
+			// false and take the whole response down with a TypeError.
+			if ( 1 !== preg_match( '/^[A-Za-z0-9_-]+$/', $class ) ) {
+				continue;
+			}
+
 			$query = sprintf(
 				"//*[contains(concat(' ', normalize-space(@class), ' '), ' %s ')]",
 				$class
 			);
 
-			foreach ( iterator_to_array( $xpath->query( $query ) ) as $node ) {
+			$nodes = $xpath->query( $query );
+
+			if ( ! $nodes instanceof \DOMNodeList ) {
+				continue;
+			}
+
+			foreach ( iterator_to_array( $nodes ) as $node ) {
 				if ( $node->parentNode ) {
 					$node->parentNode->removeChild( $node );
+					++$removed;
 				}
 			}
+		}
+
+		return $removed;
+	}
+
+	/**
+	 * Flattens `<dl>` into paragraphs: the term in bold, each definition as its
+	 * own paragraph.
+	 *
+	 * The converter has no definition-list support and `strip_tags` is on, so an
+	 * untouched `<dl>` came out as its terms and definitions concatenated with no
+	 * separator at all ("TermDefinition").
+	 */
+	private function flatten_definition_lists( \DOMDocument $dom ): void {
+		foreach ( iterator_to_array( $dom->getElementsByTagName( 'dl' ) ) as $list ) {
+			if ( ! $list->parentNode ) {
+				continue;
+			}
+
+			$fragment = $dom->createDocumentFragment();
+
+			foreach ( iterator_to_array( $list->childNodes ) as $child ) {
+				if ( ! $child instanceof \DOMElement ) {
+					continue;
+				}
+
+				$name = strtolower( $child->nodeName );
+
+				if ( 'dt' !== $name && 'dd' !== $name ) {
+					continue;
+				}
+
+				$paragraph = $dom->createElement( 'p' );
+				$target    = $paragraph;
+
+				if ( 'dt' === $name ) {
+					$target = $dom->createElement( 'strong' );
+					$paragraph->appendChild( $target );
+				}
+
+				foreach ( iterator_to_array( $child->childNodes ) as $inner ) {
+					$target->appendChild( $inner );
+				}
+
+				$fragment->appendChild( $paragraph );
+			}
+
+			if ( ! $fragment->hasChildNodes() ) {
+				$list->parentNode->removeChild( $list );
+				continue;
+			}
+
+			$list->parentNode->replaceChild( $fragment, $list );
 		}
 	}
 
 	/**
 	 * Replaces <figure> with <p>, which the library treats as standalone blocks,
 	 * ensuring blank-line separation around images and captions.
+	 *
+	 * Figures holding a block-level element are left alone: a `<table>` (the
+	 * core table block wraps one in a figure) or a `<pre>` inside a `<p>` is
+	 * invalid nesting, and the paragraph brought no benefit there anyway.
 	 */
 	private function unwrap_figures( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'figure' ) ) as $figure ) {
-			if ( ! $figure->parentNode ) {
+			if ( ! $figure->parentNode || $this->contains_block_element( $figure ) ) {
 				continue;
 			}
 
@@ -150,6 +253,19 @@ class ContentRenderer {
 	}
 
 	/**
+	 * Whether the element contains a descendant that cannot live inside a `<p>`.
+	 */
+	private function contains_block_element( \DOMElement $element ): bool {
+		foreach ( $element->getElementsByTagName( '*' ) as $descendant ) {
+			if ( in_array( strtolower( $descendant->nodeName ), self::BLOCK_TAGS, true ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Normalizes code blocks: removes syntax-highlighting <span> elements while
 	 * preserving text and setting the `language-*` class on <code>, so the library
 	 * produces a fenced code block. Covers Code Block Pro and other highlighters.
@@ -157,7 +273,7 @@ class ContentRenderer {
 	private function normalize_code_blocks( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'pre' ) ) as $pre ) {
 			$language  = $this->detect_code_language( $pre );
-			$code_text = $pre->textContent;
+			$code_text = $this->code_text( $pre );
 
 			while ( $pre->firstChild ) {
 				$pre->removeChild( $pre->firstChild );
@@ -170,6 +286,81 @@ class ContentRenderer {
 			$code->appendChild( $dom->createTextNode( $code_text ) );
 			$pre->appendChild( $code );
 		}
+	}
+
+	/**
+	 * Text content of a <pre>, restoring the line breaks when the markup carries
+	 * none of its own.
+	 *
+	 * Highlighters that wrap every line in its own element and rely on CSS for
+	 * the breaks (Shiki — and therefore Code Block Pro — emit
+	 * `<span class="line">…</span><span class="line">…</span>`) have no newline
+	 * anywhere in their text, so reading textContent flat collapsed the whole
+	 * block onto a single line. Highlighters that do keep literal newlines
+	 * (Prism, highlight.js) take the first branch and are untouched.
+	 */
+	private function code_text( \DOMElement $pre ): string {
+		$text = $pre->textContent;
+
+		if ( false !== strpos( $text, "\n" ) ) {
+			return $text;
+		}
+
+		$lines = $this->line_elements( $pre );
+
+		if ( count( $lines ) < 2 ) {
+			return $text;
+		}
+
+		$out = array();
+		foreach ( $lines as $line ) {
+			$out[] = $line->textContent;
+		}
+
+		return implode( "\n", $out );
+	}
+
+	/**
+	 * Per-line wrapper elements of a <pre>, or an empty array when its children
+	 * are not a clean one-element-per-line structure.
+	 *
+	 * Conservative on purpose: anything unexpected (a stray text node, an element
+	 * that does not look like a line wrapper) returns nothing, so code_text()
+	 * keeps the previous flat behaviour rather than guessing at line boundaries.
+	 *
+	 * @return \DOMElement[]
+	 */
+	private function line_elements( \DOMElement $pre ): array {
+		$container = $pre;
+
+		foreach ( $pre->childNodes as $child ) {
+			if ( $child instanceof \DOMElement && 'code' === strtolower( $child->nodeName ) ) {
+				$container = $child;
+				break;
+			}
+		}
+
+		$lines = array();
+
+		foreach ( $container->childNodes as $child ) {
+			if ( ! $child instanceof \DOMElement ) {
+				if ( '' !== trim( $child->textContent ) ) {
+					return array(); // Mixed content: not a line-per-element block.
+				}
+				continue;
+			}
+
+			$is_line = false !== stripos( $child->getAttribute( 'class' ), 'line' )
+				|| in_array( strtolower( $child->nodeName ), array( 'div', 'p' ), true );
+
+			if ( ! $is_line ) {
+				return array();
+			}
+
+			$lines[] = $child;
+		}
+
+		return $lines;
 	}
 
 	/**
@@ -220,7 +411,9 @@ class ContentRenderer {
 
 	/**
 	 * Makes a URL absolute by resolving it against $base (the source permalink):
-	 * - absolute / protocol-relative / special schemes → unchanged;
+	 * - any absolute reference (a scheme is present) / protocol-relative /
+	 *   fragment-only → unchanged;
+	 * - query-only (?x) → against the base path itself (RFC 3986 §5.3);
 	 * - root-relative (/x) → against the origin (scheme://host);
 	 * - document-relative (x, ../x) → against the permalink directory.
 	 */
@@ -231,30 +424,43 @@ class ContentRenderer {
 			return $url;
 		}
 
-		// Already absolute or protocol-relative.
-		if ( preg_match( '#^(https?:)?//#i', $url ) ) {
+		// Fragment-only reference.
+		if ( '#' === $url[0] ) {
 			return $url;
 		}
 
-		// Schemes/anchors that must remain unchanged. Scheme names are
-		// case-insensitive (RFC 3986 §3.1) — as the absolute check above already
-		// assumes for http/https — so `MAILTO:` must be preserved too, otherwise
-		// it would be mistaken for a document-relative path and mangled.
-		foreach ( array( 'data:', 'mailto:', 'tel:', '#' ) as $prefix ) {
-			if ( 0 === stripos( $url, $prefix ) ) {
-				return $url;
-			}
+		// Protocol-relative.
+		if ( 0 === strpos( $url, '//' ) ) {
+			return $url;
+		}
+
+		// Any absolute reference. RFC 3986 §3.1 defines a scheme as
+		// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) followed by ":", and scheme
+		// names are case-insensitive. Matching the grammar rather than a list of
+		// known prefixes covers http(s), mailto:, tel:, data: and everything else
+		// real content links to — ftp:, sms:, whatsapp:, callto:, webcal: — none
+		// of which may be resolved as a path.
+		if ( 1 === preg_match( '#^[a-z][a-z0-9+.\-]*:#i', $url ) ) {
+			return $url;
 		}
 
 		$parts = wp_parse_url( $base );
 
-		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) || empty( $parts['scheme'] ) ) {
 			// Unparseable base: fall back to the site origin.
 			return home_url( '/' . ltrim( $url, '/' ) );
 		}
 
-		$port   = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
-		$origin = $parts['scheme'] . '://' . $parts['host'] . $port;
+		$port      = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+		$origin    = $parts['scheme'] . '://' . $parts['host'] . $port;
+		$base_path = isset( $parts['path'] ) && '' !== $parts['path'] ? $parts['path'] : '/';
+
+		// Query-only reference: the base path is kept as it is, not treated as a
+		// directory (RFC 3986 §5.3). Resolving "?page=2" against "/blog/my-post"
+		// as a directory would otherwise land on "/blog/?page=2".
+		if ( '?' === $url[0] ) {
+			return $origin . $base_path . $url;
+		}
 
 		// Root-relative: resolve against the origin.
 		if ( '/' === $url[0] ) {
@@ -262,8 +468,7 @@ class ContentRenderer {
 		}
 
 		// Document-relative: resolve against the permalink directory.
-		$base_path = isset( $parts['path'] ) ? $parts['path'] : '/';
-		$dir       = ( '/' === substr( $base_path, -1 ) )
+		$dir = ( '/' === substr( $base_path, -1 ) )
 			? $base_path
 			: (string) preg_replace( '#/[^/]*$#', '/', $base_path );
 

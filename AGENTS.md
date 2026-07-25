@@ -33,6 +33,8 @@ risk, stay extensible via filters.
 
 ```bash
 # Pure-logic tests (no WP/PHPUnit; CI runs them on PHP 7.4 and 8.4)
+# The Markdown conversion tests need vendor/ (they exercise the real library);
+# without it they skip themselves with a notice, so run `composer install` first.
 php system-markdown-alternate/tests/run-tests.php
 
 # Lint a touched file
@@ -58,17 +60,28 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.24.x)
+## Current state (v0.26.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
 - **`.md` endpoint** for the enabled post types (public post/page/CPT), published,
-  public, not password-protected; **content negotiation** (`Accept: text/markdown`
+  public, not password-protected, **standard post format only** (see the decision
+  below); **content negotiation** (`Accept: text/markdown`
   or `?format=markdown`). The `Accept` header is **parsed with q-values**
   (`AcceptNegotiator`): Markdown is served only when explicitly preferred
   (q ≥ HTML); a wildcard or missing Accept stays HTML. Negotiable URLs →
   **`Vary: Accept`**; optional **`406`** when the client accepts neither HTML nor
-  Markdown (`sysmda_markdown_strict_406` filter, default on).
+  Markdown (`sysmda_markdown_strict_406` filter, default on). Negotiation happens
+  **only on the canonical singular permalink** (`is_negotiable_request()`):
+  feeds, oEmbed views, trackbacks, paged comments (`cpage`) and `<!--nextpage-->`
+  sub-pages (`page > 1`) are excluded — `is_singular()` stays true for all of
+  them, so `Accept: text/markdown` on `/my-post/feed/` used to return the article
+  body instead of the feed. The guard deliberately mirrors the one in
+  `print_alternate_link()`: what declares `Vary: Accept` and what advertises a
+  Markdown alternate must stay in step. The `.md` suffix route sets up the loop
+  (`setup_postdata` + global `$post`) before converting, because on that route the
+  main query 404s and dynamic blocks/shortcodes would otherwise render against no
+  post — and the two routes would disagree.
 - **`rel="alternate"` link** in the `<head>` of supported singular content.
 - **HTTP headers**: `Content-Type: text/markdown; charset=utf-8`,
   `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
@@ -89,7 +102,27 @@ The v1 scope is done and widely exceeded. Implemented:
   `ETag` is the sole validator.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
-  against the source permalink** (document-relative, `../`, root-relative).
+  against the source permalink** (document-relative, `../`, root-relative,
+  query-only `?x` against the base *path* per RFC 3986 §5.3; any RFC 3986 scheme —
+  `ftp:`, `sms:`, `whatsapp:`, … — is left untouched instead of being resolved as
+  a path). Pipeline invariants worth knowing before touching `ContentRenderer`:
+  - the fragment is parsed inside **`<sysmda-root>`**, never a `div`
+    (`ROOT_TAG`): a stray `</div>` in the content closed a `div` wrapper early
+    and everything after it was silently dropped from the body. Do not change it
+    back to an HTML element the content can close.
+  - `process_dom()` falls back to the unprocessed HTML if a non-empty input comes
+    back empty, but **only when no exclusion rule matched** — otherwise the
+    fallback would republish `md-exclude` content.
+  - **tables** convert through the library's `TableConverter`, registered
+    explicitly in `MarkdownConverter` (it is NOT in the library's default
+    environment; without it `strip_tags` glued every cell together). `<figure>`
+    holding a block element (`BLOCK_TAGS`) is therefore **not** rewritten to `<p>`.
+    `<dl>` is flattened to a bold term plus paragraphs.
+  - **whitespace normalization skips fenced code**: trailing spaces and blank-line
+    runs are meaningful inside a fence (Markdown hard breaks, transcripts, diffs).
+  - code blocks whose highlighter wraps each line in its own element with no
+    literal newline (Shiki → Code Block Pro) get their line breaks
+    reconstructed (`code_text()`); markup that already has newlines is untouched.
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
@@ -273,6 +306,36 @@ The v1 scope is done and widely exceeded. Implemented:
 - `sysmda_markdown_supported_post_types` defaults to **empty** → the plugin is
   **inactive** until at least one type is selected in the panel. `attachment` is
   always excluded. **CPTs are supported** (all public types are shown/validated).
+  "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
+  enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
+  `/llms.txt` stays silent as well (see below).
+- **Non-standard post formats are never served** (decided July 2026):
+  `PostSupport::EXCLUDED_POST_FORMATS` covers all nine (aside, audio, chat,
+  gallery, image, link, quote, status, video). Rationale: those are short,
+  usually untitled snippets with no editorial body worth a document
+  representation; the standard format — the *absence* of a format — is
+  unaffected, which is the overwhelming majority of content. The rule lives in
+  `is_servable()`, so it applies everywhere at once: `.md`, negotiation,
+  `rel="alternate"`, `/llms.txt`, the shortcode and the dynamic tag. Escape hatch:
+  `sysmda_markdown_excluded_post_formats` (empty array = serve them all again).
+  Corollary for `/llms.txt`: the listing query filters its results through
+  `is_servable()` (with `update_post_term_cache => true` so the formats are primed
+  in one query, not one per post) — the index must never advertise a `.md` URL
+  that 404s.
+- **`/llms.txt` stays silent until a content type is enabled** (decided July
+  2026): the option remains **on by default**, but with nothing to index the
+  endpoint answered a site name plus a tagline and took the URL over from anything
+  else that might serve it, while the rest of the plugin was still inactive. This
+  is NOT auto-yielding (see the decision below): the plugin never reacts to
+  another handler, it simply has nothing to say yet.
+- **`.htaccess` is written under an exclusive lock, atomically** (decided July
+  2026): `LiteSpeedCompat::write()` does `flock` + temp file + `rename`, and keeps
+  a one-time `.htaccess.sysmda-bak`. `sync()` runs on every settings-page load, so
+  two concurrent loads could interleave a read-modify-write on the one file whose
+  corruption takes the site down. `WP_Filesystem` is deliberately NOT used: it may
+  demand FTP/SSH credentials the user has not supplied, which would make the sync
+  fail silently on exactly the hosts that need it (the PHPCS warnings carry that
+  justification inline).
 - **ACF** and **GenerateBlocks** panel sections: shown only when the respective
   plugin is active. ACF options are `register_setting`-ed **only when ACF is
   active**, so saving with ACF off does not wipe the field names (the Settings
@@ -495,9 +558,9 @@ running code at the WP level.
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
         ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache, output, alternate link, invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
-        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs); render_fragment()
+        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment()
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
-        ├── PostSupport.php         ← post eligibility (is_servable, supported types, sanitize_types: attachment always stripped)
+        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
@@ -506,7 +569,7 @@ running code at the WP level.
         ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)
         ├── AdminSettings.php       ← settings page (Settings API)
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
-        ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules)
+        ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
         ├── Shortcodes.php          ← [sysmda_md_url]
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
@@ -544,7 +607,8 @@ running code at the WP level.
 
 ```php
 apply_filters( 'sysmda_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected; the result is normalized and `attachment` is always stripped (PostSupport::sanitize_types)
-apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header
+apply_filters( 'sysmda_markdown_excluded_post_formats', $formats, $post );    // non-standard post formats that never expose a .md; [] = serve every format
+apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header (sanitized before reaching header())
 apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
 apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
 apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
@@ -716,6 +780,17 @@ Test posts:
 3. Post with an `md-exclude` section → absent from the `.md`.
 4. Post with a form shortcode (`[contact-form-7 ...]`) and a TOC (`[lwptoc]`) → absent from the `.md`.
 5. Disallowed content (non-enabled page/CPT, draft, password-protected post) → **404**.
+6. Post with a **non-standard post format** (aside/status/quote/…) → **404**, no
+   `rel="alternate"` link, absent from `/llms.txt`, empty shortcode/dynamic tag.
+7. Post with a **table** and a **definition list** → GFM pipe table, `**Term**` +
+   paragraphs (not glued text).
+8. Post whose content carries an **unbalanced `</div>`** (Custom HTML block) →
+   nothing after it is lost.
+9. `/my-post/feed/` with `Accept: text/markdown` (and `?format=markdown`) → the
+   **feed**, not Markdown. Same for `/my-post/embed/` and
+   `/my-post/comment-page-2/`.
+10. Same post through `/my-post.md` and `?format=markdown` → **byte-identical**
+    bodies (the loop is set up on both routes).
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

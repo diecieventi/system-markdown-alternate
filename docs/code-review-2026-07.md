@@ -1,5 +1,15 @@
 # Code review — v0.25.0 (July 2026)
 
+> **Status: resolved in `0.26.0`.** Every finding below was fixed in that
+> release — see the `readme.txt` changelog for the user-facing summary and
+> `AGENTS.md` for the decisions that came out of it. Two items were deliberately
+> closed without a code change, and say so inline: **L7** (memoizing the cache
+> validator would introduce intra-request staleness for a gain the object cache
+> already provides) and **L8** (the hit counter's substring bot matching cannot
+> take word boundaries without losing `Googlebot`, and its per-hit option write
+> is a documented accepted trade-off). The document is kept as the record of what
+> was found and why each fix looks the way it does.
+
 Full review of the shipped code: edge cases, WordPress compatibility, and
 readiness for a wordpress.org submission. **Planned/future work is deliberately
 out of scope** — everything below concerns code that exists today.
@@ -406,7 +416,13 @@ WordPress structures end in `/`, so this only bites structures like
 `isset()` guard used for every neighbouring key — a scheme-less base would emit a
 PHP 8 warning.
 
-**L7 — Redundant recomputation per request.** `serve_markdown()` calls
+**L7 — Redundant recomputation per request.** *(Closed in 0.26.0 without
+memoization: `serve_markdown()` now passes the validator it already computed into
+`get_markdown()`, removing one of the duplicate computations for free. A per-post
+static memo was tried and reverted — it makes a term change stop moving the ETag
+within the same request, which is exactly the guarantee the fingerprint exists
+to provide, and the object cache already makes the repeat term lookups cheap.
+The `/llms.txt` rebuild cost stands as described.)* `serve_markdown()` calls
 `cache_version()` and then `get_markdown()` calls it again; `date_is_strong_validator()`
 adds a third `taxonomies_fingerprint()`, and `append_taxonomies()` a fourth
 `taxonomy_terms()`. Each one re-runs two filters and `get_the_terms()`.
@@ -419,7 +435,13 @@ chain — once per post across up to 500 posts *per type*, and
 edit. Consider rebuilding on a scheduled event, or only invalidating for
 supported post types.
 
-**L8 — Hit counter cost and bot classification.** `HitCounter::record()`
+**L8 — Hit counter cost and bot classification.** *(Closed in 0.26.0 with no
+change, deliberately. Word-boundary matching cannot fix the `CUBOT` false
+positive without also losing `Googlebot` — the token sits at a word boundary in
+neither case — and any brand blocklist would be endless. The per-hit
+`wp_options` write and the lost-update race are already documented as accepted
+limits of an indicator that is opt-in and off by default. Revisit only if the
+counter's own data shows the noise matters.)* `HitCounter::record()`
 (`HitCounter.php:96`) does a `get_option()` + `update_option()` per counted
 request: one `wp_options` write per `.md` hit, with an acknowledged lost-update
 race under concurrency. Both are documented as accepted; still worth knowing

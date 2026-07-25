@@ -182,11 +182,28 @@ theme/plugin-injected related-posts and CTA blocks are not reintroduced:
    - ATX headings (`# Heading`);
    - `-` list markers;
    - fenced code blocks;
+   - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells;
    - `script` / `style` / `iframe` nodes removed;
    - `strip_tags => true` — see the note below.
+4. **Whitespace normalization** — trailing whitespace is trimmed and runs of blank
+   lines are collapsed to one, **outside fenced code blocks only**. Inside a fence
+   the content is preserved byte-for-byte: trailing spaces and blank-line runs are
+   meaningful there (Markdown hard breaks, REPL transcripts, diffs).
 
 If conversion throws, the response falls back to a plain-text extraction rather
 than breaking.
+
+### Structures with a defined conversion
+
+Since `0.26.0` these are part of the documented output rather than incidental:
+
+| Source | Emitted as |
+|---|---|
+| `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table; a `<caption>` becomes a line above it |
+| `<dl>` / `<dt>` / `<dd>` | `**Term**` as its own paragraph, each definition as a following paragraph |
+| `<figure>` around an image | paragraph (so images and captions get blank-line separation) |
+| `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
+| `<pre>` from a syntax highlighter | fenced block, with the `language-*` class preserved as the info string and line breaks reconstructed when the highlighter relies on CSS for them |
 
 ### Default exclusions
 
@@ -208,6 +225,19 @@ and the structural boundary it implied are lost. Do **not** rely on raw/unknown
 HTML tags passing through into the Markdown — they are not part of this stable
 output. Custom structures should be expressed through the block/shortcode
 pipeline or a filter, not by embedding raw HTML and expecting it to round-trip.
+
+## What gets a `.md` at all
+
+The format above is only produced for content the endpoint considers servable
+(`PostSupport::is_servable()`): an enabled post type, `publish` status, not
+password-protected, not an attachment, and — since `0.26.0` — **not carrying a
+non-standard post format** (aside, audio, chat, gallery, image, link, quote,
+status, video; filterable through `sysmda_markdown_excluded_post_formats`).
+
+Markdown is served at the `.md` URL and, through negotiation, at the canonical
+permalink. It is **never** served at URL variants of the post — its feed, its
+oEmbed view, its trackback endpoint, paged comments, or the sub-pages of a post
+split with `<!--nextpage-->` — regardless of the `Accept` header.
 
 ## HTTP contract (summary)
 

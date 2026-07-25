@@ -186,6 +186,13 @@ class AdminSettings {
 	/**
 	 * Writes or removes the LiteSpeed compatibility block in .htaccess so it
 	 * matches the `sysmda_litespeed_htaccess` option (see LiteSpeedCompat).
+	 *
+	 * Runs on a plain GET of the settings page and carries no nonce on purpose:
+	 * it changes no state of its own. The target content is derived entirely from
+	 * the stored option, so the operation is idempotent — loading this page can
+	 * only bring .htaccess back in line with what was already saved, never to a
+	 * state an attacker could choose. It is capability-gated all the same, and
+	 * the write itself is locked and atomic (see LiteSpeedCompat::write()).
 	 */
 	public function sync_litespeed_htaccess(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -414,7 +421,14 @@ class AdminSettings {
 	// ─── Sanitizzazione ─────────────────────────────────────────────────────────
 
 	/**
-	 * Post type allowlist: keeps only registered public types (excluding Media).
+	 * Post type allowlist: registered public types (excluding Media), plus any
+	 * previously saved type that is not registered right now.
+	 *
+	 * The survival rule matters: a saved type whose plugin is temporarily
+	 * inactive would otherwise be dropped by the next save of this page, silently
+	 * turning the `.md` endpoint off for it when the plugin comes back. Same
+	 * reasoning as sanitize_taxonomy_slugs(); the emission path validates the
+	 * type again, so an unknown one is inert.
 	 *
 	 * @param mixed $value
 	 * @return string[]
@@ -427,10 +441,17 @@ class AdminSettings {
 		$allowed = get_post_types( array( 'public' => true ), 'names' );
 		unset( $allowed['attachment'] );
 
+		$saved = (array) get_option( 'sysmda_supported_post_types', array() );
+
 		$clean = array();
 		foreach ( $value as $item ) {
 			$item = sanitize_key( $item );
-			if ( '' !== $item && isset( $allowed[ $item ] ) ) {
+
+			if ( '' === $item || 'attachment' === $item ) {
+				continue;
+			}
+
+			if ( isset( $allowed[ $item ] ) || in_array( $item, $saved, true ) ) {
 				$clean[] = $item;
 			}
 		}
@@ -539,19 +560,18 @@ class AdminSettings {
 	private function hook_filters(): void {
 		add_filter(
 			'sysmda_markdown_cache_ttl',
-			function ( $default, $post ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_cache_ttl' );
-				return false !== $v ? (int) $v : $default;
+				return false !== $v ? (int) $v : $fallback;
 			},
-			20,
-			2
+			20
 		);
 
 		add_filter(
 			'sysmda_llms_txt_cache_ttl',
-			function ( $default ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_cache_ttl' );
-				return false !== $v ? (int) $v : $default;
+				return false !== $v ? (int) $v : $fallback;
 			},
 			20
 		);
@@ -571,27 +591,27 @@ class AdminSettings {
 
 		add_filter(
 			'sysmda_llms_txt_enriched',
-			function ( $default ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_llms_txt_enriched' );
-				return false !== $v ? '1' === $v : $default;
+				return false !== $v ? '1' === $v : $fallback;
 			},
 			20
 		);
 
 		add_filter(
 			'sysmda_llms_txt_lastmod',
-			function ( $default ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_llms_txt_lastmod' );
-				return false !== $v ? '1' === $v : $default;
+				return false !== $v ? '1' === $v : $fallback;
 			},
 			20
 		);
 
 		add_filter(
 			'sysmda_llms_txt_summary',
-			function ( $default ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_llms_txt_summary' );
-				return ( false !== $v && '' !== trim( (string) $v ) ) ? (string) $v : $default;
+				return ( false !== $v && '' !== trim( (string) $v ) ) ? (string) $v : $fallback;
 			},
 			20
 		);
@@ -643,32 +663,29 @@ class AdminSettings {
 
 		add_filter(
 			'sysmda_markdown_robots_header',
-			function ( $default, $post ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_robots_header' );
-				return false !== $v ? $v : $default;
+				return false !== $v ? $v : $fallback;
 			},
-			20,
-			2
+			20
 		);
 
 		add_filter(
 			'sysmda_acf_subtitle_key',
-			function ( $default, $post ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_acf_subtitle_key' );
-				return ( false !== $v && '' !== $v ) ? $v : $default;
+				return ( false !== $v && '' !== $v ) ? $v : $fallback;
 			},
-			20,
-			2
+			20
 		);
 
 		add_filter(
 			'sysmda_acf_tldr_key',
-			function ( $default, $post ) {
+			function ( $fallback ) {
 				$v = get_option( 'sysmda_acf_tldr_key' );
-				return ( false !== $v && '' !== $v ) ? $v : $default;
+				return ( false !== $v && '' !== $v ) ? $v : $fallback;
 			},
-			20,
-			2
+			20
 		);
 	}
 
@@ -819,6 +836,18 @@ class AdminSettings {
 				esc_html( $pt->name )
 			);
 		}
+
+		// Types saved earlier that are not registered right now (plugin
+		// deactivated). Rendered checked so saving the page cannot silently
+		// discard the choice: the field would otherwise be absent from the POST.
+		foreach ( array_diff( $saved, array_keys( $all_types ) ) as $type ) {
+			printf(
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%1$s" checked="checked" /> <code>%1$s</code> <span class="description">%2$s</span></label>',
+				esc_attr( $type ),
+				esc_html__( '— not registered right now', 'system-markdown-alternate' )
+			);
+		}
+
 		echo '<p class="description">' . wp_kses_post( __( 'Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
@@ -1043,6 +1072,17 @@ class AdminSettings {
 		echo '<p class="description">' . esc_html__( 'Days are counted in UTC.', 'system-markdown-alternate' ) . '</p>';
 	}
 
+	/**
+	 * Renders the settings page: header, tabs, one card per registered section.
+	 *
+	 * The section list is read from `$wp_settings_sections`, a core global with no
+	 * public accessor — the only way to wrap each section in its own card and tab
+	 * panel while keeping every field inside the single form (so saving,
+	 * sanitization and nonces stay exactly as the Settings API expects). If a
+	 * future core change makes that global unavailable or reshapes it, the page
+	 * falls back to the standard do_settings_sections() output: plain, but
+	 * complete and saveable.
+	 */
 	public function render_page(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
@@ -1050,6 +1090,11 @@ class AdminSettings {
 
 		global $wp_settings_sections, $wp_settings_fields;
 		$sections = isset( $wp_settings_sections[ self::PAGE ] ) ? (array) $wp_settings_sections[ self::PAGE ] : array();
+
+		if ( empty( $sections ) ) {
+			$this->render_page_fallback();
+			return;
+		}
 		?>
 		<div class="wrap sysmda-settings-page">
 			<form method="post" action="options.php" class="sysmda-settings-page__form">
@@ -1070,12 +1115,12 @@ class AdminSettings {
 				<hr class="wp-header-end">
 
 				<?php if ( count( $sections ) > 1 ) : ?>
-					<nav class="nav-tab-wrapper sysmda-tabs" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
+					<nav class="nav-tab-wrapper sysmda-tabs" role="tablist" aria-label="<?php esc_attr_e( 'Settings sections', 'system-markdown-alternate' ); ?>">
 						<?php
 						$i = 0;
 						foreach ( $sections as $sid => $section ) {
 							printf(
-								'<a href="#sysmda-panel-%1$s" class="nav-tab%2$s" data-tab="%1$s">%3$s</a>',
+								'<a href="#sysmda-panel-%1$s" id="sysmda-tab-%1$s" class="nav-tab%2$s" data-tab="%1$s" aria-controls="sysmda-panel-%1$s">%3$s</a>',
 								esc_attr( (string) $sid ),
 								0 === $i ? ' nav-tab-active' : '',
 								esc_html( (string) $section['title'] )
@@ -1093,7 +1138,7 @@ class AdminSettings {
 						foreach ( $sections as $sid => $section ) {
 							$sid = (string) $sid;
 							printf(
-								'<div class="sysmda-tab-panel%1$s" id="sysmda-panel-%2$s" data-tab="%2$s" role="tabpanel">',
+								'<div class="sysmda-tab-panel%1$s" id="sysmda-panel-%2$s" data-tab="%2$s" role="tabpanel" aria-labelledby="sysmda-tab-%2$s">',
 								0 === $i ? ' is-active' : '',
 								esc_attr( $sid )
 							);
@@ -1119,6 +1164,26 @@ class AdminSettings {
 						<?php $this->render_llmstxt_aside(); ?>
 					</aside>
 				</div>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Plain Settings API rendering, used when the section list cannot be read
+	 * (see render_page()). No tabs and no cards, but every field is present and
+	 * the form saves normally.
+	 */
+	private function render_page_fallback(): void {
+		?>
+		<div class="wrap">
+			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<form method="post" action="options.php">
+				<?php
+				settings_fields( self::OPTION_GROUP );
+				do_settings_sections( self::PAGE );
+				submit_button();
+				?>
 			</form>
 		</div>
 		<?php

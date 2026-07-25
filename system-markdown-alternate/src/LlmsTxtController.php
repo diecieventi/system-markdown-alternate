@@ -60,6 +60,15 @@ class LlmsTxtController {
 			return; // Disabled in the admin panel.
 		}
 
+		// The option is on by default, but with no enabled content type there is
+		// nothing to index: the endpoint would answer a site name and a tagline,
+		// and would take /llms.txt over from whatever else may be handling it
+		// while the rest of the plugin is still inactive. Stay out of the way
+		// until the site owner has selected something.
+		if ( empty( PostSupport::supported_post_types() ) ) {
+			return;
+		}
+
 		// Trailing slash: redirect /llms.txt/ to /llms.txt with a 301.
 		if ( $path === $expected . '/' ) {
 			wp_safe_redirect( home_url( '/llms.txt' ), 301 );
@@ -173,9 +182,18 @@ class LlmsTxtController {
 					'order'                  => 'DESC',
 					'no_found_rows'          => true,
 					'update_post_meta_cache' => $enriched, // Enriched descriptions read post meta.
-					'update_post_term_cache' => false,     // Terms are never read.
+					// Primed in one query for the whole batch: the servability
+					// filter below reads each post's format, which would otherwise
+					// be a term lookup per post.
+					'update_post_term_cache' => true,
 				)
 			);
+
+			// Every listed entry must actually resolve: the index links to `.md`
+			// URLs, so a post the endpoint would 404 (an excluded post format)
+			// has no business being advertised here. Filtering the result keeps
+			// this in step with PostSupport automatically.
+			$posts = array_filter( $posts, array( PostSupport::class, 'is_servable' ) );
 
 			if ( empty( $posts ) ) {
 				continue;

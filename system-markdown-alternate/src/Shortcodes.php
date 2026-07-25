@@ -40,7 +40,13 @@ class Shortcodes {
 	}
 
 	/**
-	 * Resolves the post from an explicit ID, the queried object, or the loop.
+	 * Resolves the post from an explicit ID, the current loop, or the queried object.
+	 *
+	 * The loop comes before the queried object: inside a secondary loop (related
+	 * posts, a query block, a shortcode in a widget on a single post) the queried
+	 * object is still the *main* post, so preferring it made every item render the
+	 * same URL. get_post() follows the global `$post`, which is what the
+	 * surrounding loop sets, and falls back to the main post outside any loop.
 	 */
 	private function resolve_post( int $id ): ?\WP_Post {
 		if ( $id > 0 ) {
@@ -48,12 +54,12 @@ class Shortcodes {
 			return $post instanceof \WP_Post ? $post : null;
 		}
 
-		$queried = get_queried_object();
-		if ( $queried instanceof \WP_Post ) {
-			return $queried;
+		$post = get_post();
+		if ( $post instanceof \WP_Post ) {
+			return $post;
 		}
 
-		$post = get_post();
-		return $post instanceof \WP_Post ? $post : null;
+		$queried = get_queried_object();
+		return $queried instanceof \WP_Post ? $queried : null;
 	}
 }

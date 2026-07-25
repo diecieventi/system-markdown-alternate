@@ -38,6 +38,12 @@ class MarkdownController {
 	 *    and proxies do not mix the two representations.
 	 */
 	public function maybe_render_markdown(): void {
+		// No enabled content type: the plugin is inactive and must not touch the
+		// request at all — not even to redirect a .md URL it would then 404.
+		if ( empty( PostSupport::supported_post_types() ) ) {
+			return;
+		}
+
 		// --- .md suffix route ---
 		$post = $this->resolve_requested_post();
 
@@ -50,10 +56,11 @@ class MarkdownController {
 		}
 
 		// --- Content negotiation on the canonical permalink ---
-		$queried = get_queried_object();
-		if ( ! $queried instanceof \WP_Post || ! $this->is_servable( $queried ) ) {
+		if ( ! $this->is_negotiable_request() ) {
 			return; // Not negotiable: WP continues with normal rendering.
 		}
+
+		$queried = get_queried_object();
 
 		// This URL varies by Accept: declare it to caches/CDNs/proxies whether
 		// responding with Markdown or leaving HTML rendering to WordPress.
@@ -77,6 +84,40 @@ class MarkdownController {
 		}
 
 		// Default: WordPress serves HTML (Vary: Accept already sent).
+	}
+
+	/**
+	 * Whether the current request may be answered with the negotiated Markdown
+	 * representation of the queried post.
+	 *
+	 * Only the canonical singular permalink negotiates. `is_singular` alone is
+	 * not enough: it stays true for a post's feed, its oEmbed view, its trackback
+	 * endpoint, its paged comments and the sub-pages of a `<!--nextpage-->` post,
+	 * so `Accept: text/markdown` on `/my-post/feed/` used to return the article
+	 * body instead of the feed. Those URLs are variants of the post, not the post,
+	 * and `markdown_url()` never advertises them.
+	 *
+	 * Matches the guard used by print_alternate_link(): what declares
+	 * `Vary: Accept` and what advertises a Markdown alternate stay in step.
+	 */
+	private function is_negotiable_request(): bool {
+		if ( is_feed() || is_embed() || is_trackback() ) {
+			return false;
+		}
+
+		if ( ! is_singular( PostSupport::supported_post_types() ) ) {
+			return false;
+		}
+
+		// Paged comments (/comment-page-2/) and post sub-pages (/my-post/2/) are
+		// separate URLs whose Markdown would duplicate the canonical one.
+		if ( (int) get_query_var( 'cpage' ) > 0 || (int) get_query_var( 'page' ) > 1 ) {
+			return false;
+		}
+
+		$queried = get_queried_object();
+
+		return $queried instanceof \WP_Post && $this->is_servable( $queried );
 	}
 
 	/**
@@ -140,9 +181,10 @@ class MarkdownController {
 
 		$path = rawurldecode( $path );
 
-		// Trailing slash: /slug.md/ → 301 to /slug.md.
-		if ( (bool) preg_match( '#\.md/+$#', $path ) ) {
-			$target = preg_replace( '#\.md/+$#', '.md', $path );
+		// Trailing slash: /slug.md/ → 301 to /slug.md. The suffix is matched
+		// case-insensitively (a hand-typed or copied `.MD` should resolve too).
+		if ( (bool) preg_match( '#\.md/+$#i', $path ) ) {
+			$target = preg_replace( '#\.md/+$#i', '.md', $path );
 			$query  = wp_parse_url( $request_uri, PHP_URL_QUERY );
 			if ( $query ) {
 				$target .= '?' . $query;
@@ -151,7 +193,7 @@ class MarkdownController {
 			exit;
 		}
 
-		if ( '.md' !== substr( $path, -3 ) ) {
+		if ( 0 !== strcasecmp( '.md', substr( $path, -3 ) ) ) {
 			return null;
 		}
 
@@ -350,7 +392,7 @@ class MarkdownController {
 		}
 
 		$this->send_headers( $post, $version );
-		echo $this->get_markdown( $post ); // phpcs:ignore WordPress.Security.EscapeOutput
+		echo $this->get_markdown( $post, $version ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
 	}
 
@@ -507,12 +549,15 @@ class MarkdownController {
 	 * - when the plugin is updated (SYSMDA_VERSION changes)
 	 * - when settings are saved (the salt changes; see AdminSettings)
 	 * - by the save_post hook through invalidate_cache().
+	 *
+	 * @param string $version Validator computed by the caller (also the ETag), so
+	 *                        the hash — and the term lookups behind it — are not
+	 *                        recomputed for the same response.
 	 */
-	private function get_markdown( \WP_Post $post ): string {
+	private function get_markdown( \WP_Post $post, string $version ): string {
 		/** Filter: cache TTL in seconds. 0 disables the cache. */
 		$ttl       = (int) apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );
 		$cache_key = 'sysmda_md_' . $post->ID;
-		$version   = $this->cache_version( $post );
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( $cache_key );
@@ -560,11 +605,34 @@ class MarkdownController {
 
 	/**
 	 * Assembles front matter, H1 title, and converted body.
+	 *
+	 * The post is installed as the global `$post` (and the loop is set up) for
+	 * the duration of the conversion. On the `.md` suffix route the main query
+	 * resolved `/slug.md`, which matches nothing, so WordPress 404s and leaves
+	 * `$GLOBALS['post']` null: dynamic blocks and shortcodes falling back to
+	 * `get_the_ID()` would render against no post at all, and the same content
+	 * would convert differently depending on whether it was reached through the
+	 * `.md` suffix or through negotiation on the permalink.
 	 */
 	private function build_markdown( \WP_Post $post ): string {
-		$front_matter = $this->metadata->build_front_matter( $post );
-		$html         = $this->renderer->render( $post );
-		$body         = $this->converter->convert( $html );
+		$previous_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+
+		$GLOBALS['post'] = $post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored below; render_block()/do_shortcode() need the loop context.
+		setup_postdata( $post );
+
+		try {
+			$front_matter = $this->metadata->build_front_matter( $post );
+			$html         = $this->renderer->render( $post );
+			$body         = $this->converter->convert( $html );
+		} finally {
+			if ( $previous_post instanceof \WP_Post ) {
+				$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the caller's value.
+				setup_postdata( $previous_post );
+			} else {
+				unset( $GLOBALS['post'] );
+				wp_reset_postdata();
+			}
+		}
 
 		$title = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
 		$title = trim( preg_replace( '/\s+/', ' ', $title ) );
@@ -603,7 +671,12 @@ class MarkdownController {
 		/** Filter: X-Robots-Tag header. Empty string means the header is not sent. */
 		$robots = apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );
 
-		if ( is_string( $robots ) && '' !== $robots ) {
+		// Both filter results are sanitized before reaching header(): a value
+		// carrying a line break is rejected by PHP with a fatal error, and a
+		// public extension point must not be able to take the response down.
+		$robots = is_string( $robots ) ? sanitize_text_field( $robots ) : '';
+
+		if ( '' !== $robots ) {
 			header( 'X-Robots-Tag: ' . $robots );
 		}
 
@@ -613,7 +686,9 @@ class MarkdownController {
 		 */
 		$canonical = apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post );
 
-		if ( is_string( $canonical ) && '' !== $canonical ) {
+		$canonical = is_string( $canonical ) ? esc_url_raw( $canonical ) : '';
+
+		if ( '' !== $canonical ) {
 			header( 'Link: <' . $canonical . '>; rel="canonical"', false );
 		}
 	}

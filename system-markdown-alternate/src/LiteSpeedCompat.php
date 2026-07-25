@@ -152,7 +152,7 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		return self::block_is_before_wordpress( (string) file_get_contents( $path ) );
+		return self::block_is_before_wordpress( (string) file_get_contents( $path ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
 	}
 
 	/**
@@ -229,8 +229,8 @@ class LiteSpeedCompat {
 				return false;
 			}
 
-			$contents = file_exists( $path ) ? (string) file_get_contents( $path ) : '';
-			$written  = false !== file_put_contents( $path, self::prepend_rules( $contents ) );
+			$contents = file_exists( $path ) ? (string) file_get_contents( $path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; WP_Filesystem would need credentials this page load does not have.
+			$written  = self::write( $path, self::prepend_rules( $contents ) );
 
 			if ( $written ) {
 				self::purge_litespeed_cache();
@@ -264,14 +264,70 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		$contents = (string) file_get_contents( $path );
+		$contents = (string) file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
 		$stripped = self::strip_rules( $contents );
 
 		if ( $stripped === $contents ) {
 			return true;
 		}
 
-		return false !== file_put_contents( $path, $stripped );
+		return self::write( $path, $stripped );
+	}
+
+	/**
+	 * Replaces .htaccess atomically: the new content goes to a private temporary
+	 * file in the same directory, which is then renamed over the target.
+	 *
+	 * This is the one file whose corruption takes the whole site down with a 500,
+	 * and sync() runs on every load of the settings page, so a concurrent load must
+	 * never be able to observe — or produce — a half-written .htaccess. rename()
+	 * within a directory is atomic, so any reader (Apache included) sees either the
+	 * old file or the new one, complete.
+	 *
+	 * The temporary name is unique per attempt on purpose: a fixed one would let two
+	 * concurrent writers truncate each other's buffer before either renamed, which
+	 * is precisely the corruption this exists to prevent. What this does NOT
+	 * serialize is the surrounding read-modify-write — two writers can still race
+	 * and the last rename wins — but both candidate contents are complete and
+	 * derived from the same stored option, so the result is always a valid file. A
+	 * lock file would close that last gap at the cost of leaving a stray file in the
+	 * site root: not worth it for an idempotent write.
+	 *
+	 * WP_Filesystem is deliberately not used: it may require FTP/SSH credentials the
+	 * user has not supplied, which would make the sync fail silently on exactly the
+	 * hosts that need it. Direct writes are guarded by htaccess_writable() instead.
+	 *
+	 * A one-time `.htaccess.sysmda-bak` snapshot is kept the first time the file is
+	 * touched, so a bad state is recoverable without FTP access.
+	 */
+	private static function write( string $path, string $contents ): bool {
+		$backup = $path . '.sysmda-bak';
+
+		if ( file_exists( $path ) && ! file_exists( $backup ) ) {
+			@copy( $path, $backup ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort: a missing backup must not block the write.
+		}
+
+		$temp = $path . '.sysmda-tmp-' . wp_generate_password( 8, false );
+
+		// 'x' fails instead of clobbering, so a name collision can never make two
+		// writers share one buffer.
+		$handle = fopen( $temp, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- See the docblock: WP_Filesystem may need credentials.
+
+		if ( false === $handle ) {
+			return false;
+		}
+
+		$written = false !== fwrite( $handle, $contents ) && fflush( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- The atomic replace is the point: WP_Filesystem::move() cannot guarantee it and may need credentials.
+		if ( ! $written || ! rename( $temp, $path ) ) {
+			wp_delete_file( $temp );
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -345,7 +401,7 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		return false !== strpos( (string) file_get_contents( $path ), '# BEGIN ' . self::MARKER );
+		return false !== strpos( (string) file_get_contents( $path ), '# BEGIN ' . self::MARKER ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
 	}
 
 	/**

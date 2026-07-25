@@ -28,6 +28,12 @@ jobs:
           find system-markdown-alternate -name '*.php' -not -path '*/vendor/*' -print0 \
             | xargs -0 -n1 php -l > /dev/null
 
+      # The Markdown conversion tests exercise league/html-to-markdown itself
+      # (table support, fenced-code handling), so the runtime dependency has to be
+      # present or they skip themselves.
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress --no-dev --working-dir=system-markdown-alternate
+
       - name: Run tests
         run: php system-markdown-alternate/tests/run-tests.php
 
