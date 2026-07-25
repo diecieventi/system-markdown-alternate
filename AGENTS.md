@@ -151,6 +151,18 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
+- **Custom taxonomies in the front matter** (`sysmda_front_matter_taxonomies`
+  toggle, default **off**; off = front matter and cache validator byte-identical
+  to 0.23.x): appends a nested `taxonomies:` mapping **after `description`**
+  (append-only contract), listing the post type's **public** taxonomies minus
+  `category`/`post_tag` (already emitted) and `post_format` (presentational).
+  Slugs and term names sorted with `SORT_STRING` — **byte order, not locale
+  collation**, so output never depends on the server locale. Curation via
+  `sysmda_front_matter_taxonomy_slugs`; invalid slugs are dropped so a filter
+  cannot break the YAML. **Cache/ETag**: term changes do not touch
+  `post_modified_gmt`, so `MetadataBuilder::taxonomies_fingerprint()` is folded
+  into `cache_version()` — without it a conditional request would answer `304`
+  with stale terms even with the body cache off (see "Technical notes" 6).
 - **Documented output format** (`docs/output-format.md`): the front-matter keys,
   their order, the YAML scalar-escaping rules, the body pipeline and the HTTP
   contract, stated as a stable append-only contract (compatibility policy from
@@ -254,6 +266,15 @@ The v1 scope is done and widely exceeded. Implemented:
   only a manual user choice from the panel; if other handlers are active
   underneath, that is the user's responsibility. The conflict notice stays purely
   informational.
+- **Custom taxonomies are opt-in and alphabetically ordered** (decided July
+  2026): enabling them changes the front-matter payload of every post on an
+  upgraded site, so it must be the user's explicit choice — default off, and off
+  means byte-identical output *and* cache validator. Ordering is `SORT_STRING`
+  (byte order) rather than locale collation, so the output never depends on the
+  server locale and the golden tests stay stable across environments; the
+  trade-off (accented names sort last) is accepted and documented. The block is
+  appended **after `description`**, honouring the append-only rule in
+  `docs/output-format.md`.
 - Front matter **description**: Rank Math (`rank_math_description`) → discarded
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
@@ -435,7 +456,7 @@ running code at the WP level.
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── PostSupport.php         ← post eligibility (is_servable, supported types, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
-        ├── MetadataBuilder.php     ← YAML front matter; markdown_url() (static)
+        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint() (static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
@@ -491,6 +512,8 @@ apply_filters( 'sysmda_markdown_output', $markdown, $post );
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+apply_filters( 'sysmda_front_matter_taxonomies', false );                    // true = append the nested `taxonomies:` block (opt-in; panel checkbox feeds this)
+apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // curate the emitted taxonomies; [] opts out. category/post_tag/post_format and invalid slugs are always stripped
 apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
 apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
 apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
@@ -535,12 +558,18 @@ Default exclusions:
    `the_content`), to avoid reintroducing injected related/CTA content.
 5. **Absolute URLs**: resolved against the post permalink (not `home_url('/')`).
 6. **Cache**: key `sysmda_md_{post_id}`, value with a validity hash
-   (`post_modified_gmt|SYSMDA_VERSION|salt`); `/llms.txt` cached under
-   `sysmda_llms_txt`. Everything through the `Cache` helper (persistent object
-   cache or transients). The **same hash is the strong `ETag`** of the `.md`
-   response (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
+   (`post_modified_gmt|SYSMDA_VERSION|salt`, plus the taxonomy fingerprint when
+   that feature is on); `/llms.txt` cached under `sysmda_llms_txt`. Everything
+   through the `Cache` helper (persistent object cache or transients). The
+   **same hash is the strong `ETag`** of the `.md` response
+   (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
-   work even when the body cache is off.
+   work even when the body cache is off. **Anything that can change the emitted
+   Markdown without touching `post_modified_gmt` MUST be folded into this hash**
+   — otherwise a client holding the old validator keeps getting `304` with stale
+   content, body cache or not. Custom taxonomies were the first such case
+   (`MetadataBuilder::taxonomies_fingerprint()`); deleting the cache entry alone
+   would NOT have been enough. Apply the same rule to any future addition.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

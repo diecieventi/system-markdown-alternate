@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.23.3
+Stable tag: 0.24.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -45,6 +45,9 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   section for older posts. Another optional toggle appends the **last modified
   date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed
   content without re-fetching each URL.
+* **Custom taxonomies in the front matter** (optional, off by default): adds a
+  `taxonomies:` block with the post type's public custom taxonomies and their
+  terms, alphabetically ordered.
 * **Object cache** with proactive invalidation on post edit, plugin update and
   settings change: a persistent object cache is used when one is available,
   falling back to transients otherwise.
@@ -78,6 +81,10 @@ The output is customizable through filters:
 * `sysmda_markdown_excluded_block_names` — Gutenberg blocks to drop.
 * `sysmda_markdown_excluded_shortcodes` — shortcodes to drop.
 * `sysmda_markdown_excluded_classes` — CSS classes whose elements are dropped.
+* `sysmda_front_matter_taxonomies` — add custom taxonomies to the front matter
+  (default `false`; the settings checkbox feeds this).
+* `sysmda_front_matter_taxonomy_slugs` — which taxonomies are emitted (return an
+  empty array to opt out for a post).
 * `sysmda_acf_field_keys` — ACF fields appended to the source.
 * `sysmda_acf_subtitle_key` / `sysmda_acf_tldr_key` — ACF fields for subtitle/TL;DR.
 * `sysmda_llms_txt_max_posts` — max posts per type in `/llms.txt`.
@@ -119,6 +126,16 @@ featured image, categories, tags and a description), followed by the `# Title`
 heading and the post body converted to clean Markdown. The exact keys, their
 order and the escaping rules are documented as a stable contract, with
 conformance tests, in `docs/output-format.md` in the source repository.
+
+= Can I include my custom taxonomies? =
+
+Yes. Open **Settings → Markdown Alternate → Markdown output** and tick *Custom
+taxonomies*: the front matter then carries a `taxonomies:` block with the post
+type's public custom taxonomies and their terms, sorted alphabetically.
+Categories and tags already have their own keys and are not repeated. The
+option is off by default, because enabling it changes the front matter of every
+post. Developers can curate the list with the `sysmda_front_matter_taxonomy_slugs`
+filter.
 
 = How do I exclude part of a post from the Markdown? =
 
@@ -195,6 +212,21 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.24.0 =
+* Added: optional **custom taxonomies in the front matter**. A new *Custom
+  taxonomies* checkbox under "Markdown output" (off by default) appends a
+  nested `taxonomies:` block listing the post type's public custom taxonomies
+  and their terms. Categories and tags keep their own keys and are not
+  repeated; `post_format` is excluded as presentational. Taxonomy slugs and
+  term names are sorted alphabetically. Curate the list with the
+  `sysmda_front_matter_taxonomy_slugs` filter.
+* Added: the emitted taxonomy data is now part of the cache validity hash and
+  therefore of the `ETag`. Assigning or renaming a term does not change a post's
+  modification date, so without this a conditional request could keep answering
+  `304 Not Modified` with outdated terms.
+* Note: with the toggle off, both the Markdown output and the `ETag` are
+  identical to 0.23.3, so upgrading does not invalidate any cached response.
 
 = 0.23.3 =
 * Fixed: links using an uppercase or mixed-case scheme (`MAILTO:`, `TEL:`,

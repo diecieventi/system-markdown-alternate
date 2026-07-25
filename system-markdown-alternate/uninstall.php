@@ -19,6 +19,7 @@ $sysmda_options = array(
 	'sysmda_excluded_classes',
 	'sysmda_supported_post_types',
 	'sysmda_robots_header',
+	'sysmda_front_matter_taxonomies',
 	'sysmda_acf_subtitle_key',
 	'sysmda_acf_tldr_key',
 	'sysmda_llms_txt_enabled',

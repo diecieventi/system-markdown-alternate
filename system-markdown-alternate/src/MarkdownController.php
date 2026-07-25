@@ -522,11 +522,21 @@ class MarkdownController {
 	/**
 	 * Cache validity hash: changes when the post is edited, the plugin is updated,
 	 * or settings are saved (global salt).
+	 *
+	 * This value is also the strong ETag, so it must change whenever the emitted
+	 * Markdown changes. Term assignments and renames do NOT touch
+	 * `post_modified_gmt`, so when custom taxonomies are emitted their data is
+	 * fingerprinted in as well; without it a conditional request would keep
+	 * answering `304` with outdated terms, even with the body cache disabled.
+	 * The fingerprint is empty while the feature is off, which leaves the hash
+	 * byte-identical to earlier versions (no mass invalidation on upgrade).
 	 */
 	private function cache_version( \WP_Post $post ): string {
-		$salt = (string) get_option( 'sysmda_cache_salt', '0' );
+		$salt       = (string) get_option( 'sysmda_cache_salt', '0' );
+		$taxonomies = MetadataBuilder::taxonomies_fingerprint( $post );
+		$taxonomies = '' !== $taxonomies ? '|' . $taxonomies : '';
 
-		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt );
+		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt . $taxonomies );
 	}
 
 	/**
