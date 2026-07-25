@@ -52,7 +52,9 @@ composer --working-dir=system-markdown-alternate phpcbf   # auto-fix what is fix
 bash bin/build.sh
 
 # Create + push any missing release tag, notes from the readme.txt changelog.
-# Run BY THE USER from the Mac (the web env cannot push tags); --dry-run previews
+# Usually NOT needed by hand: the "Release tag" GitHub Action runs this on every
+# push to main that changes the version. Run it locally only to catch up offline;
+# --dry-run previews. (Agents cannot push tags: the web proxy rejects them.)
 bash bin/release-tag.sh
 ```
 
@@ -330,12 +332,13 @@ The v1 scope is done and widely exceeded. Implemented:
   every release: bump `system-markdown-alternate.php` (both the `Version:` header
   **and** `SYSMDA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
   `bash bin/build.sh`, commit, push the branch and open the PR (see the git
-  workflow below). After merging a release PR, the user runs
-  `bash bin/release-tag.sh` from the Mac: it finds any missing `vX.Y.Z` tag,
-  creates it annotated on the release commit with that version's changelog
-  entries as notes (shown as "Notes" on the GitHub Tags page) and pushes it.
-  **Remind the user to run it in the release-PR handoff message**; never
-  leave them to craft a tag by hand.
+  workflow below). **Tagging is automated**: merging a release PR triggers the
+  `Release tag` workflow (`.github/workflows/release-tag.yml`), which runs
+  `bin/release-tag.sh` and pushes the annotated `vX.Y.Z` tag with that version's
+  changelog entries as notes (shown as "Notes" on the GitHub Tags page). It can
+  also be started by hand from the Actions tab ("Run workflow", with a
+  `dry_run` option) — handy from a phone. The script stays available locally for
+  offline catch-up; agents still cannot push tags (the web proxy rejects them).
 - **Git — PR workflow (decided July 2026, replaces the old "direct to `main`"
   rule)**: **no agent (Claude Code, Codex, or any other tool) ever pushes to
   `main` directly**. Every piece of work:
@@ -407,10 +410,11 @@ running code at the WP level.
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
+├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
-├── bin/release-tag.sh            ← creates + pushes missing release tags (user, from the Mac)
+├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
 ├── DIST/                         ← distributable zip (versioned)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
@@ -605,11 +609,13 @@ WordPress.org Plugin Check.
   Release on the version tag.
 - **Git tags**: annotated, `vX.Y.Z` on the squashed release commit on `main`
   (e.g. `v0.18.0`); retroactively added from `v0.17.1` onward. Created and
-  pushed **by the user from the Mac** with `bash bin/release-tag.sh` after
-  merging the release PR (the Claude Code web proxy rejects tag pushes; the
-  script finds the missing tags itself and uses the changelog as the tag
-  notes). Not required for local development —
-  only for SVN releases and for pinning a specific version on GitHub.
+  pushed **automatically** by the `Release tag` workflow when a push to `main`
+  changes the version, and startable by hand from the Actions tab (`dry_run`
+  input available). `bash bin/release-tag.sh` does the same thing locally for
+  offline catch-up; it finds the missing tags itself and uses the changelog as
+  the tag notes. Agents cannot push tags (the Claude Code web proxy rejects
+  them). Not required for local development — only for SVN releases and for
+  pinning a specific version on GitHub.
 - **GitHub Releases**: optional (the tag with notes is the baseline), but when
   one is published it MUST attach the built plugin zip
   `DIST/system-markdown-alternate.zip` as an asset — the auto-generated

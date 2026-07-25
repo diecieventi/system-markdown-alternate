@@ -1,0 +1,56 @@
+name: Release tag
+
+# Creates and pushes any missing vX.Y.Z release tag, with that version's
+# readme.txt changelog entries as the tag notes. Runs `bin/release-tag.sh`,
+# the same idempotent script used from a workstation: versions already tagged
+# on origin are skipped, so an extra run is always harmless.
+#
+# Two ways in:
+#   - automatically, when a push to main changes the plugin version;
+#   - manually ("Run workflow"), for catching up on a tag that was missed —
+#     useful when you are away from your machine.
+
+on:
+  push:
+    branches: [main]
+    # A release always bumps SYSMDA_VERSION in the plugin file; readme.txt is
+    # watched too so a changelog-only follow-up can still trigger a catch-up.
+    paths:
+      - 'system-markdown-alternate/system-markdown-alternate.php'
+      - 'system-markdown-alternate/readme.txt'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview only: report what would be tagged, push nothing'
+        type: boolean
+        default: false
+
+# Required to push tags with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+# Never let two runs race to create the same tag.
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    name: Create missing release tags
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The script locates each release commit with `git log -S` over the
+          # full history and compares against every existing tag, so a shallow
+          # clone would silently find nothing to tag.
+          fetch-depth: 0
+
+      - name: Configure git identity
+        # Annotated tags (`git tag -a`) need a committer identity.
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Create and push missing release tags
+        run: bash bin/release-tag.sh ${{ inputs.dry_run && '--dry-run' || '' }}
