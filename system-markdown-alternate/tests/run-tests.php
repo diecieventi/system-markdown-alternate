@@ -121,6 +121,14 @@ function sanitize_html_class( $class, $fallback = '' ) {
 	return $sanitized;
 }
 
+/**
+ * Stub matching WordPress core `sanitize_key()`: lowercase, then keep only
+ * a-z 0-9 _ - (used for the taxonomy-selection slugs).
+ */
+function sanitize_key( $key ) {
+	return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+}
+
 /** Stub: strip tags, collapse whitespace, trim (keeps slashes/colons/URLs). */
 function sanitize_text_field( $str ) {
 	$str = strip_tags( (string) $str );
@@ -627,13 +635,75 @@ check( 'taxonomies: empty names dropped', array( 'genre' => array( 'Techno' ) ),
 check( 'taxonomies: names trimmed', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( '  Techno  ' ) ) ) );
 check( 'taxonomies: duplicate names dropped', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( 'Techno', 'Techno' ) ) ) );
 
-// ─── taxonomy_terms / fingerprint: opt-in gating ─────────────────────
+// ─── candidate_taxonomies / is_public_taxonomy (F3.2) ────────────────
+//
+// These two are pure and decide what the settings page OFFERS and how each row
+// is labelled — never what is emitted, which is the saved selection alone.
 
-$GLOBALS['sysmda_test_taxonomies']['post'] = array(
-	'genre'    => (object) array( 'public' => true ),
-	'internal' => (object) array( 'public' => false ), // Not public: never emitted.
-	'category' => (object) array( 'public' => true ),  // Public but always excluded.
+$sysmda_tax_objects = array(
+	'genre'    => (object) array(
+		'public'             => true,
+		'publicly_queryable' => true,
+		'show_ui'            => true,
+	),
+	'internal' => (object) array( // Editorial-internal: public, no term archive.
+		'public'             => true,
+		'publicly_queryable' => false,
+		'show_ui'            => true,
+	),
+	'hidden'   => (object) array( // Not public but editable: offerable, unticked.
+		'public'             => false,
+		'publicly_queryable' => false,
+		'show_ui'            => true,
+	),
+	'plumbing' => (object) array( // Invisible everywhere: never offered.
+		'public'             => false,
+		'publicly_queryable' => false,
+		'show_ui'            => false,
+	),
+	'category' => (object) array( // Public, but always excluded from this block.
+		'public'             => true,
+		'publicly_queryable' => true,
+		'show_ui'            => true,
+	),
 );
+
+check(
+	'candidates: core and plumbing dropped, sorted by slug',
+	array( 'genre', 'hidden', 'internal' ),
+	array_keys( MetadataBuilder::filter_candidates( $sysmda_tax_objects ) )
+);
+check( 'candidates: empty input', array(), MetadataBuilder::filter_candidates( array() ) );
+check( 'candidates: non-object dropped', array(), MetadataBuilder::filter_candidates( array( 'genre' => 'nope' ) ) );
+check( 'candidates: invalid slug dropped', array(), MetadataBuilder::filter_candidates( array( 'bad slug!' => (object) array( 'public' => true ) ) ) );
+
+// is_public_taxonomy: the advisory predicate behind the panel label and the
+// migration seed. `publicly_queryable` is what the 0.24.x check was missing.
+check( 'is_public_taxonomy: public and queryable', true, MetadataBuilder::is_public_taxonomy( $sysmda_tax_objects['genre'] ) );
+check( 'is_public_taxonomy: public but not queryable', false, MetadataBuilder::is_public_taxonomy( $sysmda_tax_objects['internal'] ) );
+check( 'is_public_taxonomy: queryable but not public', false, MetadataBuilder::is_public_taxonomy( (object) array( 'public' => false, 'publicly_queryable' => true ) ) );
+check( 'is_public_taxonomy: neither', false, MetadataBuilder::is_public_taxonomy( $sysmda_tax_objects['plumbing'] ) );
+check( 'is_public_taxonomy: properties missing', false, MetadataBuilder::is_public_taxonomy( (object) array() ) );
+check( 'is_public_taxonomy: not an object', false, MetadataBuilder::is_public_taxonomy( 'genre' ) );
+
+// candidate_taxonomies(): the union of the taxonomies of the given post types.
+$GLOBALS['sysmda_test_taxonomies']['post'] = $sysmda_tax_objects;
+$GLOBALS['sysmda_test_taxonomies']['page'] = array(
+	'department' => (object) array(
+		'public'             => true,
+		'publicly_queryable' => true,
+	),
+);
+check( 'candidates: union across post types', array( 'department', 'genre', 'hidden', 'internal' ), array_keys( MetadataBuilder::candidate_taxonomies( array( 'post', 'page' ) ) ) );
+check( 'candidates: unknown post type', array(), MetadataBuilder::candidate_taxonomies( array( 'nope' ) ) );
+check( 'candidates: no post types', array(), MetadataBuilder::candidate_taxonomies( array() ) );
+check( 'candidates: non-string post type ignored', array(), MetadataBuilder::candidate_taxonomies( array( 0, '', null ) ) );
+
+// ─── taxonomy_terms / fingerprint: explicit selection only (F3.2) ────
+//
+// The emitted list is the selection fed into `sysmda_front_matter_taxonomy_slugs`
+// (by AdminSettings from the saved option; here by the filter stub). There is no
+// auto-detection to test any more: registration alone must never publish.
 
 $sysmda_tax_post = new WP_Post(
 	array(
@@ -650,23 +720,62 @@ $GLOBALS['sysmda_test_terms'][60]['genre']    = array( (object) array( 'name' =>
 $GLOBALS['sysmda_test_terms'][60]['internal'] = array( (object) array( 'name' => 'Hidden' ) );
 $GLOBALS['sysmda_test_terms'][60]['category'] = array( (object) array( 'name' => 'News' ) );
 
-// Toggle OFF (default): nothing collected, no fingerprint — so the front matter
-// and the cache validator stay exactly as they were before this feature.
-check( 'taxonomies: disabled => no data', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
-check( 'taxonomies: disabled => empty fingerprint', '', MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+// Nothing selected (the default): no data and no fingerprint, so the front
+// matter and the cache validator stay as on a site without the feature — even
+// though all three taxonomies are registered and have terms.
+check( 'taxonomies: nothing selected => no data', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+check( 'taxonomies: nothing selected => empty fingerprint', '', MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
 
-// Toggle ON.
-$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+// A selection is all it takes: the gate's default is "something is selected",
+// so there is no separate toggle to set.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
 
 check(
-	'taxonomies: enabled => only public custom ones, sorted',
+	'taxonomies: selection alone enables the block',
 	array( 'genre' => array( 'Ambient', 'Techno' ) ),
 	MetadataBuilder::taxonomy_terms( $sysmda_tax_post )
 );
 
+// The reported defect: `internal` is registered `public => true,
+// publicly_queryable => false` and has a term, and 0.24.x published it on its
+// own. Not selected now => it never reaches the output.
+check( 'taxonomies: unselected internal taxonomy stays out', false, array_key_exists( 'internal', MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) ) );
+
+// Selecting it is still allowed: the panel labels such a taxonomy, it does not
+// veto it, so an explicit choice is honoured.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'internal' );
+check(
+	'taxonomies: internal taxonomy emitted when deliberately selected',
+	array( 'internal' => array( 'Hidden' ) ),
+	MetadataBuilder::taxonomy_terms( $sysmda_tax_post )
+);
+
+// The always-excluded set and invalid slugs are stripped AFTER the selection, so
+// neither the option nor a filter can duplicate categories/tags or break the YAML.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre', 'category', 'post_tag', 'post_format', 'bad slug!' );
+check(
+	'taxonomies: excluded and invalid slugs stripped after the selection',
+	array( 'genre' => array( 'Ambient', 'Techno' ) ),
+	MetadataBuilder::taxonomy_terms( $sysmda_tax_post )
+);
+
+// Kill switch: the boolean filter still wins over a non-empty selection.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = false;
+check( 'taxonomies: kill switch beats the selection', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+check( 'taxonomies: kill switch => empty fingerprint', '', MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] );
+
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
+
 $sysmda_fp = MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post );
-check( 'taxonomies: enabled => fingerprint present', true, '' !== $sysmda_fp );
+check( 'taxonomies: selected => fingerprint present', true, '' !== $sysmda_fp );
 check( 'taxonomies: fingerprint stable for same terms', $sysmda_fp, MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+
+// Changing the selection changes the emitted body, so it must change the
+// validator too (the settings-save salt bump is a second, independent layer).
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre', 'internal' );
+check( 'taxonomies: fingerprint changes with the selection', true, $sysmda_fp !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
 
 // The fingerprint must move when the terms move: this is what makes the ETag
 // change on a term reassignment or rename (post_modified_gmt does not).
@@ -740,22 +849,27 @@ $sysmda_cv_post = new WP_Post(
 		'post_modified_gmt' => '2026-07-01 08:30:00',
 	)
 );
-$GLOBALS['sysmda_test_taxonomies']['post'] = array( 'genre' => (object) array( 'public' => true ) );
+$GLOBALS['sysmda_test_taxonomies']['post'] = array(
+	'genre' => (object) array(
+		'public'             => true,
+		'publicly_queryable' => true,
+	),
+);
 $GLOBALS['sysmda_test_terms'][61]['genre'] = array( (object) array( 'name' => 'Techno' ) );
 
-// Toggle OFF: byte-identical to the pre-feature formula, so upgrading does not
-// invalidate a single cached response or ETag.
+// Nothing selected: byte-identical to the pre-feature formula, so upgrading does
+// not invalidate a single cached response or ETag.
 $GLOBALS['sysmda_test_filters'] = array();
 check(
-	'cache_version: unchanged while the feature is off',
+	'cache_version: unchanged while nothing is selected',
 	md5( '2026-07-01 08:30:00|' . SYSMDA_VERSION . '|0' ),
 	$sysmda_cv( $sysmda_cv_post )
 );
 
-// Toggle ON: the validator now depends on the terms.
-$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+// Taxonomy selected: the validator now depends on the terms.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
 $sysmda_cv_on = $sysmda_cv( $sysmda_cv_post );
-check( 'cache_version: changes when the feature is enabled', true, $sysmda_cv_on !== md5( '2026-07-01 08:30:00|' . SYSMDA_VERSION . '|0' ) );
+check( 'cache_version: changes once a taxonomy is selected', true, $sysmda_cv_on !== md5( '2026-07-01 08:30:00|' . SYSMDA_VERSION . '|0' ) );
 check( 'cache_version: stable for unchanged terms', $sysmda_cv_on, $sysmda_cv( $sysmda_cv_post ) );
 
 // The whole point: a term change moves the ETag even though post_modified_gmt
@@ -787,19 +901,19 @@ $sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_contro
 // The client already holds a copy newer than the post's modification date.
 $sysmda_fresh_since = gmdate( 'D, d M Y H:i:s', strtotime( '2026-07-01 08:30:00 GMT' ) ) . ' GMT';
 
-// Feature OFF: the date fully determines the body, so a 304 is correct and the
-// existing behaviour is preserved.
+// Nothing selected: the date fully determines the body, so a 304 is correct and
+// the existing behaviour is preserved.
 $GLOBALS['sysmda_test_filters'] = array();
-check( 'conditional: IMS honoured while taxonomies are off', true, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: IMS honoured while no taxonomy is selected', true, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
 check( 'conditional: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_status'] );
 
-// Feature ON: the date can no longer prove the body is unchanged, so the full
-// response must be served instead of a stale 304.
-$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+// Taxonomy selected: the date can no longer prove the body is unchanged, so the
+// full response must be served instead of a stale 304.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
 check( 'conditional: IMS ignored when taxonomies are emitted', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
 check( 'conditional: no 304 sent', array(), $GLOBALS['sysmda_test_status'] );
 
-// If-None-Match still works with the feature on: the ETag is taxonomy-aware, so
+// If-None-Match still works with the block on: the ETag is taxonomy-aware, so
 // it remains a reliable validator (this is the common browser/crawler case).
 $GLOBALS['sysmda_test_status'] = array();
 unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
@@ -1026,6 +1140,24 @@ check(
 );
 check( 'class_lines: empty input', '', $sysmda_admin->sanitize_class_lines( '' ) );
 check( 'class_lines: whitespace-only input', '', $sysmda_admin->sanitize_class_lines( "  \t\n " ) );
+
+// sanitize_taxonomy_slugs: the taxonomy selection saved by the panel.
+check(
+	'taxonomy_slugs: valid slugs kept and sorted',
+	array( 'department', 'genre' ),
+	$sysmda_admin->sanitize_taxonomy_slugs( array( 'genre', 'department' ) )
+);
+check( 'taxonomy_slugs: nothing ticked (null) => empty', array(), $sysmda_admin->sanitize_taxonomy_slugs( null ) );
+check( 'taxonomy_slugs: empty array', array(), $sysmda_admin->sanitize_taxonomy_slugs( array() ) );
+check( 'taxonomy_slugs: non-array => empty', array(), $sysmda_admin->sanitize_taxonomy_slugs( 'genre' ) );
+check( 'taxonomy_slugs: duplicates dropped', array( 'genre' ), $sysmda_admin->sanitize_taxonomy_slugs( array( 'genre', 'genre' ) ) );
+check( 'taxonomy_slugs: non-string entries skipped', array( 'genre' ), $sysmda_admin->sanitize_taxonomy_slugs( array( 'genre', 42, null, array( 'x' ) ) ) );
+check( 'taxonomy_slugs: always-excluded taxonomies rejected', array(), $sysmda_admin->sanitize_taxonomy_slugs( array( 'category', 'post_tag', 'post_format' ) ) );
+check( 'taxonomy_slugs: punctuation normalized away', array( 'genre' ), $sysmda_admin->sanitize_taxonomy_slugs( array( 'gen re!' ) ) );
+check( 'taxonomy_slugs: punctuation-only dropped', array(), $sysmda_admin->sanitize_taxonomy_slugs( array( '///' ) ) );
+// An unregistered slug is deliberately KEPT: a temporarily inactive plugin must
+// not silently erase the choice on the next save.
+check( 'taxonomy_slugs: unknown slug preserved', array( 'not_registered_yet' ), $sysmda_admin->sanitize_taxonomy_slugs( array( 'not_registered_yet' ) ) );
 
 // Regression: the generic multiline sanitizer was NOT replaced globally — it must
 // still preserve values with slashes/colons/URLs (block names, key content, …).

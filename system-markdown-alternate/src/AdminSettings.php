@@ -23,6 +23,20 @@ class AdminSettings {
 	const PAGE         = 'sysmda-settings';
 	const OPTION_GROUP = 'sysmda_options';
 
+	/**
+	 * Taxonomies selected for the front matter (array of slugs, empty = none).
+	 *
+	 * Named after the filter it feeds (`sysmda_front_matter_taxonomy_slugs`):
+	 * the option is the default value of that filter, not a separate concept.
+	 */
+	const OPTION_TAXONOMIES = 'sysmda_front_matter_taxonomy_slugs';
+
+	/**
+	 * The 0.24.x on/off checkbox, replaced by the explicit selection above in
+	 * 0.25.0. Read once by the migration, then deleted.
+	 */
+	const LEGACY_OPTION_TAXONOMIES = 'sysmda_front_matter_taxonomies';
+
 	/** Exclusion defaults (displayed in the panel for reference only). */
 	const DEFAULT_SHORTCODES  = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
 	const DEFAULT_BLOCK_NAMES = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
@@ -42,6 +56,9 @@ class AdminSettings {
 		// Invalidate the Markdown cache when a plugin option changes.
 		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
 		add_action( 'updated_option', array( $this, 'maybe_bump_cache_salt' ) );
+
+		// After init, so taxonomies registered by themes/plugins are all visible.
+		add_action( 'wp_loaded', array( $this, 'maybe_migrate_legacy_taxonomies' ) );
 
 		$this->hook_filters();
 	}
@@ -70,6 +87,61 @@ class AdminSettings {
 		$bumped = true;
 
 		update_option( 'sysmda_cache_salt', (string) time() );
+	}
+
+	/**
+	 * One-time migration from the 0.24.x "Custom taxonomies" checkbox to the
+	 * explicit selection.
+	 *
+	 * A site that had the checkbox on keeps the feature, seeded with the
+	 * taxonomies that are public **and** publicly queryable — so the output
+	 * loses exactly the editorial-internal taxonomies that should never have
+	 * been published (the reason for the change). A site that had it off gets
+	 * nothing selected, i.e. no output change at all.
+	 *
+	 * The legacy option is deleted either way, which makes this idempotent: the
+	 * option is autoloaded, so the check costs nothing once it is gone.
+	 */
+	public function maybe_migrate_legacy_taxonomies(): void {
+		$legacy = get_option( self::LEGACY_OPTION_TAXONOMIES );
+
+		if ( false === $legacy ) {
+			return;
+		}
+
+		$was_enabled = '1' === (string) $legacy;
+		delete_option( self::LEGACY_OPTION_TAXONOMIES );
+
+		if ( ! $was_enabled ) {
+			return;
+		}
+
+		if ( false === get_option( self::OPTION_TAXONOMIES ) ) {
+			$seed = array();
+
+			$candidates = MetadataBuilder::candidate_taxonomies(
+				(array) get_option( 'sysmda_supported_post_types', array() )
+			);
+
+			foreach ( $candidates as $slug => $taxonomy ) {
+				if ( MetadataBuilder::is_public_taxonomy( $taxonomy ) ) {
+					$seed[] = $slug;
+				}
+			}
+
+			if ( ! empty( $seed ) ) {
+				update_option( self::OPTION_TAXONOMIES, $seed );
+			}
+		}
+
+		// The emitted front matter changes for every post that has terms in an
+		// affected taxonomy, and a term change never touches post_modified_gmt:
+		// the salt has to move so cached bodies and ETags are not reused. Writing
+		// the seed above already triggers this through added_option; calling it
+		// explicitly also covers the "nothing left to select" case (the site was
+		// only emitting internal taxonomies). The static guard inside makes the
+		// second call a no-op.
+		$this->maybe_bump_cache_salt( self::OPTION_TAXONOMIES );
 	}
 
 	/**
@@ -201,10 +273,10 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
-			'sysmda_front_matter_taxonomies',
+			self::OPTION_TAXONOMIES,
 			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+				'type'              => 'array',
+				'sanitize_callback' => array( $this, 'sanitize_taxonomy_slugs' ),
 			)
 		);
 		register_setting(
@@ -365,6 +437,44 @@ class AdminSettings {
 	}
 
 	/**
+	 * Taxonomy selection: valid slugs only, minus the always-excluded ones.
+	 *
+	 * Deliberately does NOT check `taxonomy_exists()`: a saved slug whose plugin
+	 * is temporarily inactive must survive the next save instead of silently
+	 * dropping out of the selection. The emission path validates the slug shape
+	 * again and skips taxonomies with no terms, so an unknown slug is inert.
+	 *
+	 * @param mixed $value
+	 * @return string[]
+	 */
+	public function sanitize_taxonomy_slugs( $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array(); // Nothing ticked: options.php passes null.
+		}
+
+		$clean = array();
+
+		foreach ( $value as $item ) {
+			if ( ! is_string( $item ) ) {
+				continue;
+			}
+
+			$item = sanitize_key( $item );
+
+			if ( '' === $item || in_array( $item, MetadataBuilder::EXCLUDED_TAXONOMIES, true ) ) {
+				continue;
+			}
+
+			$clean[] = $item;
+		}
+
+		$clean = array_values( array_unique( $clean ) );
+		sort( $clean, SORT_STRING ); // Stored order is irrelevant; a stable one keeps diffs readable.
+
+		return $clean;
+	}
+
+	/**
 	 * Normalizes a "one entry per line" textarea: trims entries, removes empty
 	 * lines, applies sanitize_text_field, and deduplicates. Preserves a multiline string.
 	 *
@@ -444,13 +554,17 @@ class AdminSettings {
 			20
 		);
 
+		// Priority 5, before the default 10: the saved selection is the *default*
+		// value of the filter, so site code hooking at 10 can still narrow it and
+		// extend it. The `sysmda_front_matter_taxonomies` gate needs no closure:
+		// its default is derived from this list (see MetadataBuilder).
 		add_filter(
-			'sysmda_front_matter_taxonomies',
-			function ( $default ) {
-				$v = get_option( 'sysmda_front_matter_taxonomies' );
-				return false !== $v ? '1' === $v : $default;
+			'sysmda_front_matter_taxonomy_slugs', // Same string as the option: the option IS this filter's default.
+			function ( $slugs ) {
+				$saved = get_option( self::OPTION_TAXONOMIES );
+				return false !== $saved ? (array) $saved : $slugs;
 			},
-			20
+			5
 		);
 
 		add_filter(
@@ -761,10 +875,57 @@ class AdminSettings {
 		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
+	/**
+	 * Checkbox list of the taxonomies to emit under `taxonomies:`.
+	 *
+	 * Nothing is selected by default and nothing is ever added implicitly: a
+	 * taxonomy registered by a plugin installed later shows up here unticked.
+	 * Rows that are not publicly queryable (typically editorial-internal
+	 * classifications with no term archive) are labelled as such but stay
+	 * selectable — including one is a deliberate choice, not an accident.
+	 */
 	public function field_front_matter_taxonomies(): void {
-		$v = get_option( 'sysmda_front_matter_taxonomies', '0' ); // Disabled by default.
-		echo '<label><input type="checkbox" name="sysmda_front_matter_taxonomies" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Add custom taxonomies to the front matter', 'system-markdown-alternate' ) . '</label>';
-		echo '<p class="description">' . wp_kses_post( __( 'Adds a <code>taxonomies:</code> block listing the post\'s public custom taxonomies and their terms, in alphabetical order. Categories and tags already have their own keys and are not repeated. Off = the front matter is unchanged.', 'system-markdown-alternate' ) ) . '</p>';
+		$raw      = get_option( self::OPTION_TAXONOMIES ); // false = never saved.
+		$selected = false !== $raw ? (array) $raw : array();
+
+		$post_types = (array) get_option( 'sysmda_supported_post_types', array() );
+		$candidates = MetadataBuilder::candidate_taxonomies( $post_types );
+
+		foreach ( $candidates as $slug => $taxonomy ) {
+			$label = isset( $taxonomy->labels->singular_name ) ? (string) $taxonomy->labels->singular_name : $slug;
+
+			printf(
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="%1$s[]" value="%2$s"%3$s /> %4$s <code>(%2$s)</code>%5$s</label>',
+				esc_attr( self::OPTION_TAXONOMIES ),
+				esc_attr( $slug ),
+				checked( in_array( $slug, $selected, true ), true, false ),
+				esc_html( $label ),
+				MetadataBuilder::is_public_taxonomy( $taxonomy )
+					? ''
+					: ' <span class="description">' . esc_html__( '— internal: not publicly queryable', 'system-markdown-alternate' ) . '</span>'
+			);
+		}
+
+		// Slugs saved earlier that are not among the candidates right now (plugin
+		// deactivated, taxonomy detached, content type disabled). Rendered checked
+		// so saving the page cannot silently discard the choice: the field would
+		// otherwise be absent from the POST and sanitize to an empty selection.
+		foreach ( array_diff( $selected, array_keys( $candidates ) ) as $slug ) {
+			printf(
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="%1$s[]" value="%2$s" checked="checked" /> <code>%2$s</code> <span class="description">%3$s</span></label>',
+				esc_attr( self::OPTION_TAXONOMIES ),
+				esc_attr( $slug ),
+				esc_html__( '— not available for the enabled content types', 'system-markdown-alternate' )
+			);
+		}
+
+		if ( empty( $post_types ) ) {
+			echo '<p class="description">' . esc_html__( 'Select at least one content type under General first: the taxonomies available for it will be listed here.', 'system-markdown-alternate' ) . '</p>';
+		} elseif ( empty( $candidates ) ) {
+			echo '<p class="description">' . esc_html__( 'No custom taxonomy is registered for the enabled content types.', 'system-markdown-alternate' ) . '</p>';
+		}
+
+		echo '<p class="description">' . wp_kses_post( __( 'Adds a <code>taxonomies:</code> block with the terms of the taxonomies ticked above, in alphabetical order. Nothing is added until you tick one. Categories and tags already have their own keys and are never repeated here.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_enriched(): void {

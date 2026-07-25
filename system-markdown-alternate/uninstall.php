@@ -19,7 +19,7 @@ $sysmda_options = array(
 	'sysmda_excluded_classes',
 	'sysmda_supported_post_types',
 	'sysmda_robots_header',
-	'sysmda_front_matter_taxonomies',
+	'sysmda_front_matter_taxonomy_slugs',
 	'sysmda_acf_subtitle_key',
 	'sysmda_acf_tldr_key',
 	'sysmda_llms_txt_enabled',
@@ -32,6 +32,7 @@ $sysmda_options = array(
 	'sysmda_md_hits_enabled',
 	'sysmda_cache_salt',
 	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
+	'sysmda_front_matter_taxonomies', // Legacy option (checkbox replaced by the taxonomy selection in 0.25.0).
 );
 
 foreach ( $sysmda_options as $sysmda_option ) {
