@@ -17,9 +17,9 @@ them.
   change across earlier `0.x` releases, so no retroactive stability is claimed.
 - **Additions are backwards-compatible.** New front-matter keys are **appended**
   in a defined position; existing keys are never silently reordered or removed.
-  Any custom taxonomy data, when added, is emitted as a single appended nested
-  `taxonomies:` mapping (never as arbitrary top-level keys), consistent with this
-  append-only rule.
+  The first exercise of this rule is the `taxonomies:` block added in `0.24.0`:
+  a single nested mapping appended after `description` (never arbitrary
+  top-level keys, which could collide with a stable or future key).
 - A **breaking** change to the shape (reordering, removing or renaming an
   existing key; changing the escaping rules) is a deliberate, noted change, not a
   side effect.
@@ -67,6 +67,7 @@ exact order**; conditional keys are omitted entirely when they have no value
 | `categories` | only if the post has categories | term names of `category`, as a YAML list |
 | `tags` | only if the post has tags | term names of `post_tag`, as a YAML list |
 | `description` | only if non-empty | see *Description* below |
+| `taxonomies` | only when the feature is enabled **and** at least one eligible taxonomy has terms | see *Custom taxonomies* below |
 
 List-valued keys (`categories`, `tags`) are emitted as a YAML block sequence:
 
@@ -90,6 +91,45 @@ categories:
    characters with a trailing `…`.
 
 If all three yield an empty string, the `description` key is omitted.
+
+### Custom taxonomies
+
+**Opt-in, off by default** (since `0.24.0`). When enabled — the *Custom
+taxonomies* checkbox under **Markdown output**, or the
+`sysmda_front_matter_taxonomies` filter — a nested `taxonomies:` mapping is
+**appended after `description`**:
+
+```yaml
+taxonomies:
+  genre:
+    - "Ambient"
+    - "Techno"
+  topic:
+    - "Privacy"
+```
+
+- **Default list**: the **public** taxonomies registered for the post's type,
+  minus `category` and `post_tag` (already emitted as `categories`/`tags`) and
+  `post_format` (registered public, but a presentational flag).
+- **Curation**: `sysmda_front_matter_taxonomy_slugs` receives that default list
+  and may both narrow it (return an empty array to opt out for a post) **and
+  extend it**. Naming a taxonomy that is registered but not public is a
+  deliberate, supported choice — `public => false, show_ui => true` is a common
+  registration for editorial-internal taxonomies a site may legitimately want in
+  its machine-readable output. What the filter can never do is override the
+  always-excluded set above or emit an invalid slug: both are stripped *after*
+  it runs, so a filter can neither duplicate `categories`/`tags` nor break the
+  YAML.
+- **Conditional**: a taxonomy with no terms on the post is omitted, and if no
+  eligible taxonomy has terms the `taxonomies:` key is not emitted at all.
+- **Ordering**: taxonomy slugs and term names are both sorted with PHP's
+  `SORT_STRING`, i.e. **byte order, not locale collation**. This is deliberate —
+  the output must not depend on the server's locale — and it means accented
+  names sort after unaccented ones (`Ähnlich` after `Zeta`). The order is
+  stable, not human-alphabetical.
+- Term names go through the same scalar escaping as every other string.
+
+When the feature is off, the front matter is byte-identical to `0.23.x`.
 
 ### Scalar escaping (YAML safety)
 
@@ -162,7 +202,11 @@ successful `.md` response carries:
 - `Link: <permalink>; rel="canonical"` back to the HTML
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
 - `ETag` + `Last-Modified`, with conditional `304 Not Modified` support
-  (`If-None-Match` takes priority over `If-Modified-Since`)
+  (`If-None-Match` takes priority over `If-Modified-Since`). When the
+  `taxonomies:` block is emitted, `If-Modified-Since` is **ignored**: the body
+  can then change without `post_modified_gmt` moving, so only the
+  taxonomy-aware `ETag` can prove a cached copy is still current.
+  `Last-Modified` is still sent, as information.
 
 Two request paths reach the same Markdown:
 

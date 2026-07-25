@@ -201,6 +201,14 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
+			'sysmda_front_matter_taxonomies',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
 			'sysmda_llms_txt_enabled',
 			array(
 				'type'              => 'string',
@@ -288,6 +296,7 @@ class AdminSettings {
 		add_settings_field( 'sysmda_excluded_shortcodes', __( 'Excluded shortcodes', 'system-markdown-alternate' ), array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sysmda_markdown' );
+		add_settings_field( 'sysmda_front_matter_taxonomies', __( 'Custom taxonomies', 'system-markdown-alternate' ), array( $this, 'field_front_matter_taxonomies' ), self::PAGE, 'sysmda_markdown' );
 
 		if ( $this->acf_active() ) {
 			add_settings_field( 'sysmda_acf_subtitle_key', __( 'ACF subtitle field', 'system-markdown-alternate' ), array( $this, 'field_acf_subtitle_key' ), self::PAGE, 'sysmda_markdown' );
@@ -431,6 +440,15 @@ class AdminSettings {
 			function ( $default ) {
 				$v = get_option( 'sysmda_cache_ttl' );
 				return false !== $v ? (int) $v : $default;
+			},
+			20
+		);
+
+		add_filter(
+			'sysmda_front_matter_taxonomies',
+			function ( $default ) {
+				$v = get_option( 'sysmda_front_matter_taxonomies' );
+				return false !== $v ? '1' === $v : $default;
 			},
 			20
 		);
@@ -741,6 +759,12 @@ class AdminSettings {
 		$v = get_option( 'sysmda_llms_txt_enabled', '1' ); // Enabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_front_matter_taxonomies(): void {
+		$v = get_option( 'sysmda_front_matter_taxonomies', '0' ); // Disabled by default.
+		echo '<label><input type="checkbox" name="sysmda_front_matter_taxonomies" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Add custom taxonomies to the front matter', 'system-markdown-alternate' ) . '</label>';
+		echo '<p class="description">' . wp_kses_post( __( 'Adds a <code>taxonomies:</code> block listing the post\'s public custom taxonomies and their terms, in alphabetical order. Categories and tags already have their own keys and are not repeated. Off = the front matter is unchanged.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_llms_txt_enriched(): void {

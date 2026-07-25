@@ -58,7 +58,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.23.x)
+## Current state (v0.24.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -83,6 +83,10 @@ The v1 scope is done and widely exceeded. Implemented:
   (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt), so a `304` always means the
   cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
+  `If-Modified-Since` is honoured **only while the date is a strong validator**:
+  when the taxonomy block is emitted the body can change without
+  `post_modified_gmt` moving, so the date check is skipped and the (taxonomy-aware)
+  `ETag` is the sole validator.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
   against the source permalink** (document-relative, `../`, root-relative).
@@ -151,6 +155,26 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
+- **Custom taxonomies in the front matter** (`sysmda_front_matter_taxonomies`
+  toggle, default **off**; off = front matter and cache validator byte-identical
+  to 0.23.x): appends a nested `taxonomies:` mapping **after `description`**
+  (append-only contract), listing the post type's **public** taxonomies minus
+  `category`/`post_tag` (already emitted) and `post_format` (presentational).
+  Slugs and term names sorted with `SORT_STRING` — **byte order, not locale
+  collation**, so output never depends on the server locale. Curation via
+  `sysmda_front_matter_taxonomy_slugs`, which may narrow **and** extend that
+  default (naming a non-public taxonomy is a deliberate opt-in —
+  `public => false, show_ui => true` is common for editorial-internal ones); the
+  always-excluded set and invalid slugs are stripped *after* the filter, so it
+  can neither duplicate `categories`/`tags` nor break the YAML.
+  **Cache/ETag**: term changes do not touch `post_modified_gmt`, so
+  `MetadataBuilder::taxonomies_fingerprint()` is folded into `cache_version()`
+  — without it a conditional request would answer `304` with stale terms even
+  with the body cache off (see "Technical notes" 6). For the same reason
+  `If-Modified-Since` is **ignored while the block is emitted**
+  (`date_is_strong_validator()`): `Last-Modified` comes from
+  `post_modified_gmt`, which a term change does not move, so a client sending
+  no `If-None-Match` would otherwise get a stale `304`.
 - **Documented output format** (`docs/output-format.md`): the front-matter keys,
   their order, the YAML scalar-escaping rules, the body pipeline and the HTTP
   contract, stated as a stable append-only contract (compatibility policy from
@@ -254,6 +278,15 @@ The v1 scope is done and widely exceeded. Implemented:
   only a manual user choice from the panel; if other handlers are active
   underneath, that is the user's responsibility. The conflict notice stays purely
   informational.
+- **Custom taxonomies are opt-in and alphabetically ordered** (decided July
+  2026): enabling them changes the front-matter payload of every post on an
+  upgraded site, so it must be the user's explicit choice — default off, and off
+  means byte-identical output *and* cache validator. Ordering is `SORT_STRING`
+  (byte order) rather than locale collation, so the output never depends on the
+  server locale and the golden tests stay stable across environments; the
+  trade-off (accented names sort last) is accepted and documented. The block is
+  appended **after `description`**, honouring the append-only rule in
+  `docs/output-format.md`.
 - Front matter **description**: Rank Math (`rank_math_description`) → discarded
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
@@ -362,7 +395,10 @@ The v1 scope is done and widely exceeded. Implemented:
   branch — commit there, push it, open the PR (GitHub MCP tools). The old
   "consolidate onto `main` with ff-merges" procedure is **retired**: never
   push `main` from this environment. The environment's git proxy rejects tag
-  pushes (403): leave release tags to the user (see the SVN section).
+  pushes (403), but **no manual tagging step is needed**: the `Release tag`
+  workflow creates `vX.Y.Z` when the release PR is merged, and can be re-run
+  from the Actions tab if a tag was ever missed (`bin/release-tag.sh` stays the
+  offline fallback). Do not tell the user to tag from their machine.
 - **Codex and any other agent**: same rule, no exceptions — work on a
   dedicated branch (e.g. `codex/<topic>`), push it, open a PR to `main`, let
   the user merge. Code-review fixes follow the same path: a PR, never a
@@ -435,7 +471,7 @@ running code at the WP level.
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── PostSupport.php         ← post eligibility (is_servable, supported types, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
-        ├── MetadataBuilder.php     ← YAML front matter; markdown_url() (static)
+        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint() (static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
@@ -491,6 +527,8 @@ apply_filters( 'sysmda_markdown_output', $markdown, $post );
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+apply_filters( 'sysmda_front_matter_taxonomies', false );                    // true = append the nested `taxonomies:` block (opt-in; panel checkbox feeds this)
+apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // curate the emitted taxonomies: may narrow AND extend the public default (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
 apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
 apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
 apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
@@ -535,12 +573,18 @@ Default exclusions:
    `the_content`), to avoid reintroducing injected related/CTA content.
 5. **Absolute URLs**: resolved against the post permalink (not `home_url('/')`).
 6. **Cache**: key `sysmda_md_{post_id}`, value with a validity hash
-   (`post_modified_gmt|SYSMDA_VERSION|salt`); `/llms.txt` cached under
-   `sysmda_llms_txt`. Everything through the `Cache` helper (persistent object
-   cache or transients). The **same hash is the strong `ETag`** of the `.md`
-   response (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
+   (`post_modified_gmt|SYSMDA_VERSION|salt`, plus the taxonomy fingerprint when
+   that feature is on); `/llms.txt` cached under `sysmda_llms_txt`. Everything
+   through the `Cache` helper (persistent object cache or transients). The
+   **same hash is the strong `ETag`** of the `.md` response
+   (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
-   work even when the body cache is off.
+   work even when the body cache is off. **Anything that can change the emitted
+   Markdown without touching `post_modified_gmt` MUST be folded into this hash**
+   — otherwise a client holding the old validator keeps getting `304` with stale
+   content, body cache or not. Custom taxonomies were the first such case
+   (`MetadataBuilder::taxonomies_fingerprint()`); deleting the cache entry alone
+   would NOT have been enough. Apply the same rule to any future addition.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)
@@ -619,8 +663,9 @@ WordPress.org Plugin Check.
 - **GitHub Releases**: optional (the tag with notes is the baseline), but when
   one is published it MUST attach the built plugin zip
   `DIST/system-markdown-alternate.zip` as an asset — the auto-generated
-  "Source code" archives are not an installable plugin. One command, run by
-  the user from the Mac after `bin/release-tag.sh`:
+  "Source code" archives are not an installable plugin. Publishing a Release is
+  NOT automated (only the tag is), so this stays one command for the user, run
+  from the Mac once the tag exists:
   `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip`
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
   Note: publishing a Release triggers the SVN deploy workflow, which fails

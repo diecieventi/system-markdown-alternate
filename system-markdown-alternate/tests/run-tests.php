@@ -16,6 +16,7 @@
 
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'DAY_IN_SECONDS', 86400 );
+define( 'SYSMDA_VERSION', '0.0.0-test' ); // Only used by the cache-validator tests.
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', '1' );
@@ -29,10 +30,19 @@ $GLOBALS['sysmda_test_meta']        = array(); // post ID => meta key => value
 $GLOBALS['sysmda_test_authors']     = array(); // user ID => display name
 $GLOBALS['sysmda_test_attachments'] = array(); // attachment ID => image URL
 $GLOBALS['sysmda_test_terms']       = array(); // post ID => taxonomy => term objects
+$GLOBALS['sysmda_test_taxonomies']  = array(); // post type => taxonomy slug => object
+$GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return value
+$GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
 
-/** Stub: filters return the default value. */
+/**
+ * Stub: filters return the default value, unless a test forced a return value
+ * for that tag in $GLOBALS['sysmda_test_filters'] (used to drive opt-in
+ * features, which read their toggle through a filter).
+ */
 function apply_filters( $tag, $value ) {
-	return $value;
+	return array_key_exists( $tag, $GLOBALS['sysmda_test_filters'] )
+		? $GLOBALS['sysmda_test_filters'][ $tag ]
+		: $value;
 }
 
 function get_post( $id = null ) {
@@ -154,6 +164,36 @@ function get_the_terms( $post, $taxonomy ) {
 		: false;
 }
 
+/** Stub: no magic quotes to strip in the tests. */
+function wp_unslash( $value ) {
+	return $value;
+}
+
+/**
+ * Stub: records the status codes the conditional-request logic would send, so a
+ * 304 can be asserted without a real HTTP response ($GLOBALS reset per test).
+ */
+function status_header( $code ) {
+	$GLOBALS['sysmda_test_status'][] = (int) $code;
+}
+
+/** Stub: taxonomies registered for a post type (always called with 'objects'). */
+function get_object_taxonomies( $post_type, $output = 'names' ) {
+	return isset( $GLOBALS['sysmda_test_taxonomies'][ $post_type ] )
+		? $GLOBALS['sysmda_test_taxonomies'][ $post_type ]
+		: array();
+}
+
+/** Stub: JSON encoding used to fingerprint the taxonomy data. */
+function wp_json_encode( $data ) {
+	return json_encode( $data );
+}
+
+/** Minimal WP_Error stub: get_the_terms returns one for unknown taxonomies. */
+class WP_Error {
+	public function __construct( $code = '', $message = '' ) {}
+}
+
 /** Stub: pluck a field from a list of objects/arrays. */
 function wp_list_pluck( $list, $field ) {
 	$out = array();
@@ -177,6 +217,8 @@ class WP_Post {
 	public $post_content = '';
 	public $post_excerpt = '';
 	public $permalink    = '';
+	/** GMT modification time: part of the cache validity hash / ETag. */
+	public $post_modified_gmt = '';
 	/** Test-only presets read by the get_post_time/thumbnail stubs above. */
 	public $sysmda_published = '';
 	public $sysmda_modified  = '';
@@ -195,6 +237,7 @@ require __DIR__ . '/../src/AcceptNegotiator.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/ContentRenderer.php';
+require __DIR__ . '/../src/MarkdownConverter.php';
 require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
@@ -212,6 +255,7 @@ use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
+use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 
@@ -544,6 +588,232 @@ check( 'scalar: entities decoded', 'title: "Tom & Jerry"', $sysmda_title_line( '
 check( 'scalar: entity quote decoded then escaped', 'title: "AT&T \\"deal\\""', $sysmda_title_line( 'AT&amp;T &quot;deal&quot;' ) );
 check( 'scalar: embedded tags stripped', 'title: "Bold move"', $sysmda_title_line( '<strong>Bold</strong> move' ) );
 check( 'scalar: whitespace collapsed and trimmed', 'title: "Line one Line two"', $sysmda_title_line( "  Line one\n\n\tLine   two  " ) );
+
+// ─── MetadataBuilder: custom taxonomies (F3.1) ───────────────────────
+//
+// normalize_taxonomies() is pure: filtering and ordering are tested directly.
+
+// Ordering: taxonomy slugs and term names both come out alphabetical.
+check(
+	'taxonomies: slugs and names sorted',
+	array(
+		'genre' => array( 'Ambient', 'Techno' ),
+		'topic' => array( 'Privacy' ),
+	),
+	MetadataBuilder::normalize_taxonomies(
+		array(
+			'topic' => array( 'Privacy' ),
+			'genre' => array( 'Techno', 'Ambient' ),
+		)
+	)
+);
+
+// Core and presentational taxonomies never appear here.
+check( 'taxonomies: category excluded', array(), MetadataBuilder::normalize_taxonomies( array( 'category' => array( 'News' ) ) ) );
+check( 'taxonomies: post_tag excluded', array(), MetadataBuilder::normalize_taxonomies( array( 'post_tag' => array( 'alpha' ) ) ) );
+check( 'taxonomies: post_format excluded', array(), MetadataBuilder::normalize_taxonomies( array( 'post_format' => array( 'post-format-aside' ) ) ) );
+
+// A slug a filter could inject must never become a YAML key.
+check( 'taxonomies: invalid slug dropped', array(), MetadataBuilder::normalize_taxonomies( array( 'bad slug!' => array( 'x' ) ) ) );
+check( 'taxonomies: slug with colon dropped', array(), MetadataBuilder::normalize_taxonomies( array( 'a:b' => array( 'x' ) ) ) );
+check( 'taxonomies: lookalike slug kept', array( 'category_extra' => array( 'x' ) ), MetadataBuilder::normalize_taxonomies( array( 'category_extra' => array( 'x' ) ) ) );
+
+// Empty / malformed input.
+check( 'taxonomies: empty input', array(), MetadataBuilder::normalize_taxonomies( array() ) );
+check( 'taxonomies: taxonomy with no terms dropped', array(), MetadataBuilder::normalize_taxonomies( array( 'genre' => array() ) ) );
+check( 'taxonomies: non-array terms dropped', array(), MetadataBuilder::normalize_taxonomies( array( 'genre' => 'Techno' ) ) );
+check( 'taxonomies: non-string names skipped', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( 'Techno', 42, null, array( 'x' ) ) ) ) );
+check( 'taxonomies: empty names dropped', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( '', '   ', 'Techno' ) ) ) );
+check( 'taxonomies: names trimmed', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( '  Techno  ' ) ) ) );
+check( 'taxonomies: duplicate names dropped', array( 'genre' => array( 'Techno' ) ), MetadataBuilder::normalize_taxonomies( array( 'genre' => array( 'Techno', 'Techno' ) ) ) );
+
+// ─── taxonomy_terms / fingerprint: opt-in gating ─────────────────────
+
+$GLOBALS['sysmda_test_taxonomies']['post'] = array(
+	'genre'    => (object) array( 'public' => true ),
+	'internal' => (object) array( 'public' => false ), // Not public: never emitted.
+	'category' => (object) array( 'public' => true ),  // Public but always excluded.
+);
+
+$sysmda_tax_post = new WP_Post(
+	array(
+		'ID'               => 60,
+		'post_type'        => 'post',
+		'post_title'       => 'Tagged',
+		'post_author'      => 0,
+		'permalink'        => 'https://example.com/tagged/',
+		'sysmda_published' => '2026-01-01T00:00:00+00:00',
+		'sysmda_modified'  => '2026-01-01T00:00:00+00:00',
+	)
+);
+$GLOBALS['sysmda_test_terms'][60]['genre']    = array( (object) array( 'name' => 'Techno' ), (object) array( 'name' => 'Ambient' ) );
+$GLOBALS['sysmda_test_terms'][60]['internal'] = array( (object) array( 'name' => 'Hidden' ) );
+$GLOBALS['sysmda_test_terms'][60]['category'] = array( (object) array( 'name' => 'News' ) );
+
+// Toggle OFF (default): nothing collected, no fingerprint — so the front matter
+// and the cache validator stay exactly as they were before this feature.
+check( 'taxonomies: disabled => no data', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+check( 'taxonomies: disabled => empty fingerprint', '', MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+
+// Toggle ON.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+
+check(
+	'taxonomies: enabled => only public custom ones, sorted',
+	array( 'genre' => array( 'Ambient', 'Techno' ) ),
+	MetadataBuilder::taxonomy_terms( $sysmda_tax_post )
+);
+
+$sysmda_fp = MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post );
+check( 'taxonomies: enabled => fingerprint present', true, '' !== $sysmda_fp );
+check( 'taxonomies: fingerprint stable for same terms', $sysmda_fp, MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+
+// The fingerprint must move when the terms move: this is what makes the ETag
+// change on a term reassignment or rename (post_modified_gmt does not).
+$GLOBALS['sysmda_test_terms'][60]['genre'] = array( (object) array( 'name' => 'Techno' ), (object) array( 'name' => 'Dub' ) );
+check( 'taxonomies: fingerprint changes on term change', true, $sysmda_fp !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+
+// A taxonomy the post has no terms in (false) or an unregistered one (WP_Error).
+$GLOBALS['sysmda_test_terms'][60]['genre'] = false;
+check( 'taxonomies: no terms => omitted', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+$GLOBALS['sysmda_test_terms'][60]['genre'] = new WP_Error( 'invalid_taxonomy' );
+check( 'taxonomies: WP_Error => omitted', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+
+// ─── Front matter with the taxonomies block ──────────────────────────
+
+$GLOBALS['sysmda_test_terms'][60]['genre'] = array( (object) array( 'name' => 'Techno' ), (object) array( 'name' => 'Ambient' ) );
+
+check(
+	'front matter: taxonomies appended after description',
+	implode(
+		"\n",
+		array(
+			'---',
+			'title: "Tagged"',
+			'url: "https://example.com/tagged/"',
+			'markdown_url: "https://example.com/tagged.md"',
+			'date_published: "2026-01-01T00:00:00+00:00"',
+			'date_modified: "2026-01-01T00:00:00+00:00"',
+			'categories:',
+			'  - "News"',
+			'taxonomies:',
+			'  genre:',
+			'    - "Ambient"',
+			'    - "Techno"',
+			'---',
+		)
+	) . "\n",
+	$metadata->build_front_matter( $sysmda_tax_post )
+);
+
+// Term names go through the same YAML escaping as every other scalar.
+$GLOBALS['sysmda_test_terms'][60]['genre'] = array( (object) array( 'name' => 'He said "hi"' ) );
+check(
+	'front matter: taxonomy term escaped',
+	true,
+	false !== strpos( $metadata->build_front_matter( $sysmda_tax_post ), '    - "He said \\"hi\\""' )
+);
+
+// ─── cache_version: the taxonomy fingerprint reaches the ETag ────────
+//
+// cache_version() is private and is both the cache-validity hash AND the strong
+// ETag, so it is checked through reflection: this is the one place where an
+// error would either invalidate every cached .md on upgrade (toggle off) or
+// keep serving 304 with stale terms (toggle on).
+
+$sysmda_controller  = new MarkdownController(
+	new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner() ),
+	new MarkdownConverter(),
+	$metadata
+);
+$sysmda_cv_method = new ReflectionMethod( MarkdownController::class, 'cache_version' );
+$sysmda_cv_method->setAccessible( true );
+$sysmda_cv        = function ( $post ) use ( $sysmda_cv_method, $sysmda_controller ) {
+	return $sysmda_cv_method->invoke( $sysmda_controller, $post );
+};
+
+$sysmda_cv_post = new WP_Post(
+	array(
+		'ID'                => 61,
+		'post_type'         => 'post',
+		'permalink'         => 'https://example.com/cv/',
+		'post_modified_gmt' => '2026-07-01 08:30:00',
+	)
+);
+$GLOBALS['sysmda_test_taxonomies']['post'] = array( 'genre' => (object) array( 'public' => true ) );
+$GLOBALS['sysmda_test_terms'][61]['genre'] = array( (object) array( 'name' => 'Techno' ) );
+
+// Toggle OFF: byte-identical to the pre-feature formula, so upgrading does not
+// invalidate a single cached response or ETag.
+$GLOBALS['sysmda_test_filters'] = array();
+check(
+	'cache_version: unchanged while the feature is off',
+	md5( '2026-07-01 08:30:00|' . SYSMDA_VERSION . '|0' ),
+	$sysmda_cv( $sysmda_cv_post )
+);
+
+// Toggle ON: the validator now depends on the terms.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+$sysmda_cv_on = $sysmda_cv( $sysmda_cv_post );
+check( 'cache_version: changes when the feature is enabled', true, $sysmda_cv_on !== md5( '2026-07-01 08:30:00|' . SYSMDA_VERSION . '|0' ) );
+check( 'cache_version: stable for unchanged terms', $sysmda_cv_on, $sysmda_cv( $sysmda_cv_post ) );
+
+// The whole point: a term change moves the ETag even though post_modified_gmt
+// is untouched, so a conditional request cannot answer 304 with stale terms.
+$GLOBALS['sysmda_test_terms'][61]['genre'] = array( (object) array( 'name' => 'Ambient' ) );
+check( 'cache_version: term rename changes the ETag', true, $sysmda_cv_on !== $sysmda_cv( $sysmda_cv_post ) );
+
+// ─── handle_conditional: If-Modified-Since must not go stale ─────────
+//
+// The ETag carries the taxonomy fingerprint, but Last-Modified is derived from
+// post_modified_gmt, which a term change does NOT touch. A client sending only
+// If-Modified-Since would therefore be told "304 Not Modified" while its copy
+// has outdated terms, so the date is only honoured while it is a strong
+// validator for the representation.
+
+$sysmda_hc_method = new ReflectionMethod( MarkdownController::class, 'handle_conditional' );
+$sysmda_hc_method->setAccessible( true );
+
+/** Runs handle_conditional() with only an If-Modified-Since header set. */
+$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv ) {
+	$GLOBALS['sysmda_test_status'] = array();
+	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+	$_SERVER['HTTP_IF_MODIFIED_SINCE'] = $since;
+	$result = $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ) );
+	unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
+	return $result;
+};
+
+// The client already holds a copy newer than the post's modification date.
+$sysmda_fresh_since = gmdate( 'D, d M Y H:i:s', strtotime( '2026-07-01 08:30:00 GMT' ) ) . ' GMT';
+
+// Feature OFF: the date fully determines the body, so a 304 is correct and the
+// existing behaviour is preserved.
+$GLOBALS['sysmda_test_filters'] = array();
+check( 'conditional: IMS honoured while taxonomies are off', true, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_status'] );
+
+// Feature ON: the date can no longer prove the body is unchanged, so the full
+// response must be served instead of a stale 304.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomies'] = true;
+check( 'conditional: IMS ignored when taxonomies are emitted', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: no 304 sent', array(), $GLOBALS['sysmda_test_status'] );
+
+// If-None-Match still works with the feature on: the ETag is taxonomy-aware, so
+// it remains a reliable validator (this is the common browser/crawler case).
+$GLOBALS['sysmda_test_status'] = array();
+unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
+$_SERVER['HTTP_IF_NONE_MATCH'] = '"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+$_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
+check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+
+// Back to the default state so later assertions are unaffected.
+$GLOBALS['sysmda_test_filters'] = array();
+$GLOBALS['sysmda_test_taxonomies'] = array();
+$GLOBALS['sysmda_test_status'] = array();
+unset( $GLOBALS['sysmda_test_terms'][60], $GLOBALS['sysmda_test_terms'][61] );
 
 // ─── LlmsTxtController: line escaping ─────────────────────────────────
 
