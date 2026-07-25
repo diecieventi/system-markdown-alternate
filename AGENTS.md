@@ -664,9 +664,15 @@ WordPress.org Plugin Check.
   one is published it MUST attach the built plugin zip
   `DIST/system-markdown-alternate.zip` as an asset — the auto-generated
   "Source code" archives are not an installable plugin. Publishing a Release is
-  NOT automated (only the tag is), so this stays one command for the user, run
-  from the Mac once the tag exists:
-  `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip`
+  NOT automated (only the tag is), so this stays a manual step for the user,
+  run from the Mac. **Fetch the tags first**: the tag is now created on GitHub
+  by the workflow, and `git pull origin main` does NOT bring tags down, so
+  `--notes-from-tag` fails with *"cannot generate release notes from tag …&nbsp;as
+  it does not exist locally"* without this:
+  ```bash
+  git fetch origin --tags
+  gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip
+  ```
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
   Note: publishing a Release triggers the SVN deploy workflow, which fails
   harmlessly until the SVN secrets are configured (see above).
