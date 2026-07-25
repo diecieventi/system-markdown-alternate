@@ -216,6 +216,18 @@ without error. `LiteSpeedCompat::update()` now holds `LOCK_EX` across read,
 compute and an in-place rewrite, matching core's discipline, and accepts the same
 brief partial-read window core accepts. See the amended decision in `AGENTS.md`.
 
+**Follow-up (0.26.2)** — the in-place rewrite introduced a failure mode the
+rename never had: `ftruncate()` empties the live file *before* the new contents
+are written, so a write that fails (a full disk, an I/O error) or falls short
+left the site with an empty or half-written `.htaccess` — dead permalinks, or a
+500 from a rule cut in two — and `update()` returned `false` without putting
+anything back. Two fixes, both in `overwrite()`: a short write is now detected
+(`fwrite()` reports it as a byte count, not `false`, so the old
+`false !== fwrite(...)` check reported success on a partial write), and any
+failure rewrites the previous contents before the lock is released. Covered by
+tests driving `update()` through a stream wrapper whose writes can be made to
+fail or truncate.
+
 ### M3 — Negotiation is not limited to singular views
 
 **Where** `src/MarkdownController.php:53-56`

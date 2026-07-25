@@ -346,6 +346,13 @@ The v1 scope is done and widely exceeded. Implemented:
     locking discipline matters more than the brief window in which a lock-less
     reader (Apache) could see a partially written file; core lives with the same
     window.
+  - **A failed write is rolled back.** In place means `ftruncate` empties the
+    live file before the new contents land, so a write that fails or falls
+    short would leave a broken `.htaccess` (dead permalinks, or a 500 from a
+    rule cut in two). `overwrite()` compares the byte count `fwrite()` returns
+    with the payload — a short write is NOT a `false` return — and on any
+    failure rewrites the previous contents before the lock is released. Do not
+    reduce that back to a bare `false !== fwrite(...)`.
   `flock()` failing is deliberately non-fatal (as in core): on a filesystem
   without working locks, bailing out would disable the feature precisely on the
   hosts that asked for it. `WP_Filesystem` is deliberately NOT used: it may demand

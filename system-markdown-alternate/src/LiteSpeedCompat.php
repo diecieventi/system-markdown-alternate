@@ -287,6 +287,10 @@ class LiteSpeedCompat {
 	 * accept the same brief window core accepts, in which a reader that takes no
 	 * lock (Apache) could observe a partially written file.
 	 *
+	 * That window is also why a failed write is rolled back before the lock is
+	 * released: truncate-then-write empties the file first, so a write that fails
+	 * or falls short would otherwise leave the site with a broken .htaccess.
+	 *
 	 * flock() failing is not treated as fatal, for the same reason core does not
 	 * check it: on a filesystem without working locks (some NFS setups) bailing out
 	 * would make the feature fail silently on exactly the hosts that asked for it.
@@ -329,14 +333,42 @@ class LiteSpeedCompat {
 
 		self::backup( $path, $contents );
 
-		$ok = rewind( $handle )
-			&& ftruncate( $handle, 0 ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_ftruncate
-			&& false !== fwrite( $handle, $new ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
-			&& fflush( $handle );
+		$ok = self::overwrite( $handle, $new );
+
+		if ( ! $ok && '' !== $contents ) {
+			// The truncate has already emptied the live .htaccess, so a write that
+			// fails or falls short (a full disk is the usual cause) would leave the
+			// site with an empty or half-written config: dead permalinks, or a 500
+			// from a rule cut in two. Put the previous contents back before the lock
+			// is released. Best effort — if that write fails too there is nothing
+			// left to try, and the one-time .sysmda-bak snapshot is the fallback.
+			self::overwrite( $handle, $contents );
+		}
 
 		self::release( $handle );
 
 		return $ok;
+	}
+
+	/**
+	 * Truncates the file behind an open handle and rewrites it with $data.
+	 *
+	 * fwrite() reports a short write by returning fewer bytes than it was given
+	 * rather than false, so the count is compared with the payload: a partially
+	 * written .htaccess is just as broken as an empty one.
+	 *
+	 * @param resource $handle Handle open for reading and writing.
+	 * @param string   $data   Full contents to write.
+	 * @return bool True when the file now holds exactly $data.
+	 */
+	private static function overwrite( $handle, string $data ): bool {
+		if ( ! rewind( $handle ) || ! ftruncate( $handle, 0 ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_ftruncate
+			return false;
+		}
+
+		$written = fwrite( $handle, $data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+
+		return strlen( $data ) === $written && fflush( $handle );
 	}
 
 	/**
