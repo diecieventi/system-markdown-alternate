@@ -1,7 +1,16 @@
 # F3.2 — Explicit taxonomy selection for the front matter
 
-> Implementation plan. Status: **proposed, not started**. Target release
-> **0.25.0**. Supersedes the auto-detection introduced with F3.1 in `0.24.0`.
+> Implementation plan. Status: **implemented in `0.25.0`** — kept as the record
+> of why auto-detection was removed (the *Product decisions* entry in `AGENTS.md`
+> is the binding summary; retire this file once it stops being useful).
+> Supersedes the auto-detection introduced with F3.1 in `0.24.0`.
+>
+> Deviations from the plan as written: the emission path reads no options
+> directly — the selection reaches it through `sysmda_front_matter_taxonomy_slugs`
+> at priority 5 — so the `sysmda_front_matter_taxonomies` gate needed no
+> option-backed closure at all; and `eligible_slugs()` shipped as
+> `candidate_taxonomies()` + the pure `filter_candidates()`, in
+> `MetadataBuilder`, since the migration needs it outside the panel.
 
 ## 1. The problem
 

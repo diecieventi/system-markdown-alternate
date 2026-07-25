@@ -94,9 +94,10 @@ If all three yield an empty string, the `description` key is omitted.
 
 ### Custom taxonomies
 
-**Opt-in, off by default** (since `0.24.0`). When enabled — the *Custom
-taxonomies* checkbox under **Markdown output**, or the
-`sysmda_front_matter_taxonomies` filter — a nested `taxonomies:` mapping is
+**Opt-in, nothing selected by default** (since `0.24.0`; the on/off checkbox
+became a per-taxonomy selection in `0.25.0`). Tick one or more taxonomies under
+*Custom taxonomies* in **Markdown output** — or supply slugs through
+`sysmda_front_matter_taxonomy_slugs` — and a nested `taxonomies:` mapping is
 **appended after `description`**:
 
 ```yaml
@@ -108,20 +109,29 @@ taxonomies:
     - "Privacy"
 ```
 
-- **Default list**: the **public** taxonomies registered for the post's type,
-  minus `category` and `post_tag` (already emitted as `categories`/`tags`) and
-  `post_format` (registered public, but a presentational flag).
-- **Curation**: `sysmda_front_matter_taxonomy_slugs` receives that default list
+- **The list is the explicit selection, never inferred.** Only the taxonomies
+  ticked in the panel are emitted. A taxonomy that is merely *registered* —
+  including one registered `public => true` — is never published on its own, and
+  a taxonomy a newly installed plugin registers appears in the panel unticked.
+  `category`, `post_tag` (already emitted as `categories`/`tags`) and
+  `post_format` (presentational) can never be selected.
+- **Curation**: `sysmda_front_matter_taxonomy_slugs` receives the saved selection
   and may both narrow it (return an empty array to opt out for a post) **and
-  extend it**. Naming a taxonomy that is registered but not public is a
-  deliberate, supported choice — `public => false, show_ui => true` is a common
-  registration for editorial-internal taxonomies a site may legitimately want in
-  its machine-readable output. What the filter can never do is override the
-  always-excluded set above or emit an invalid slug: both are stripped *after*
-  it runs, so a filter can neither duplicate `categories`/`tags` nor break the
-  YAML.
+  extend it**. Naming a taxonomy that is registered but not public, or not
+  publicly queryable, is a deliberate, supported choice — a site may legitimately
+  want an editorial-internal taxonomy in its machine-readable output, and the
+  panel labels such a row rather than hiding it. What the filter can never do is
+  override the always-excluded set above or emit an invalid slug: both are
+  stripped *after* it runs, so a filter can neither duplicate
+  `categories`/`tags` nor break the YAML.
+- **Kill switch**: `sysmda_front_matter_taxonomies` still gates the whole block.
+  Its default is now "at least one taxonomy is selected", so returning `false`
+  suppresses the block whatever the selection is. Code that supplies slugs
+  purely through the filter above needs nothing extra: a non-empty list turns the
+  block on by itself.
 - **Conditional**: a taxonomy with no terms on the post is omitted, and if no
-  eligible taxonomy has terms the `taxonomies:` key is not emitted at all.
+  selected taxonomy has terms the `taxonomies:` key is not emitted at all. A
+  selected slug whose taxonomy is not registered is inert.
 - **Ordering**: taxonomy slugs and term names are both sorted with PHP's
   `SORT_STRING`, i.e. **byte order, not locale collation**. This is deliberate —
   the output must not depend on the server's locale — and it means accented
@@ -129,7 +139,15 @@ taxonomies:
   stable, not human-alphabetical.
 - Term names go through the same scalar escaping as every other string.
 
-When the feature is off, the front matter is byte-identical to `0.23.x`.
+With nothing selected, the front matter is byte-identical to `0.23.x`.
+
+> **`0.25.0` note.** Replacing the checkbox with a selection can make the block
+> *absent* where `0.24.x` emitted it — the emitted set narrows to what the site
+> owner ticked. That is a settings-driven change, not a change to the format:
+> no key was reordered, renamed or removed, and the compatibility policy above
+> still holds. Upgrading from `0.24.x` with the checkbox on seeds the selection
+> with the taxonomies that are public **and** publicly queryable, so only the
+> editorial-internal ones drop out.
 
 ### Scalar escaping (YAML safety)
 
