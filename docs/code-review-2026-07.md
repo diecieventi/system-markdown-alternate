@@ -9,6 +9,10 @@
 > take word boundaries without losing `Googlebot`, and its per-hit option write
 > is a documented accepted trade-off). The document is kept as the record of what
 > was found and why each fix looks the way it does.
+>
+> **M2 was fixed twice**: the first attempt used an atomic temp-file rename, which
+> a review correctly flagged as not serializing the read-modify-write — and as
+> breaking interoperation with core's own `flock`. See the correction under M2.
 
 Full review of the shipped code: edge cases, WordPress compatibility, and
 readiness for a wordpress.org submission. **Planned/future work is deliberately
@@ -199,6 +203,18 @@ instead of replacing the first.
 write to `.htaccess.sysmda-tmp` in the same directory and `rename()` over the
 target (atomic on the same filesystem), and keep a one-time `.htaccess.sysmda-bak`
 before the first write so a bad state is recoverable without FTP.
+
+**Correction (post-0.26.0)** — the rename half of that advice was wrong, and the
+first fix followed it. An automated review pointed out that atomic replacement
+does not serialize the *read*-modify-write, which is the part that matters here:
+`.htaccess` is shared with core (`insert_with_markers()` on a permalink save) and
+with cache/security plugins, so another writer can land between our read and our
+write and have their block silently reverted. Worse, `rename()` actively breaks
+interoperation: it swaps the inode, so a writer holding `flock` on the old one —
+core's exact pattern — keeps writing to an orphaned file and loses its changes
+without error. `LiteSpeedCompat::update()` now holds `LOCK_EX` across read,
+compute and an in-place rewrite, matching core's discipline, and accepts the same
+brief partial-read window core accepts. See the amended decision in `AGENTS.md`.
 
 ### M3 — Negotiation is not limited to singular views
 

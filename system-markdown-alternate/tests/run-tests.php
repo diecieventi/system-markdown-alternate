@@ -1375,6 +1375,68 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 	check( 'convert: empty input', '', $sysmda_conv->convert( '   ' ) );
 }
 
+// ─── LiteSpeedCompat::update (read-modify-write on a real file) ──────────────
+
+// The pure string helpers above are the interesting logic, but the file path has
+// its own failure modes (wrong fopen mode truncating before the read, a lock that
+// is never released, a backup that clobbers itself). Exercised on a temp file:
+// no WordPress needed, and it catches the kind of typo that only shows up on a
+// live site's .htaccess — the one file whose breakage takes a site down.
+$sysmda_update = new ReflectionMethod( LiteSpeedCompat::class, 'update' );
+$sysmda_update->setAccessible( true );
+
+$sysmda_tmp_dir  = sys_get_temp_dir() . '/sysmda-tests-' . getmypid();
+@mkdir( $sysmda_tmp_dir, 0777, true );
+$sysmda_htaccess = $sysmda_tmp_dir . '/.htaccess';
+$sysmda_bak      = $sysmda_htaccess . '.sysmda-bak';
+
+$sysmda_reset_htaccess = static function ( $contents ) use ( $sysmda_htaccess, $sysmda_bak ) {
+	file_put_contents( $sysmda_htaccess, $contents );
+	if ( file_exists( $sysmda_bak ) ) {
+		unlink( $sysmda_bak );
+	}
+};
+
+// Existing content must survive the open: 'w' modes would truncate before the
+// transform ever sees it, silently wiping every other plugin's rules.
+$sysmda_wp_rules = "# BEGIN WordPress\nRewriteEngine On\n# END WordPress\n";
+$sysmda_reset_htaccess( $sysmda_wp_rules );
+$sysmda_update->invoke( null, $sysmda_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) );
+$sysmda_after_add = (string) file_get_contents( $sysmda_htaccess );
+
+check( 'update: existing content preserved', true, false !== strpos( $sysmda_after_add, '# BEGIN WordPress' ) );
+check( 'update: block written', true, LiteSpeedCompat::block_is_before_wordpress( $sysmda_after_add ) );
+check( 'update: matches prepend_rules exactly', LiteSpeedCompat::prepend_rules( $sysmda_wp_rules ), $sysmda_after_add );
+check( 'update: backup taken', $sysmda_wp_rules, (string) file_get_contents( $sysmda_bak ) );
+
+// Idempotent: a second run changes nothing and still reports success.
+check( 'update: second run is a no-op', true, (bool) $sysmda_update->invoke( null, $sysmda_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: contents unchanged by the no-op', $sysmda_after_add, (string) file_get_contents( $sysmda_htaccess ) );
+
+// Removal leaves the rest of the file intact.
+$sysmda_update->invoke( null, $sysmda_htaccess, array( LiteSpeedCompat::class, 'strip_rules' ) );
+check( 'update: removal restores the original', $sysmda_wp_rules, (string) file_get_contents( $sysmda_htaccess ) );
+
+// The backup is a one-time snapshot of the pre-plugin state, never overwritten
+// by a later write (which would replace it with our own block).
+check( 'update: backup not overwritten', $sysmda_wp_rules, (string) file_get_contents( $sysmda_bak ) );
+
+// A missing file is created rather than failing.
+unlink( $sysmda_htaccess );
+unlink( $sysmda_bak );
+check( 'update: creates a missing file', true, (bool) $sysmda_update->invoke( null, $sysmda_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: created file holds the block', true, LiteSpeedCompat::block_is_before_wordpress( (string) file_get_contents( $sysmda_htaccess ) ) );
+check( 'update: no backup for a file that did not exist', false, file_exists( $sysmda_bak ) );
+
+// Cleanup, doubling as a weak check that nothing holds the file open. Weak on
+// purpose: PHP frees the handle when it goes out of scope, so a missing
+// release() would still pass here — the reason release() is called explicitly is
+// to unlock deterministically rather than at the mercy of refcounting. The two
+// consecutive update() calls above are the real guard: a lock left held would
+// make the second one block on flock and hang the suite.
+check( 'update: file removable after the write', true, unlink( $sysmda_htaccess ) );
+@rmdir( $sysmda_tmp_dir );
+
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 echo "\n{$GLOBALS['sysmda_asserts']} assertions, {$GLOBALS['sysmda_failures']} failed.\n";

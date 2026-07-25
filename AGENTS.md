@@ -328,13 +328,29 @@ The v1 scope is done and widely exceeded. Implemented:
   else that might serve it, while the rest of the plugin was still inactive. This
   is NOT auto-yielding (see the decision below): the plugin never reacts to
   another handler, it simply has nothing to say yet.
-- **`.htaccess` is written under an exclusive lock, atomically** (decided July
-  2026): `LiteSpeedCompat::write()` does `flock` + temp file + `rename`, and keeps
-  a one-time `.htaccess.sysmda-bak`. `sync()` runs on every settings-page load, so
-  two concurrent loads could interleave a read-modify-write on the one file whose
-  corruption takes the site down. `WP_Filesystem` is deliberately NOT used: it may
-  demand FTP/SSH credentials the user has not supplied, which would make the sync
-  fail silently on exactly the hosts that need it (the PHPCS warnings carry that
+- **`.htaccess`: the lock spans the whole read-modify-write, and the write is
+  in place** (decided July 2026, amended after review — do not "improve" it into
+  an atomic rename again): `LiteSpeedCompat::update()` opens with `c+`, takes
+  `flock(LOCK_EX)`, and only then reads, computes and rewrites (`ftruncate` +
+  `fwrite`), keeping a one-time `.htaccess.sysmda-bak`. Two reasons, both
+  learned the hard way:
+  - **The lock must cover the read.** `sync()` runs on every settings-page load
+    and `.htaccess` is a *shared* file — core rewrites it on a permalink save,
+    cache/security plugins write to it too. Reading outside the lock lets another
+    writer land between our read and our write, and our write then silently
+    reverts their block.
+  - **In place, not `rename`.** A temp-file rename is atomic for readers but
+    replaces the inode, so a concurrent writer holding `flock` on the *old* inode
+    — exactly what core's `insert_with_markers()` does — keeps writing to an
+    orphaned file and loses its changes with no error. Interoperating with core's
+    locking discipline matters more than the brief window in which a lock-less
+    reader (Apache) could see a partially written file; core lives with the same
+    window.
+  `flock()` failing is deliberately non-fatal (as in core): on a filesystem
+  without working locks, bailing out would disable the feature precisely on the
+  hosts that asked for it. `WP_Filesystem` is deliberately NOT used: it may demand
+  FTP/SSH credentials the user has not supplied, which would make the sync fail
+  silently on exactly the hosts that need it (the PHPCS ignores carry that
   justification inline).
 - **ACF** and **GenerateBlocks** panel sections: shown only when the respective
   plugin is active. ACF options are `register_setting`-ed **only when ACF is

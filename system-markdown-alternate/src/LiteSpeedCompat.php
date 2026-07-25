@@ -152,7 +152,7 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		return self::block_is_before_wordpress( (string) file_get_contents( $path ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
+		return self::block_is_before_wordpress( (string) file_get_contents( $path ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see update().
 	}
 
 	/**
@@ -229,8 +229,8 @@ class LiteSpeedCompat {
 				return false;
 			}
 
-			$contents = file_exists( $path ) ? (string) file_get_contents( $path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; WP_Filesystem would need credentials this page load does not have.
-			$written  = self::write( $path, self::prepend_rules( $contents ) );
+			// The read happens inside update(), under the same lock as the write.
+			$written = self::update( $path, array( __CLASS__, 'prepend_rules' ) );
 
 			if ( $written ) {
 				self::purge_litespeed_cache();
@@ -264,70 +264,104 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		$contents = (string) file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
-		$stripped = self::strip_rules( $contents );
-
-		if ( $stripped === $contents ) {
-			return true;
-		}
-
-		return self::write( $path, $stripped );
+		return self::update( $path, array( __CLASS__, 'strip_rules' ) );
 	}
 
 	/**
-	 * Replaces .htaccess atomically: the new content goes to a private temporary
-	 * file in the same directory, which is then renamed over the target.
+	 * Applies a transform to .htaccess with the read, the computation and the
+	 * write all inside one exclusive lock.
 	 *
-	 * This is the one file whose corruption takes the whole site down with a 500,
-	 * and sync() runs on every load of the settings page, so a concurrent load must
-	 * never be able to observe — or produce — a half-written .htaccess. rename()
-	 * within a directory is atomic, so any reader (Apache included) sees either the
-	 * old file or the new one, complete.
+	 * The lock has to span the whole sequence, not just the write. sync() runs on
+	 * every load of the settings page, and .htaccess is a *shared* file: WordPress
+	 * core rewrites it on a permalink save, and cache/security plugins write to it
+	 * too. Reading outside the lock lets a writer land between our read and our
+	 * write, and our write then silently reverts their block — on the one file
+	 * whose breakage takes the site down.
 	 *
-	 * The temporary name is unique per attempt on purpose: a fixed one would let two
-	 * concurrent writers truncate each other's buffer before either renamed, which
-	 * is precisely the corruption this exists to prevent. What this does NOT
-	 * serialize is the surrounding read-modify-write — two writers can still race
-	 * and the last rename wins — but both candidate contents are complete and
-	 * derived from the same stored option, so the result is always a valid file. A
-	 * lock file would close that last gap at the cost of leaving a stray file in the
-	 * site root: not worth it for an idempotent write.
+	 * The write is deliberately in place (truncate + rewrite under the lock) rather
+	 * than an atomic temp-file rename. Rename looks safer in isolation, but it
+	 * replaces the inode: a concurrent writer holding flock on the old inode — which
+	 * is exactly what core's insert_with_markers() does — would keep writing to an
+	 * orphaned file and lose its changes without any error. Matching core's own
+	 * locking discipline is what actually makes concurrent writers safe here, so we
+	 * accept the same brief window core accepts, in which a reader that takes no
+	 * lock (Apache) could observe a partially written file.
+	 *
+	 * flock() failing is not treated as fatal, for the same reason core does not
+	 * check it: on a filesystem without working locks (some NFS setups) bailing out
+	 * would make the feature fail silently on exactly the hosts that asked for it.
+	 * There the behaviour degrades to core's.
 	 *
 	 * WP_Filesystem is deliberately not used: it may require FTP/SSH credentials the
 	 * user has not supplied, which would make the sync fail silently on exactly the
-	 * hosts that need it. Direct writes are guarded by htaccess_writable() instead.
+	 * hosts that need it. Direct access is guarded by htaccess_writable() instead.
 	 *
-	 * A one-time `.htaccess.sysmda-bak` snapshot is kept the first time the file is
-	 * touched, so a bad state is recoverable without FTP access.
+	 * @param string   $path      Absolute path of .htaccess.
+	 * @param callable $transform Receives the current contents, returns the new ones.
+	 * @return bool True when the file already matched or was updated successfully.
 	 */
-	private static function write( string $path, string $contents ): bool {
-		$backup = $path . '.sysmda-bak';
-
-		if ( file_exists( $path ) && ! file_exists( $backup ) ) {
-			@copy( $path, $backup ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort: a missing backup must not block the write.
-		}
-
-		$temp = $path . '.sysmda-tmp-' . wp_generate_password( 8, false );
-
-		// 'x' fails instead of clobbering, so a name collision can never make two
-		// writers share one buffer.
-		$handle = fopen( $temp, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- See the docblock: WP_Filesystem may need credentials.
+	private static function update( string $path, callable $transform ): bool {
+		// 'c+' creates the file when missing and opens it for reading and writing
+		// WITHOUT truncating, so the current contents survive until the lock is held.
+		$handle = fopen( $path, 'c+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- See the docblock: WP_Filesystem may need credentials.
 
 		if ( false === $handle ) {
 			return false;
 		}
 
-		$written = false !== fwrite( $handle, $contents ) && fflush( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		flock( $handle, LOCK_EX ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Failure is non-fatal by design, see the docblock.
 
-		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- The atomic replace is the point: WP_Filesystem::move() cannot guarantee it and may need credentials.
-		if ( ! $written || ! rename( $temp, $path ) ) {
-			wp_delete_file( $temp );
-			return false;
+		$contents = '';
+		while ( ! feof( $handle ) ) {
+			$chunk = fread( $handle, 8192 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+			if ( false === $chunk ) {
+				break;
+			}
+			$contents .= $chunk;
 		}
 
-		return true;
+		$new = (string) call_user_func( $transform, $contents );
+
+		if ( $new === $contents ) {
+			self::release( $handle );
+			return true; // Already in the desired state.
+		}
+
+		self::backup( $path, $contents );
+
+		$ok = rewind( $handle )
+			&& ftruncate( $handle, 0 ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_ftruncate
+			&& false !== fwrite( $handle, $new ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+			&& fflush( $handle );
+
+		self::release( $handle );
+
+		return $ok;
+	}
+
+	/**
+	 * Unlocks and closes a handle opened by update().
+	 *
+	 * @param resource $handle Open file handle.
+	 */
+	private static function release( $handle ): void {
+		flock( $handle, LOCK_UN );
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+	}
+
+	/**
+	 * Keeps a one-time `.htaccess.sysmda-bak` snapshot of the contents as they were
+	 * before this plugin first touched them, so a bad state stays recoverable
+	 * without FTP access. Best effort: a failed backup never blocks the write.
+	 */
+	private static function backup( string $path, string $contents ): void {
+		$backup = $path . '.sysmda-bak';
+
+		if ( '' === $contents || file_exists( $backup ) ) {
+			return;
+		}
+
+		@file_put_contents( $backup, $contents ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort; see the method docblock.
 	}
 
 	/**
@@ -401,7 +435,7 @@ class LiteSpeedCompat {
 			return false;
 		}
 
-		return false !== strpos( (string) file_get_contents( $path ), '# BEGIN ' . self::MARKER ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see write().
+		return false !== strpos( (string) file_get_contents( $path ), '# BEGIN ' . self::MARKER ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file; see update().
 	}
 
 	/**
