@@ -19,22 +19,31 @@ plan documents were deleted once merged: the outcome lives in the code, in
 `AGENTS.md` (*Current state*, *Product decisions*, *Filters*) and in
 `docs/output-format.md`. Do not go looking for them.
 
+One piece of that plan came back with a defect: F3.1 auto-detects the emitted
+taxonomies from `WP_Taxonomy::$public`, which publishes editorial-internal
+taxonomies (`publicly_queryable => false`) and auto-publishes whatever the next
+plugin registers. The fix — an explicit selection in the panel — is planned in
+`docs/f3-2-taxonomy-selection-plan.md` and is the next thing to build.
+
 ## The documents that remain
 
 | File | What it is |
 |---|---|
 | `docs/output-format.md` | **Not a plan — a live contract.** The front-matter keys and order, scalar escaping, body pipeline and HTTP contract, append-only from `0.24.0`. Enforced by golden tests in `tests/run-tests.php` and linked from `README.md` and `readme.txt`. Keep it in sync with any output change. |
-| `docs/llms-txt-multilingual-plan.md` | The **only open plan**: list WPML/Polylang translations in the single `/llms.txt`. Greenlit but **not started** — needs the staging reconnaissance described inside before any code. |
+| `docs/f3-2-taxonomy-selection-plan.md` | **Open plan, next up**: replace the F3.1 auto-detection of front-matter taxonomies with an explicit per-taxonomy selection in the panel (target `0.25.0`). Written after a real defect: a taxonomy registered `public => true, publicly_queryable => false` — editorial-internal — was being published. |
+| `docs/llms-txt-multilingual-plan.md` | Open plan: list WPML/Polylang translations in the single `/llms.txt`. Greenlit but **not started** — needs the staging reconnaissance described inside before any code. |
 | `docs/strategy-review-2026-07.md` | The reasoning, the eliminated options, and the **future thoughts** (parked, not plans): server-side diagnostics, ACF structured extraction, WooCommerce, hardening, wider multilingual. |
 
 ## What to do next
 
-1. **Multilingual `/llms.txt`** — the only thing actually queued. Start with the
-   WPML/Polylang staging reconnaissance, not with code.
-2. Everything else in *Future thoughts* stays parked until the decisive signal:
+1. **Explicit taxonomy selection (F3.2)** — queued first: it fixes a shipped
+   defect, not just an ergonomics gap. See `docs/f3-2-taxonomy-selection-plan.md`.
+2. **Multilingual `/llms.txt`** — queued after it. Start with the WPML/Polylang
+   staging reconnaissance, not with code.
+3. Everything else in *Future thoughts* stays parked until the decisive signal:
    **real, recurring `.md` requests from important clients in the logs**. Do not
    promote any of it to a plan without that.
-3. Housekeeping tracked in `AGENTS.md` *Open / to do*: the wordpress.org
+4. Housekeeping tracked in `AGENTS.md` *Open / to do*: the wordpress.org
    screenshots are stale (pre-0.17.0 UI), and Italian translation happens on
    translate.wordpress.org once the plugin is live — never in this repo.
 
