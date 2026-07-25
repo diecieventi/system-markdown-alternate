@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.26.0
+Stable tag: 0.26.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -239,6 +239,18 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 
 == Changelog ==
 
+= 0.26.1 =
+
+* **`.htaccess` is now read and rewritten under a single exclusive lock.** The
+  atomic replacement added in 0.26.0 prevented a half-written file from ever
+  being observed, but it did not serialize the read-modify-write around it — and
+  `.htaccess` is a shared file: WordPress core rewrites it when you save the
+  permalink settings, and cache and security plugins write to it too. A writer
+  landing between the read and the write had its block silently reverted. The
+  lock now spans the whole sequence and the file is rewritten in place, matching
+  what WordPress core itself does, so concurrent writers block each other
+  properly instead of overwriting each other's rules.
+
 = 0.26.0 =
 
 Correctness and robustness pass over the whole conversion pipeline, from a full
@@ -288,11 +300,10 @@ code review of the shipped code. Two fixes change the output on real content.
   answered a site name and a tagline while taking the URL over from anything else
   that might serve it. It also no longer lists posts the `.md` endpoint would
   404.
-* **`.htaccess` is now read and rewritten under a single exclusive lock**, with a
-  one-time `.htaccess.sysmda-bak` snapshot. Two concurrent writers could
-  previously interleave a read-modify-write on the one file whose corruption
-  takes a site down — and `.htaccess` is shared with WordPress core and other
-  plugins, so the lock has to cover the read as well as the write.
+* **`.htaccess` is now replaced atomically** (a private temporary file renamed
+  over the target), with a one-time `.htaccess.sysmda-bak` snapshot, so a
+  half-written file can never be observed. See 0.26.1: the locking around it
+  needed more than that.
 * **Uninstall now cleans every site of a multisite network**, in batches, instead
   of only the current one.
 * Fixed: a CSS class supplied through `sysmda_markdown_excluded_classes` that is
