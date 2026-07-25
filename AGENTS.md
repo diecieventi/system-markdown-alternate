@@ -395,7 +395,10 @@ The v1 scope is done and widely exceeded. Implemented:
   branch — commit there, push it, open the PR (GitHub MCP tools). The old
   "consolidate onto `main` with ff-merges" procedure is **retired**: never
   push `main` from this environment. The environment's git proxy rejects tag
-  pushes (403): leave release tags to the user (see the SVN section).
+  pushes (403), but **no manual tagging step is needed**: the `Release tag`
+  workflow creates `vX.Y.Z` when the release PR is merged, and can be re-run
+  from the Actions tab if a tag was ever missed (`bin/release-tag.sh` stays the
+  offline fallback). Do not tell the user to tag from their machine.
 - **Codex and any other agent**: same rule, no exceptions — work on a
   dedicated branch (e.g. `codex/<topic>`), push it, open a PR to `main`, let
   the user merge. Code-review fixes follow the same path: a PR, never a
@@ -660,8 +663,9 @@ WordPress.org Plugin Check.
 - **GitHub Releases**: optional (the tag with notes is the baseline), but when
   one is published it MUST attach the built plugin zip
   `DIST/system-markdown-alternate.zip` as an asset — the auto-generated
-  "Source code" archives are not an installable plugin. One command, run by
-  the user from the Mac after `bin/release-tag.sh`:
+  "Source code" archives are not an installable plugin. Publishing a Release is
+  NOT automated (only the tag is), so this stays one command for the user, run
+  from the Mac once the tag exists:
   `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip`
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
   Note: publishing a Release triggers the SVN deploy workflow, which fails
