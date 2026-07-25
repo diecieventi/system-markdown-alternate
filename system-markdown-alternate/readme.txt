@@ -288,10 +288,11 @@ code review of the shipped code. Two fixes change the output on real content.
   answered a site name and a tagline while taking the URL over from anything else
   that might serve it. It also no longer lists posts the `.md` endpoint would
   404.
-* **`.htaccess` writes are now locked and atomic** (exclusive lock, temporary
-  file plus rename), with a one-time `.htaccess.sysmda-bak` snapshot. Two
-  concurrent settings-page loads could previously interleave a read-modify-write
-  on the one file whose corruption takes a site down.
+* **`.htaccess` is now read and rewritten under a single exclusive lock**, with a
+  one-time `.htaccess.sysmda-bak` snapshot. Two concurrent writers could
+  previously interleave a read-modify-write on the one file whose corruption
+  takes a site down — and `.htaccess` is shared with WordPress core and other
+  plugins, so the lock has to cover the read as well as the write.
 * **Uninstall now cleans every site of a multisite network**, in batches, instead
   of only the current one.
 * Fixed: a CSS class supplied through `sysmda_markdown_excluded_classes` that is
