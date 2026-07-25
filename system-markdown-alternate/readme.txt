@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.25.0
+Stable tag: 0.26.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,8 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 The output is customizable through filters:
 
 * `sysmda_markdown_supported_post_types` — post types that expose `.md` (default: none).
+* `sysmda_markdown_excluded_post_formats` — post formats that never expose a `.md`
+  (default: every non-standard format; return an empty array to serve them all).
 * `sysmda_markdown_robots_header` — the `X-Robots-Tag` value (`''` = no header).
 * `sysmda_markdown_strict_406` — return `406` when the client accepts neither HTML nor
   Markdown (default `true`; `false` always serves the HTML default).
@@ -120,6 +122,23 @@ No rewrite rules are added, so no permalink flush is required.
 
 By default no post type is enabled. Open **Settings → Markdown Alternate** and
 tick at least one post type under **Supported post types**.
+
+= Which content does NOT get a .md version? =
+
+Anything the endpoint would not be able to serve honestly:
+
+* content types not enabled in the settings page;
+* drafts, pending and private content, and password-protected posts;
+* media attachments (always excluded);
+* posts with a **non-standard post format** — aside, status, quote, link,
+  gallery, image, video, audio, chat. These are short snippets, usually
+  untitled, with no editorial body worth serving as a document. Use the
+  `sysmda_markdown_excluded_post_formats` filter to change that.
+
+Markdown is also never served for URL *variants* of a post — its feed, its
+oEmbed view, its trackback endpoint, paged comments and the sub-pages of a
+post split with `<!--nextpage-->` — even with `Accept: text/markdown`. Only the
+canonical permalink and its `.md` URL return Markdown.
 
 = What does the Markdown output look like? =
 
@@ -219,6 +238,82 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.26.0 =
+
+Correctness and robustness pass over the whole conversion pipeline, from a full
+code review of the shipped code. Two fixes change the output on real content.
+
+* **Fixed: an unbalanced `</div>` in the content silently truncated the Markdown
+  body.** The fragment was parsed inside a `<div>` wrapper and only that
+  wrapper's children were serialized, so a stray closing tag — custom HTML
+  blocks, migrated content, legacy column shortcodes — ended the wrapper early
+  and everything after it was dropped. The HTML page rendered fine, which made
+  the loss invisible. The wrapper is now an element the content cannot close.
+* **Fixed: tables came out as unreadable glued text** ("NamePriceCoffee2"). The
+  library's table converter is now registered, so tables become GFM pipe tables
+  with `|` escaped inside cells. Definition lists (`<dl>`) are flattened to a
+  bold term plus paragraphs instead of being concatenated.
+* **Fixed: whitespace normalization rewrote the inside of fenced code blocks.**
+  Trailing spaces and runs of blank lines are now preserved verbatim inside
+  fences (they are meaningful in code samples, transcripts and diffs) and still
+  normalized everywhere else.
+* **Fixed: code from syntax highlighters that wrap each line in its own element**
+  (Shiki, and therefore Code Block Pro) collapsed onto a single line. Line
+  breaks are reconstructed when the markup carries none of its own.
+* **Fixed: absolute URLs with a scheme other than `http(s)`** — `ftp:`, `sms:`,
+  `whatsapp:`, `callto:`, `webcal:` — were mangled into bogus site-relative
+  URLs. Any RFC 3986 scheme is now recognised as absolute.
+* **Fixed: a query-only link** (`?page=2`) resolved against the base directory
+  instead of the base path on permalink structures without a trailing slash.
+* **Markdown is no longer served for feeds, oEmbed views, trackbacks, paged
+  comments or post sub-pages.** `Accept: text/markdown` on `/my-post/feed/`
+  returned the article body instead of the feed: those URLs are variants of the
+  post, not the post, and are never advertised as Markdown. The negotiation
+  guard now matches the one used for the `rel="alternate"` link.
+* **New: posts with a non-standard post format** (aside, status, quote, link,
+  gallery, image, video, audio, chat) no longer expose a Markdown version. They
+  are short snippets, usually untitled, with no editorial body worth serving as
+  a document; they also disappear from `/llms.txt`, the alternate link, the
+  shortcode and the dynamic tag. Filterable through
+  `sysmda_markdown_excluded_post_formats` (return an empty array to serve them
+  again).
+* **Fixed: the `.md` route rendered blocks and shortcodes with no post context.**
+  On that route the main query 404s, leaving the global `$post` empty, so dynamic
+  blocks and shortcodes falling back to `get_the_ID()` rendered against nothing —
+  and the same post could convert differently through `.md` than through
+  `?format=markdown`. The loop is now set up for the conversion on both routes.
+* **`/llms.txt` stays out of the way until a content type is enabled.** The
+  endpoint is on by default but had nothing to index on a fresh install, so it
+  answered a site name and a tagline while taking the URL over from anything else
+  that might serve it. It also no longer lists posts the `.md` endpoint would
+  404.
+* **`.htaccess` writes are now locked and atomic** (exclusive lock, temporary
+  file plus rename), with a one-time `.htaccess.sysmda-bak` snapshot. Two
+  concurrent settings-page loads could previously interleave a read-modify-write
+  on the one file whose corruption takes a site down.
+* **Uninstall now cleans every site of a multisite network**, in batches, instead
+  of only the current one.
+* Fixed: a CSS class supplied through `sysmda_markdown_excluded_classes` that is
+  not a plain token (a quote in it) took the whole response down with a fatal
+  XPath error; such entries are skipped now.
+* Fixed: `[sysmda_md_url]` returned the main post's URL inside a secondary loop
+  (related posts, a query block) instead of the current item's.
+* Fixed: an enabled content type whose plugin was temporarily deactivated was
+  silently dropped from the selection by the next save of the settings page.
+* Fixed: the `/llms.txt` conflict check looked for a physical `llms.txt` in
+  ABSPATH instead of the site root (wrong on subdirectory installs).
+* Fixed: an ACF field whose value is the string `0` was skipped.
+* `X-Robots-Tag` and `Link: rel="canonical"` values coming from filters are
+  sanitized before reaching `header()`.
+* `.md` URLs are matched case-insensitively, and an inactive plugin (no content
+  type enabled) no longer redirects `.md` URLs it would then 404.
+* Settings page: keyboard navigation for the tabs (arrow keys, Home/End) with
+  the matching ARIA roles, and a plain-rendering fallback if the section list
+  ever becomes unreadable.
+* Tests: the DOM pipeline and the Markdown conversion — previously uncovered,
+  which is where every output bug above lived — now have golden coverage
+  (260 assertions, up from 211). PHPCS is clean with zero warnings.
 
 = 0.25.0 =
 * Changed: the *Custom taxonomies* setting is now a **list of checkboxes, one per

@@ -173,6 +173,19 @@ function get_the_terms( $post, $taxonomy ) {
 }
 
 /** Stub: no magic quotes to strip in the tests. */
+function post_password_required( $post ) {
+	return ! empty( $post->post_password );
+}
+
+/** Stub: post format, driven by a test-only property (false = standard format). */
+function get_post_format( $post = null ) {
+	return isset( $post->post_format ) ? $post->post_format : false;
+}
+
+function esc_url_raw( $url ) {
+	return $url;
+}
+
 function wp_unslash( $value ) {
 	return $value;
 }
@@ -223,10 +236,13 @@ class WP_Post {
 	public $post_title   = '';
 	public $post_author  = 0;
 	public $post_content = '';
-	public $post_excerpt = '';
-	public $permalink    = '';
+	public $post_excerpt   = '';
+	public $post_password  = '';
+	public $permalink      = '';
 	/** GMT modification time: part of the cache validity hash / ETag. */
 	public $post_modified_gmt = '';
+	/** Test-only preset read by the get_post_format() stub (false = standard). */
+	public $post_format = false;
 	/** Test-only presets read by the get_post_time/thumbnail stubs above. */
 	public $sysmda_published = '';
 	public $sysmda_modified  = '';
@@ -240,6 +256,18 @@ class WP_Post {
 }
 
 // ─── Classes under test ───────────────────────────────────────────────────────
+
+/*
+ * The Markdown conversion tests need league/html-to-markdown, which lives in
+ * vendor/. Loaded when present; the few tests that need it are skipped with an
+ * explicit notice otherwise, so `php tests/run-tests.php` still works in a bare
+ * checkout. CI installs the dependencies, so they always run there.
+ */
+$GLOBALS['sysmda_has_vendor'] = is_readable( __DIR__ . '/../vendor/autoload.php' );
+
+if ( $GLOBALS['sysmda_has_vendor'] ) {
+	require __DIR__ . '/../vendor/autoload.php';
+}
 
 require __DIR__ . '/../src/AcceptNegotiator.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
@@ -1166,6 +1194,186 @@ check(
 	"gravityforms/form\nhttps://example.com/a:b",
 	$sysmda_admin->sanitize_lines( "gravityforms/form\nhttps://example.com/a:b" )
 );
+
+// ─── ContentRenderer::process_dom (DOM pipeline) ──────────────────────────────
+
+// The DOM pass is where the body is assembled, so it gets golden coverage: the
+// bugs it used to hide (silent truncation, glued tables, collapsed code) were all
+// invisible to the pure-logic tests that only reached absolutize().
+$sysmda_dom_method = new ReflectionMethod( ContentRenderer::class, 'process_dom' );
+$sysmda_dom_method->setAccessible( true );
+
+$sysmda_dom = static function ( $html, $base = 'https://example.com/blog/my-post/' ) use ( $sysmda_renderer, $sysmda_dom_method ) {
+	return $sysmda_dom_method->invoke( $sysmda_renderer, $html, $base );
+};
+
+// The wrapper element must not be closeable by the content itself. A stray
+// </div> — custom HTML blocks, migrated content, legacy column shortcodes —
+// used to close the wrapper early and silently drop everything after it.
+check( 'dom: stray </div> mid-content keeps the rest', '<p>a</p><p>b</p><p>c</p>', $sysmda_dom( '<p>a</p></div><p>b</p><p>c</p>' ) );
+check( 'dom: leading </div> keeps everything', '<p>a</p>', $sysmda_dom( '</div><p>a</p>' ) );
+check( 'dom: stray </section> harmless', '<p>a</p><p>b</p>', $sysmda_dom( '<p>a</p></section><p>b</p>' ) );
+check( 'dom: legitimate div preserved', '<div class="k"><p>a</p></div><p>b</p>', $sysmda_dom( '<div class="k"><p>a</p></div><p>b</p>' ) );
+
+// Class exclusion still empties the body when that is the point: the
+// "parse came back empty" fallback must never republish excluded content.
+check( 'dom: excluded wrapper empties the body', '', trim( $sysmda_dom( '<div class="md-exclude"><p>secret</p></div>' ) ) );
+check( 'dom: excluded node removed, sibling kept', '<p>keep</p>', $sysmda_dom( '<p>keep</p><div class="no-md"><p>drop</p></div>' ) );
+
+// A class that cannot be interpolated into XPath is skipped instead of taking
+// the response down: query() returns false and iterator_to_array() fatals on it.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_classes'] = array( "it's-bad", 'no-md' );
+check( 'dom: unsafe class skipped, safe one still applied', '<p>keep</p>', $sysmda_dom( '<p>keep</p><span class="no-md">x</span>' ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_classes'] );
+
+// Figures become paragraphs (blank-line separation around images), EXCEPT when
+// they hold a block element: a <table> inside a <p> is invalid nesting.
+check( 'dom: image figure unwrapped to p', '<p><img src="https://example.com/a.png" alt="x"></p>', $sysmda_dom( '<figure class="wp-block-image"><img src="/a.png" alt="x"/></figure>' ) );
+check(
+	'dom: table figure left alone',
+	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>',
+	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>' )
+);
+
+// Definition lists: the converter has no dl support and strip_tags is on, so an
+// untouched <dl> came out as "TermDefinition".
+check(
+	'dom: dl flattened to bold term + paragraphs',
+	'<p><strong>Term</strong></p><p>Def</p>',
+	$sysmda_dom( '<dl><dt>Term</dt><dd>Def</dd></dl>' )
+);
+
+// Code blocks: a highlighter that wraps each line in its own element and relies
+// on CSS for the breaks has no newline in its text at all.
+check(
+	'dom: per-line spans regain their newlines',
+	"<pre class=\"shiki\"><code>echo 1;\necho 2;</code></pre>",
+	$sysmda_dom( '<pre class="shiki"><code><span class="line">echo 1;</span><span class="line">echo 2;</span></code></pre>' )
+);
+check(
+	'dom: markup with real newlines untouched',
+	"<pre><code class=\"language-php\">echo 1;\necho 2;</code></pre>",
+	$sysmda_dom( "<pre><code class=\"language-php\">echo 1;\necho 2;</code></pre>" )
+);
+// Not a clean line-per-element structure: keep the flat text rather than guess.
+check(
+	'dom: mixed inline spans stay on one line',
+	'<pre><code class="language-js">let a = 1;</code></pre>',
+	$sysmda_dom( '<pre><code class="language-js">let <span>a</span> = 1;</code></pre>' )
+);
+
+// ─── ContentRenderer::absolutize (schemes and query-only references) ─────────
+
+// Any scheme, not just http(s), is an absolute reference: resolving one as a
+// path produced URLs like "https://example.com/blog/my-post/ftp://host/file".
+check( 'absolutize: ftp scheme preserved', 'ftp://host/file', $sysmda_abs( 'ftp://host/file' ) );
+check( 'absolutize: sms scheme preserved', 'sms:+390212345', $sysmda_abs( 'sms:+390212345' ) );
+check( 'absolutize: whatsapp scheme preserved', 'whatsapp://send?text=x', $sysmda_abs( 'whatsapp://send?text=x' ) );
+check( 'absolutize: callto scheme preserved', 'callto:123', $sysmda_abs( 'callto:123' ) );
+check( 'absolutize: webcal scheme preserved', 'webcal://example.com/c.ics', $sysmda_abs( 'webcal://example.com/c.ics' ) );
+
+// A query-only reference keeps the base path (RFC 3986 §5.3) instead of being
+// resolved against the base *directory*.
+check( 'absolutize: query-only, trailing-slash base', 'https://example.com/blog/my-post/?page=2', $sysmda_abs( '?page=2' ) );
+$sysmda_abs_flat = static function ( $url ) use ( $sysmda_renderer, $sysmda_abs_method ) {
+	return $sysmda_abs_method->invoke( $sysmda_renderer, $url, 'https://example.com/blog/my-post' );
+};
+check( 'absolutize: query-only, no trailing slash', 'https://example.com/blog/my-post?page=2', $sysmda_abs_flat( '?page=2' ) );
+check( 'absolutize: document-relative, no trailing slash', 'https://example.com/blog/other', $sysmda_abs_flat( 'other' ) );
+
+// ─── PostSupport::is_servable (post formats) ──────────────────────────────────
+
+$GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] = array( 'post', 'page' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post', 'page' );
+
+$sysmda_mk_post = static function ( $overrides = array() ) {
+	$post = new WP_Post(
+		array_merge(
+			array(
+				'ID'          => 900,
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			),
+			$overrides
+		)
+	);
+	return $post;
+};
+
+check( 'servable: standard format post', true, PostSupport::is_servable( $sysmda_mk_post() ) );
+check( 'servable: unsupported type', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_type' => 'product' ) ) ) );
+check( 'servable: draft', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_status' => 'draft' ) ) ) );
+check( 'servable: password protected', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) ) );
+
+// Non-standard post formats are snippets, not documents: excluded everywhere
+// is_servable() is consulted (.md, alternate link, /llms.txt, shortcode, tag).
+foreach ( array( 'aside', 'status', 'quote', 'link', 'gallery', 'image', 'video', 'audio', 'chat' ) as $sysmda_format ) {
+	check( "servable: {$sysmda_format} format excluded", false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => $sysmda_format ) ) ) );
+}
+// The standard format is the ABSENCE of a format, so it must never be excluded.
+check( 'servable: standard format not excluded', false, PostSupport::has_excluded_post_format( $sysmda_mk_post() ) );
+check( 'servable: unknown format value ignored', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'something-else' ) ) ) );
+
+// The exclusion list is filterable: an empty list serves every format again.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array();
+check( 'servable: filter can opt formats back in', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array( 'status' );
+check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
+check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
+unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
+
+// ─── MarkdownConverter (needs league/html-to-markdown) ───────────────────────
+
+if ( ! $GLOBALS['sysmda_has_vendor'] ) {
+	echo "NOTE: skipping the Markdown conversion tests (vendor/ absent — run `composer install`).\n";
+} else {
+	$sysmda_conv = new MarkdownConverter();
+
+	// Tables. Without the library's TableConverter registered, strip_tags glued
+	// every cell together ("NamePriceCoffee2") — worse than useless to an LLM.
+	check(
+		'convert: table becomes a GFM pipe table',
+		"| Name | Price |\n|---|---|\n| Coffee | 2 |\n| Tea | 3 |\n",
+		$sysmda_conv->convert( '<table><thead><tr><th>Name</th><th>Price</th></tr></thead><tbody><tr><td>Coffee</td><td>2</td></tr><tr><td>Tea</td><td>3</td></tr></tbody></table>' )
+	);
+	check(
+		'convert: headerless table still tabular',
+		"| a | b |\n|---|---|\n| c | d |\n",
+		$sysmda_conv->convert( '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>' )
+	);
+	check(
+		'convert: pipe inside a cell escaped',
+		"| H |\n|---|\n| a\\|b |\n",
+		$sysmda_conv->convert( '<table><thead><tr><th>H</th></tr></thead><tbody><tr><td>a|b</td></tr></tbody></table>' )
+	);
+
+	// Fenced code must survive byte-for-byte: trailing spaces are meaningful in a
+	// Markdown sample and blank-line runs matter in transcripts, diffs and patches.
+	check(
+		'convert: blank lines inside a fence preserved',
+		"```python\na = 1\n\n\n\nb = 2\n```\n",
+		$sysmda_conv->convert( "<pre><code class=\"language-python\">a = 1\n\n\n\nb = 2</code></pre>" )
+	);
+	check(
+		'convert: trailing spaces inside a fence preserved',
+		"```\na   \nb\n```\n",
+		$sysmda_conv->convert( "<pre>a   \nb</pre>" )
+	);
+	// Outside a fence both rules still apply.
+	check(
+		'convert: blank lines collapsed outside a fence',
+		"a\n\nb\n",
+		$sysmda_conv->convert( '<p>a</p><p></p><p></p><p>b</p>' )
+	);
+
+	// Ordinary conversions, pinned so the converter config cannot drift silently.
+	check( 'convert: atx heading', "## Title\n", $sysmda_conv->convert( '<h2>Title</h2>' ) );
+	check( 'convert: dash list items', "- a\n- b\n", $sysmda_conv->convert( '<ul><li>a</li><li>b</li></ul>' ) );
+	check( 'convert: script node removed', "text\n", $sysmda_conv->convert( '<p>text</p><script>evil()</script>' ) );
+	check( 'convert: empty input', '', $sysmda_conv->convert( '   ' ) );
+}
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

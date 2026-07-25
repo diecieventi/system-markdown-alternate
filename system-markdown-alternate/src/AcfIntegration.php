@@ -68,10 +68,12 @@ class AcfIntegration {
 		foreach ( $keys as $key ) {
 			$value = get_field( (string) $key, $post->ID );
 
-			if ( ! $value || ! is_string( $value ) ) {
+			if ( ! is_string( $value ) ) {
 				continue;
 			}
 
+			// Explicit emptiness check: a falsy test would also drop the string
+			// "0", which is a perfectly valid field value.
 			$value = trim( $value );
 			if ( '' === $value ) {
 				continue;

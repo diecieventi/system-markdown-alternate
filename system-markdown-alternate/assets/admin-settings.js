@@ -29,7 +29,7 @@
 		} );
 	}
 
-	function activate( id, store ) {
+	function activate( id, store, focus ) {
 		if ( ! hasPanel( id ) ) {
 			return;
 		}
@@ -40,6 +40,12 @@
 			var on = t.getAttribute( 'data-tab' ) === id;
 			t.classList.toggle( 'nav-tab-active', on );
 			t.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+			// Roving tabindex: only the selected tab is in the tab order, so Tab
+			// leaves the tablist and the arrow keys move between tabs.
+			t.setAttribute( 'tabindex', on ? '0' : '-1' );
+			if ( on && focus ) {
+				t.focus();
+			}
 		} );
 		if ( store ) {
 			try {
@@ -51,11 +57,28 @@
 		}
 	}
 
-	tabs.forEach( function ( t ) {
+	tabs.forEach( function ( t, index ) {
 		t.setAttribute( 'role', 'tab' );
 		t.addEventListener( 'click', function ( e ) {
 			e.preventDefault();
 			activate( t.getAttribute( 'data-tab' ), true );
+		} );
+		t.addEventListener( 'keydown', function ( e ) {
+			var step = 0;
+			if ( 'ArrowRight' === e.key || 'ArrowDown' === e.key ) {
+				step = 1;
+			} else if ( 'ArrowLeft' === e.key || 'ArrowUp' === e.key ) {
+				step = -1;
+			} else if ( 'Home' === e.key ) {
+				step = -index;
+			} else if ( 'End' === e.key ) {
+				step = tabs.length - 1 - index;
+			} else {
+				return;
+			}
+			e.preventDefault();
+			var next = tabs[ ( index + step + tabs.length ) % tabs.length ];
+			activate( next.getAttribute( 'data-tab' ), true, true );
 		} );
 	} );
 
@@ -72,7 +95,7 @@
 			}
 		} catch ( e ) {}
 	}
-	if ( initial ) {
-		activate( initial, false );
-	}
+	// Always activate something, even when it is the tab already marked active
+	// server-side: this is what sets aria-selected and the roving tabindex.
+	activate( initial || tabs[ 0 ].getAttribute( 'data-tab' ), false );
 } )();

@@ -24,19 +24,35 @@ class PostSupport {
 	const NEVER_SERVABLE = array( 'attachment' );
 
 	/**
+	 * Post formats whose posts never expose a Markdown version.
+	 *
+	 * Every non-standard format: an aside, status, link or quote is a short
+	 * snippet, usually untitled, that carries no editorial body worth serving as
+	 * a document. Posts with the standard format (get_post_format() === false)
+	 * are unaffected, which is the overwhelming majority of content.
+	 */
+	const EXCLUDED_POST_FORMATS = array( 'aside', 'audio', 'chat', 'gallery', 'image', 'link', 'quote', 'status', 'video' );
+
+	/**
 	 * Supported post types (filterable). An empty list means the plugin is inactive.
+	 *
+	 * Memoized per blog: the value is keyed on the current blog ID so a
+	 * switch_to_blog() loop (WP-CLI, network cron, a multisite aggregator) does
+	 * not evaluate one site's posts against another site's settings.
 	 *
 	 * @return string[]
 	 */
 	public static function supported_post_types(): array {
-		static $types = null;
+		static $types = array();
 
-		if ( null === $types ) {
+		$blog_id = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+
+		if ( ! isset( $types[ $blog_id ] ) ) {
 			/** Filters post types that expose the .md endpoint and alternate link. */
-			$types = self::sanitize_types( (array) apply_filters( 'sysmda_markdown_supported_post_types', array() ) );
+			$types[ $blog_id ] = self::sanitize_types( (array) apply_filters( 'sysmda_markdown_supported_post_types', array() ) );
 		}
 
-		return $types;
+		return $types[ $blog_id ];
 	}
 
 	/**
@@ -74,11 +90,45 @@ class PostSupport {
 
 	/**
 	 * Whether the post exposes a .md representation: supported type, published,
-	 * and not password-protected.
+	 * not password-protected, and not carrying an excluded post format.
 	 */
 	public static function is_servable( \WP_Post $post ): bool {
 		return in_array( $post->post_type, self::supported_post_types(), true )
 			&& 'publish' === $post->post_status
-			&& ! post_password_required( $post );
+			&& ! post_password_required( $post )
+			&& ! self::has_excluded_post_format( $post );
+	}
+
+	/**
+	 * Whether the post carries a post format that is excluded from Markdown.
+	 *
+	 * Checked last in is_servable(): it is the only rule that may need a term
+	 * lookup, and the cheaper checks usually settle the question first.
+	 */
+	public static function has_excluded_post_format( \WP_Post $post ): bool {
+		/**
+		 * Filters the post formats excluded from the Markdown representation.
+		 *
+		 * Defaults to every non-standard format. Return an empty array to serve
+		 * them all again, or a shorter list to exclude only some. The standard
+		 * format is never affected: it is the absence of a format, not a value.
+		 *
+		 * @param string[] $formats Excluded format slugs (without the `post-format-` prefix).
+		 * @param \WP_Post $post    Post being evaluated.
+		 */
+		$excluded = (array) apply_filters( 'sysmda_markdown_excluded_post_formats', self::EXCLUDED_POST_FORMATS, $post );
+
+		if ( empty( $excluded ) ) {
+			return false;
+		}
+
+		$format = get_post_format( $post );
+
+		// false (standard format) or a post type without format support.
+		if ( ! is_string( $format ) || '' === $format ) {
+			return false;
+		}
+
+		return in_array( $format, $excluded, true );
 	}
 }
