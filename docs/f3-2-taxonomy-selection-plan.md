@@ -147,8 +147,10 @@ inject a presentational taxonomy.
 Same section (**Markdown output**), same field id and label (*Custom
 taxonomies*), new body: a checkbox list replacing the single checkbox.
 
-- **Candidates**: taxonomies registered for at least one **enabled** post type
-  (`sysmda_supported_post_types`), with `show_ui` or `public` true so the user
+- **Candidates**: taxonomies registered for at least one **enabled** post type —
+  the *effective* list, `PostSupport::supported_post_types()`, not the raw option,
+  since a site may enable its types through the filter alone — with `show_ui` or
+  `public` true so the user
   recognises them, minus `EXCLUDED_TAXONOMIES`. Alphabetical by slug.
 - **Row**: `Label (slug)` + a badge from the strict predicate — nothing for a
   fully public taxonomy, `internal — no public archive` when
@@ -189,9 +191,11 @@ run once, idempotent:
 
 1. If `get_option( 'sysmda_front_matter_taxonomies' ) === false` → nothing to do.
 2. If it is `'1'`: seed `sysmda_front_matter_taxonomy_slugs` with the taxonomies
-   of the enabled post types that pass the **strict** predicate
-   (`public && publicly_queryable`), minus `EXCLUDED_TAXONOMIES`. Write only if
-   the seed is non-empty.
+   of the **effective** supported post types (`PostSupport::supported_post_types()`
+   — the raw option would seed nothing on a site whose types come from the
+   filter, silently dropping taxonomies it was already emitting) that pass the
+   **strict** predicate (`public && publicly_queryable`), minus
+   `EXCLUDED_TAXONOMIES`. Write only if the seed is non-empty.
 3. `delete_option( 'sysmda_front_matter_taxonomies' )`.
 
 Net effect for a site that had the feature on: the same output **minus** the

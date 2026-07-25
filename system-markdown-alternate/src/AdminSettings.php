@@ -119,9 +119,11 @@ class AdminSettings {
 		if ( false === get_option( self::OPTION_TAXONOMIES ) ) {
 			$seed = array();
 
-			$candidates = MetadataBuilder::candidate_taxonomies(
-				(array) get_option( 'sysmda_supported_post_types', array() )
-			);
+			// The EFFECTIVE list, not the raw option: a site can enable its types
+			// through `sysmda_markdown_supported_post_types` alone, and seeding
+			// from the option would find no candidate and silently drop the
+			// taxonomies such a site was already emitting.
+			$candidates = MetadataBuilder::candidate_taxonomies( PostSupport::supported_post_types() );
 
 			foreach ( $candidates as $slug => $taxonomy ) {
 				if ( MetadataBuilder::is_public_taxonomy( $taxonomy ) ) {
@@ -888,7 +890,9 @@ class AdminSettings {
 		$raw      = get_option( self::OPTION_TAXONOMIES ); // false = never saved.
 		$selected = false !== $raw ? (array) $raw : array();
 
-		$post_types = (array) get_option( 'sysmda_supported_post_types', array() );
+		// Effective supported types (option, or the filter on a code-driven site),
+		// so the list matches what actually gets served.
+		$post_types = PostSupport::supported_post_types();
 		$candidates = MetadataBuilder::candidate_taxonomies( $post_types );
 
 		foreach ( $candidates as $slug => $taxonomy ) {
