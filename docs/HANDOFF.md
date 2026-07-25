@@ -1,109 +1,77 @@
-# Handoff — Markdown strategy & Tier 1 (July 2026)
+# Handoff — working notes (July 2026)
 
 > For the next session (Claude Code web) and any other agent (Codex). Read
-> `AGENTS.md` first (source of truth), then the two documents below. This file is
-> a working note, not shipped in the plugin.
+> `AGENTS.md` first — it is the source of truth for the plugin's state,
+> decisions and workflow. This file is only a pointer to what is *not* in
+> `AGENTS.md`: what is still open, and where the reasoning lives.
+> Not shipped in the plugin.
 
-## Context
+## Where things stand
 
-A strategic review of the "WordPress → Markdown" plugin category was evaluated
-against the plugin's actual state. Outcome: the **core serving path is mature**;
-the residual real value is a niche-quality play. Full reasoning and the eliminated
-(already-done / already-decided / colliding) items are in:
-
-- **`docs/strategy-review-2026-07.md`** — the evaluation, priorities and the
-  parked *Future thoughts* (server-side diagnostics now lives there).
-- **`docs/tier1-implementation-plan.md`** — the concrete, ordered work plan
-  (sanitize fix → doc corrections → F1 → custom taxonomies → ACF later),
-  incorporating the 2026-07-24 audit corrections.
-- **`docs/llms-txt-multilingual-plan.md`** — user-approved plan to list
-  WPML/Polylang translations in the single `/llms.txt` (`## Translations`
-  section). Independent; needs a staging reconnaissance pass first.
-- **`docs/output-format.md`** — the F1 output-format contract (front-matter
-  keys/order, scalar escaping, body pipeline, HTTP contract), enforced by golden
-  tests in `tests/run-tests.php`.
-- **`docs/f3-1-taxonomies-plan.md`** — the detailed plan for the **next** piece
-  of work (custom taxonomies in the front matter): opt-in, alphabetical, and the
-  cache/ETag invalidation it requires. Supersedes the PR 4 sketch in the tier-1
-  plan.
-
-(The standalone `FIX-PLAN-sanitize-register-setting-revised.md` note was removed
-once its fix shipped in v0.23.2 — the detail lives in the `readme.txt`
-changelog.)
-
-Current `main` is **0.23.3**. The repository is **English-only** (the Italian
+`main` is **0.24.0**. The repository is **English-only** (the Italian
 `AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
 `.it.md` files.
 
-## The three durable constraints not to trip over
+The July 2026 strategy review produced an ordered plan that is now **fully
+shipped** — sanitize fix (`0.23.2`), doc corrections, the documented output
+format (F1) and custom taxonomies in the front matter (F3.1, `0.24.0`). Those
+plan documents were deleted once merged: the outcome lives in the code, in
+`AGENTS.md` (*Current state*, *Product decisions*, *Filters*) and in
+`docs/output-format.md`. Do not go looking for them.
 
-These come from `AGENTS.md` *Product decisions* and were re-confirmed here:
+## The documents that remain
 
-1. **`.md` hit counter is count-only** — no IP, no raw UA, no per-visitor, no
-   sub-daily timestamps. This is the **only** shipped request-side telemetry and
-   the plan adds nothing to it. Do not enrich request logging beyond the
-   aggregate bot/human buckets.
-2. **No HTTP loopback** (the "NO Vary self-test" decision): any content analysis
-   runs **in-process**; the live "is the cache serving HTML?" check stays a
-   **manual curl** in the readme FAQ.
-3. Already decided **NO**: rate limiting, `.md` XML sitemap, synthesized homepage
-   index, auto-yield of `/llms.txt`.
+| File | What it is |
+|---|---|
+| `docs/output-format.md` | **Not a plan — a live contract.** The front-matter keys and order, scalar escaping, body pipeline and HTTP contract, append-only from `0.24.0`. Enforced by golden tests in `tests/run-tests.php` and linked from `README.md` and `readme.txt`. Keep it in sync with any output change. |
+| `docs/llms-txt-multilingual-plan.md` | The **only open plan**: list WPML/Polylang translations in the single `/llms.txt`. Greenlit but **not started** — needs the staging reconnaissance described inside before any code. |
+| `docs/strategy-review-2026-07.md` | The reasoning, the eliminated options, and the **future thoughts** (parked, not plans): server-side diagnostics, ACF structured extraction, WooCommerce, hardening, wider multilingual. |
 
-> **Server-side diagnostics (old "F2") is parked**, not planned — moved to
-> *Future thoughts* in `docs/strategy-review-2026-07.md`. We will revisit it
-> later. Do not start it.
+## What to do next
 
-## What to do next — active plans
+1. **Multilingual `/llms.txt`** — the only thing actually queued. Start with the
+   WPML/Polylang staging reconnaissance, not with code.
+2. Everything else in *Future thoughts* stays parked until the decisive signal:
+   **real, recurring `.md` requests from important clients in the logs**. Do not
+   promote any of it to a plan without that.
+3. Housekeeping tracked in `AGENTS.md` *Open / to do*: the wordpress.org
+   screenshots are stale (pre-0.17.0 UI), and Italian translation happens on
+   translate.wordpress.org once the plugin is live — never in this repo.
 
-Ordered work (`docs/tier1-implementation-plan.md`), each an independent PR to
-`main`:
+## The four durable constraints not to trip over
 
-1. **Sanitize fix** for `register_setting()` — ✅ **done in v0.23.2**. Was the
-   wordpress.org Plugin Check blocker.
-2. **Plan & doc corrections** — ✅ **done**: noindex claim (already fixed in the
-   strategy doc), `AGENTS.md` version label (`v0.22.x → v0.23.x`),
-   `Vary`/cache-backend/menu wording in README/readme. No version bump.
-3. **F1 — Documented, stable output format** — ✅ **done**: `docs/output-format.md`
-   + golden conformance tests (116 → 124 assertions) + readme FAQ / README link.
-   No `src/` change, no version bump.
-4. **F3.1 — Custom taxonomies in front matter** — ← **next up, planned and
-   ready to implement**: see `docs/f3-1-taxonomies-plan.md` (opt-in default off,
-   alphabetical ordering, appended after `description`, plus the terms
-   fingerprint in the cache validator that the `ETag` requires). Runtime release
-   → **0.24.0**.
-5. **ACF structured extraction (F3.2)** — later, case-driven only; not now.
+From `AGENTS.md` *Product decisions*, repeated here because they are the ones an
+agent is most likely to violate by accident:
 
-Also shipped since this file was last updated: **PHPCS/WPCS tooling + CI gate**
-(#18) and the **0.23.3** fixes (#20: uppercase URI schemes preserved,
-`attachment` exclusion enforced in `PostSupport`). Coding standards are now
-checked with `composer phpcs` — see *Code conventions* in `AGENTS.md`.
+1. **`.md` hit counter is count-only** — no IP, no raw UA, no per-visitor data,
+   no sub-daily timestamps. The only shipped request-side telemetry; do not
+   enrich it.
+2. **No HTTP loopback** anywhere ("NO Vary self-test"): content analysis runs
+   **in-process**; the live cache check stays a manual curl in the readme FAQ.
+3. **Anything that can change the emitted Markdown without touching
+   `post_modified_gmt` must be folded into the cache validator**
+   (`cache_version()`), which is also the strong `ETag` — otherwise conditional
+   requests answer `304` with stale content, body cache or not. Custom
+   taxonomies were the first such case; `If-Modified-Since` additionally has to
+   be ignored while the date is not a strong validator.
+4. Already decided **NO**: rate limiting, `.md` XML sitemap, synthesized
+   homepage index, auto-yield of `/llms.txt`.
 
-**Multilingual `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`) — independent:
-list WPML/Polylang translations in the single `/llms.txt`. Requires a
-WPML/Polylang **staging reconnaissance** pass before coding (the main query's
-default-language assumption is not reliable — see the plan).
+## Working agreements
 
-## Not planned — future thoughts
-
-Everything else (**server-side diagnostics**, WooCommerce, `HEAD`/multisite/
-Varnish hardening, broader multilingual, benchmarks; plus the explicit "do not
-build" list) is parked as **future thoughts, not plans** in
-`docs/strategy-review-2026-07.md`. Do not promote any of it to a plan until real,
-recurring `.md` requests show up in the logs.
+- Branch → push → open a PR to `main`; **the user merges** with "Squash and
+  merge". Agents never push `main`.
+- **Tagging is automatic**: merging a release PR triggers the `Release tag`
+  workflow. Do not ask the user to tag from their machine; a missed tag is
+  recovered with "Run workflow" from the Actions tab. Publishing a GitHub
+  Release is still manual and needs `git fetch origin --tags` first.
+- After changes: `php -l` on touched files, `php system-markdown-alternate/tests/run-tests.php`,
+  and `composer phpcs` (0 errors — warnings are pre-existing).
+- On a release: bump `Version:` + `SYSMDA_VERSION`, `readme.txt` (`Stable tag` +
+  changelog), `bash bin/build.sh`.
 
 ## Positioning reminder
 
 Sell *"clean, predictable, structured, machine-readable representation of
 WordPress content"* — **not** *"install and gain AI visibility"*, and **not** a
-*"free Cloudflare alternative"*. The go/no-go signal is real recurring `.md`
-requests from important clients in the logs.
-
-## Working agreements (from AGENTS.md)
-
-- Branch → push → open PR to `main`; **user** squash-merges; **user** runs
-  `bash bin/release-tag.sh` from the Mac. Agents never push `main` or tags.
-- The repository is **English-only** — do not create `.it.md` translations
-  (removed in #5).
-- After changes: `php -l` on touched files + `php system-markdown-alternate/tests/run-tests.php`.
-- On release: bump `Version:` + `SYSMDA_VERSION`, `readme.txt` (`Stable tag` +
-  changelog), `bash bin/build.sh`.
+*"free Cloudflare alternative"*.
