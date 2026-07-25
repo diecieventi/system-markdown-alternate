@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.24.0
+Stable tag: 0.25.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -45,9 +45,11 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   section for older posts. Another optional toggle appends the **last modified
   date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed
   content without re-fetching each URL.
-* **Custom taxonomies in the front matter** (optional, off by default): adds a
-  `taxonomies:` block with the post type's public custom taxonomies and their
-  terms, alphabetically ordered.
+* **Custom taxonomies in the front matter** (optional, nothing selected by
+  default): tick the taxonomies you want and their terms are added as a
+  `taxonomies:` block, alphabetically ordered. Nothing is ever published
+  automatically: a taxonomy registered by another plugin appears in the panel
+  unticked, and taxonomies with no public term archive are labelled as internal.
 * **Object cache** with proactive invalidation on post edit, plugin update and
   settings change: a persistent object cache is used when one is available,
   falling back to transients otherwise.
@@ -81,9 +83,10 @@ The output is customizable through filters:
 * `sysmda_markdown_excluded_block_names` — Gutenberg blocks to drop.
 * `sysmda_markdown_excluded_shortcodes` — shortcodes to drop.
 * `sysmda_markdown_excluded_classes` — CSS classes whose elements are dropped.
-* `sysmda_front_matter_taxonomies` — add custom taxonomies to the front matter
-  (default `false`; the settings checkbox feeds this).
-* `sysmda_front_matter_taxonomy_slugs` — which taxonomies are emitted (return an
+* `sysmda_front_matter_taxonomies` — kill switch for the `taxonomies:` block
+  (default: on as soon as one taxonomy is selected; `false` = never emit it).
+* `sysmda_front_matter_taxonomy_slugs` — which taxonomies are emitted. Receives
+  the selection saved in the panel and may narrow it or extend it (return an
   empty array to opt out for a post).
 * `sysmda_acf_field_keys` — ACF fields appended to the source.
 * `sysmda_acf_subtitle_key` / `sysmda_acf_tldr_key` — ACF fields for subtitle/TL;DR.
@@ -129,13 +132,17 @@ conformance tests, in `docs/output-format.md` in the source repository.
 
 = Can I include my custom taxonomies? =
 
-Yes. Open **Settings → Markdown Alternate → Markdown output** and tick *Custom
-taxonomies*: the front matter then carries a `taxonomies:` block with the post
-type's public custom taxonomies and their terms, sorted alphabetically.
-Categories and tags already have their own keys and are not repeated. The
-option is off by default, because enabling it changes the front matter of every
-post. Developers can curate the list with the `sysmda_front_matter_taxonomy_slugs`
-filter.
+Yes. Open **Settings → Markdown Alternate → Markdown output** and tick the ones
+you want under *Custom taxonomies*: the front matter then carries a
+`taxonomies:` block with their terms, sorted alphabetically. Categories and tags
+already have their own keys and are not repeated.
+
+Nothing is selected by default and nothing is ever added implicitly — a taxonomy
+registered by a plugin you install later shows up in the list unticked, so it
+cannot start publishing itself. Taxonomies used for editorial classification
+only, with no public term archive ("publicly queryable" off), are labelled as
+internal in the list: they are still selectable, but only on purpose. Developers
+can curate the list further with the `sysmda_front_matter_taxonomy_slugs` filter.
 
 = How do I exclude part of a post from the Markdown? =
 
@@ -212,6 +219,27 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.25.0 =
+* Changed: the *Custom taxonomies* setting is now a **list of checkboxes, one per
+  taxonomy**, instead of a single on/off switch. Only the taxonomies you tick are
+  added to the front matter; nothing is selected by default, and a taxonomy
+  registered by a plugin you install later appears in the list unticked instead
+  of publishing itself.
+* Fixed: a taxonomy registered as public but **not publicly queryable** — the
+  usual shape of an editorial-internal classification with no term archive — was
+  added to the front matter automatically. Whether such a taxonomy is published
+  is now your explicit choice; the list labels those rows as internal, and they
+  stay selectable for the cases where you do want them.
+* Changed: `sysmda_front_matter_taxonomy_slugs` now receives the saved selection
+  as its default value (it can still narrow it and extend it), and
+  `sysmda_front_matter_taxonomies` becomes a kill switch whose default is "at
+  least one taxonomy is selected".
+* Upgrade note: if you had the 0.24.x checkbox enabled, the selection is seeded
+  automatically with the taxonomies that are public **and** publicly queryable,
+  so only the internal ones drop out of the front matter. Cached Markdown and
+  `ETag`s are refreshed once during the upgrade. Sites that had the checkbox off
+  see no change at all.
 
 = 0.24.0 =
 * Added: optional **custom taxonomies in the front matter**. A new *Custom
