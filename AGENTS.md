@@ -347,6 +347,27 @@ The v1 scope is done and widely exceeded. Implemented:
   A host that ignores `Cache-Control` on the way in
   (`fastcgi_ignore_headers`) would instead reintroduce staleness, and the
   answer there is a purge integration, not a header.
+  **Control experiment, run on the same host (July 2026): the `max-age=0`
+  explanation above is correct.** `sysmda_cache_control` was pointed at
+  `public, max-age=0, s-maxage=600, must-revalidate` from an mu-plugin, and the
+  RunCloud nginx cache — which had answered `x-runcache-status: MISS` on every
+  single `.md` request before — started answering **`HIT`**, with PHP no longer
+  running. Nothing else changed. So the cache was never unable to store the
+  `.md`; it was declining to, exactly because the response declared itself stale
+  on arrival. Two details worth keeping: nginx adds no `Age` header on a hit
+  (`x-runcache-status` is the only reliable signal there), and Cloudflare stayed
+  `cf-cache-status: DYNAMIC` throughout, confirming the `4b` table's prediction
+  that `.md` is not a default-cached extension and needs an explicit Cache Rule.
+  **What it does NOT buy, and the reason the default does not move:** a one-pass
+  crawl is unaffected. Each URL is visited once, so every one is a first-time
+  miss that boots WordPress anyway — 800 articles are still 800 boots. The
+  lifetime pays off on re-crawls, on concurrent crawlers hitting the same URL
+  (which is the realistic way to exhaust PHP-FPM workers, far more than the
+  request total), and on ordinary repeat traffic. Against a single sweep the
+  answer is rate limiting upstream, not a header. The cost is the documented one:
+  nothing purges a `.md`, so an edit is invisible for up to the lifetime. This is
+  a per-site trade, taken deliberately, and it stays out of the default —
+  correctness of series, speed by explicit choice.
 - **`acceptmarkdown.com` guides: reviewed, closed** (July 2026 — the
   *Generating the Markdown* and *Caching & CDN* pages, by Ben Word / Roots, which
   is also why they present `roots/post-content-to-markdown` as *the* WordPress
