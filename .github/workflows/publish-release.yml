@@ -1,0 +1,116 @@
+name: Publish release
+
+# Publishes the GitHub Release for a version tag, with the installable plugin
+# zip attached — the auto-generated "Source code" archives are not installable.
+#
+# Manual on purpose: this is the one release step that stays a decision, so it
+# runs only when started from Actions → "Publish release" → "Run workflow".
+# That button works from the GitHub mobile app, which is the point: no
+# workstation, no `git fetch --tags`, no forgotten asset.
+#
+# The tag defaults to the most recent vX.Y.Z, so the usual case is a single tap
+# with nothing to fill in. Fill `tag` in only to publish an older one.
+# Idempotent: a tag that already has a Release is reported and left alone.
+#
+# NOTE — this does not start the SVN deploy. "Deploy to WordPress.org" triggers
+# on `release: published`, and GitHub deliberately raises no workflow-starting
+# event from the default GITHUB_TOKEN. That workflow is inactive anyway and has
+# its own manual trigger; to chain the two once wordpress.org is live, add a
+# `RELEASE_TOKEN` secret (a PAT with `contents: write`) — it is picked up below
+# automatically, and events it raises do start other workflows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (leave empty for the most recent one)'
+        type: string
+        default: ''
+
+# Required to create a Release with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+# Never let two runs publish the same tag.
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    name: Build the zip and publish the Release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags are needed both to resolve the default and for
+          # `gh release create --notes-from-tag`, which reads the annotated
+          # tag's message locally.
+          fetch-depth: 0
+
+      - name: Resolve the tag
+        id: tag
+        env:
+          REQUESTED: ${{ inputs.tag }}
+        run: |
+          TAG="$REQUESTED"
+
+          if [ -z "$TAG" ]; then
+            TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+            if [ -z "$TAG" ]; then
+              echo '::error::the repository has no vX.Y.Z tag yet — run "Release tag" first.'
+              exit 1
+            fi
+            echo "==> No tag given, using the most recent one: $TAG"
+          elif ! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            echo "::error::tag $TAG does not exist."
+            exit 1
+          fi
+
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the Release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::notice::$TAG already has a Release — nothing to publish."
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up PHP
+        if: steps.existing.outputs.skip == 'false'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer
+
+      - name: Build the plugin zip from the tag
+        if: steps.existing.outputs.skip == 'false'
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        # Built from the tagged tree rather than taken from the committed DIST/,
+        # so the asset always matches the released source.
+        run: |
+          git checkout --quiet --detach "$TAG"
+          bash bin/build.sh
+
+      - name: Publish the Release
+        if: steps.existing.outputs.skip == 'false'
+        env:
+          # A PAT in RELEASE_TOKEN, when present, makes the published Release
+          # able to start other workflows (see the note at the top).
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          TAG: ${{ steps.tag.outputs.value }}
+        # Body = the tag notes, i.e. that version's readme.txt changelog entries.
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-from-tag \
+            DIST/system-markdown-alternate.zip
+          echo "==> $TAG published with the plugin zip attached."

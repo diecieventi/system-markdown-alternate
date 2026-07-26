@@ -81,8 +81,10 @@ agent is most likely to violate by accident:
   merge". Agents never push `main`.
 - **Tagging is automatic**: merging a release PR triggers the `Release tag`
   workflow. Do not ask the user to tag from their machine; a missed tag is
-  recovered with "Run workflow" from the Actions tab. Publishing a GitHub
-  Release is still manual and needs `git fetch origin --tags` first.
+  recovered with "Run workflow" from the Actions tab. **Publishing the GitHub
+  Release is a manual button**, on purpose: the `Publish release` workflow,
+  "Run workflow" from the Actions tab (the mobile app works), tag defaulting to
+  the most recent one, zip built from the tag and attached.
 - After changes: `php -l` on touched files, `php system-markdown-alternate/tests/run-tests.php`,
   and `composer phpcs` (0 errors — warnings are pre-existing).
 - On a release: bump `Version:` + `SYSMDA_VERSION`, `readme.txt` (`Stable tag` +

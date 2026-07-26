@@ -512,7 +512,9 @@ The v1 scope is done and widely exceeded. Implemented:
   pushes (403), but **no manual tagging step is needed**: the `Release tag`
   workflow creates `vX.Y.Z` when the release PR is merged, and can be re-run
   from the Actions tab if a tag was ever missed (`bin/release-tag.sh` stays the
-  offline fallback). Do not tell the user to tag from their machine.
+  offline fallback). Do not tell the user to tag from their machine. Same for
+  the GitHub Release: it is the `Publish release` workflow, one tap from the
+  Actions tab (phone included) — not a `gh release create` on the Mac.
 - **Codex and any other agent**: same rule, no exceptions — work on a
   dedicated branch (e.g. `codex/<topic>`), push it, open a PR to `main`, let
   the user merge. Code-review fixes follow the same path: a PR, never a
@@ -561,6 +563,7 @@ running code at the WP level.
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
+├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
 ├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
@@ -775,22 +778,33 @@ WordPress.org Plugin Check.
   the tag notes. Agents cannot push tags (the Claude Code web proxy rejects
   them). Not required for local development — only for SVN releases and for
   pinning a specific version on GitHub.
-- **GitHub Releases**: optional (the tag with notes is the baseline), but when
-  one is published it MUST attach the built plugin zip
-  `DIST/system-markdown-alternate.zip` as an asset — the auto-generated
-  "Source code" archives are not an installable plugin. Publishing a Release is
-  NOT automated (only the tag is), so this stays a manual step for the user,
-  run from the Mac. **Fetch the tags first**: the tag is now created on GitHub
-  by the workflow, and `git pull origin main` does NOT bring tags down, so
-  `--notes-from-tag` fails with *"cannot generate release notes from tag …&nbsp;as
-  it does not exist locally"* without this:
+- **GitHub Releases**: optional (the tag with notes is the baseline), and
+  **deliberately not automatic** — publishing stays a decision, taken with one
+  tap. Run the **`Publish release`** workflow
+  (`.github/workflows/publish-release.yml`) from Actions → "Run workflow"; it
+  works from the GitHub mobile app, which is the point. The `tag` input defaults
+  to the most recent `vX.Y.Z`, so the usual case is a single tap with nothing to
+  fill in; name an older tag to catch one up. The job checks the tag out, runs
+  `bin/build.sh` there and attaches the resulting
+  `DIST/system-markdown-alternate.zip` (the auto-generated "Source code"
+  archives are not an installable plugin), with the tag notes as the body. The
+  asset is rebuilt from the tagged tree rather than taken from the committed
+  `DIST/`, so it always matches the released source. Idempotent: a tag that
+  already has a Release is reported and left alone. The manual equivalent, if
+  ever needed from the Mac:
   ```bash
-  git fetch origin --tags
+  git fetch origin --tags   # git pull does NOT bring tags down, and
+                            # --notes-from-tag needs the tag locally
   gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag DIST/system-markdown-alternate.zip
   ```
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
-  Note: publishing a Release triggers the SVN deploy workflow, which fails
-  harmlessly until the SVN secrets are configured (see above).
+  Note: a Release published by the workflow does **not** start the SVN deploy —
+  GitHub raises no workflow-starting event from the default `GITHUB_TOKEN`. That
+  workflow is inactive anyway and has its own manual trigger; to chain the two
+  once wordpress.org is live, add a `RELEASE_TOKEN` secret (a PAT with
+  `contents: write`), which `Publish release` already prefers when present. A
+  Release published by hand from the Mac does trigger it, and fails harmlessly
+  until the SVN secrets are configured (see above).
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
