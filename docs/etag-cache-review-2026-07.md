@@ -405,13 +405,16 @@ be checked rather than trusted.
 ## 4b. What each layer does with `public, max-age=0, must-revalidate`
 
 Added when F4 was applied. The property that matters is the same everywhere —
-**no layer may hand out a `.md` without checking first** — but what each one
-does with the permission to store differs, and only the first row was measured.
+**no layer may hand out a `.md` without checking first** — but what each one does
+with the permission to store differs. Two rows have been measured since: the
+browser, and nginx — the latter on the reference host only, which is not the same
+as nginx in general (see the correction below). Every other row is read from the
+specification, and each layer's own configuration can move it.
 
 | Layer | Stores the body? | Serves it without asking? | Net effect |
 |---|---|---|---|
 | Browser | yes | no — revalidates with `If-None-Match` | `304`, no body on the wire. The gain the whole design was built for, and it was impossible under `no-store` |
-| nginx `fastcgi_cache` / `proxy_cache` | **no** — measured; see the correction below | n/a | never stores, so every request reaches PHP. The predicted "yes, unless configured to skip `max-age=0`" was wrong for the measured host |
+| nginx `fastcgi_cache` / `proxy_cache` | configuration-dependent — **no** on the reference host (measured, see below) | no | in principle it may store and answer `304` itself, and `proxy_cache_revalidate on` makes it revalidate upstream instead of refetching. On the one host measured it stores nothing at all, so every request reaches PHP |
 | Varnish | no (TTL 0) — unless VCL sets `beresp.keep` | n/a | behaves as a pass, like today, minus the heuristic 120 s window that `no-store` was accidentally protecting against |
 | LiteSpeed LSCache | no (it caches only what it is told to) | n/a | unchanged; the negotiated route keeps its own LiteSpeed signals |
 | Cloudflare / CDN | only if a Cache Rule opts `.md` in | no, with "respect origin headers" | safe by default (`.md` is not a default-cached extension) |
@@ -432,6 +435,12 @@ every time. `max-age=0` marks the response stale on arrival, and this cache
 declines to keep something it would have to revalidate before every use. The same
 disposition is why no `304` is ever produced: it strips conditional headers from
 the upstream request wherever caching is configured for the location.
+
+**This is one configuration, not nginx as such.** `proxy_cache_valid`,
+`proxy_cache_revalidate` and `fastcgi_ignore_headers` all move the behaviour, so
+another nginx deployment may well store the body exactly as the table first
+predicted. Read the row as the reference-host result, and measure before assuming
+it describes a stack you are diagnosing.
 
 That reading was confirmed by a control experiment on the same host, which is
 what makes it a diagnosis rather than a guess. Pointing `sysmda_cache_control` at
