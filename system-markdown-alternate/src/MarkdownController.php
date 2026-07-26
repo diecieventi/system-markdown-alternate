@@ -52,6 +52,10 @@ class MarkdownController {
 				$this->force_404();
 				return;
 			}
+			// Dedicated URL: storable by any cache, never reusable without
+			// revalidating first. Sent before serve_markdown() so the conditional
+			// 304 exit carries the same policy as the 200 (RFC 9110 §15.4.5).
+			self::send_cache_control();
 			$this->serve_markdown( $post );
 		}
 
@@ -322,6 +326,93 @@ class MarkdownController {
 		}
 
 		LiteSpeedCompat::mark_nocache();
+	}
+
+	/**
+	 * Sends the caching policy of a representation that has its own URL: the
+	 * `.md` endpoint and `/llms.txt`. Storable by anything, reusable by nothing
+	 * without asking first.
+	 *
+	 * Until `0.29.0` these responses sent no `Cache-Control` at all, on the
+	 * assumption that saying nothing meant "always revalidate". It does not, in
+	 * either direction:
+	 *
+	 * - RFC 9111 §4.2.2 lets a cache **invent** a lifetime when a response
+	 *   carries none. The usual heuristic is a fraction of the age since
+	 *   `Last-Modified`, which on an old post is weeks (Varnish's stock
+	 *   `default_ttl` is a flat 120 s). "No header" is not "no freshness".
+	 * - Saying nothing does not even reach the wire. This route resolves as an
+	 *   error inside WordPress, so `WP::send_headers()` has already sent
+	 *   `wp_get_nocache_headers()` — `no-store` included — by the time the
+	 *   plugin runs. Measured in production: every `.md` carried
+	 *   `no-cache, must-revalidate, max-age=0, no-store, private` plus the 1984
+	 *   `Expires`, to anonymous clients too. `no-store` forbids keeping a copy
+	 *   at all, so no client ever revalidated and the entire `ETag`/`304` path
+	 *   was dead weight, while every hit paid for a full render.
+	 *
+	 * The header is therefore explicit, and the only correct value is one that
+	 * grants storage while refusing reuse: `max-age=0` makes the response stale
+	 * the moment it arrives and `must-revalidate` makes that binding, so a cache
+	 * must revalidate before serving it — a `.md` can never be handed out after
+	 * the article behind it changed. That is the goal the old "send nothing"
+	 * decision was written for; this is the header that actually delivers it.
+	 * `public` states what is true by construction: the representation never
+	 * varies by visitor (protected content has no `.md`, drafts 404, and the
+	 * body is built from cleaned blocks rather than `the_content`, so
+	 * personalisation filters never run).
+	 *
+	 * Freshness for shared caches is still not imposed, but it is no longer
+	 * unreachable either: `sysmda_cache_control` can return an `s-maxage`, and
+	 * whoever does that takes on the purge responsibility that comes with it.
+	 *
+	 * NOT used for negotiated Markdown, which shares its URL with the HTML page
+	 * and stays `no-store` — see send_no_cache_headers().
+	 */
+	public static function send_cache_control(): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		// WordPress's nocache set travels with `Expires: Wed, 11 Jan 1984`.
+		// Cache-Control wins over Expires wherever both are understood (RFC 9111
+		// §5.3), but leaving a 1984 date behind is a trap for anything that
+		// reads Expires first, and it contradicts the header sent below.
+		header_remove( 'Expires' );
+
+		$value = self::cache_control_value();
+
+		if ( '' === $value ) {
+			// Explicit opt-out: no policy from the plugin, and none inherited
+			// from WordPress either — genuinely no header, which is what the
+			// filter promises.
+			header_remove( 'Cache-Control' );
+			return;
+		}
+
+		header( 'Cache-Control: ' . $value );
+	}
+
+	/**
+	 * The `Cache-Control` value for the plugin's own URLs.
+	 *
+	 * Public and separate from the header call so the policy is testable
+	 * without a live response.
+	 */
+	public static function cache_control_value(): string {
+		/**
+		 * Filter: `Cache-Control` for the URLs the plugin owns (`.md` and
+		 * `/llms.txt`). The default grants storage but forbids reuse without
+		 * revalidation, which is what keeps a cached `.md` from outliving an
+		 * edit. Returning a freshness lifetime (`s-maxage`, `max-age`) is
+		 * supported and makes staleness possible again: the URL is invisible to
+		 * page-cache plugins, which purge the permalink and not `permalink.md`,
+		 * so nothing will clear it early. An empty string sends no header at all.
+		 */
+		$value = apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' );
+
+		// Sanitized like every other filtered header value: a line break would
+		// take the response down with a fatal error.
+		return is_string( $value ) ? trim( sanitize_text_field( $value ) ) : '';
 	}
 
 	/**

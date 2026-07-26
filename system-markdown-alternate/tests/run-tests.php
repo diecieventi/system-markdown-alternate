@@ -1235,6 +1235,73 @@ $GLOBALS['sysmda_test_bloginfo']['description'] = 'New tagline';
 check( 'llms: changing the tagline invalidates the cached index', true, $sysmda_llms_cv_named !== $sysmda_llms_cv() );
 check( 'llms: unchanged identity keeps the same version', $sysmda_llms_cv(), $sysmda_llms_cv() );
 
+// ─── LlmsTxtController: validators on the index ───────────────────────
+//
+// The ETag hashes the BYTES about to be sent, not cache_version(): the version
+// does not cover the posts listed in the file (a new post is picked up by
+// deleting the cache entry, not by moving the version), so using it here would
+// answer 304 with an index missing that post.
+
+check( 'llms: body etag is the md5 of the body', '"' . md5( "# Site\n" ) . '"', LlmsTxtController::body_etag( "# Site\n" ) );
+check( 'llms: a different body is a different etag', true, LlmsTxtController::body_etag( 'a' ) !== LlmsTxtController::body_etag( 'b' ) );
+check( 'llms: the same body is the same etag', LlmsTxtController::body_etag( 'x' ), LlmsTxtController::body_etag( 'x' ) );
+
+$sysmda_llms_hc_method = new ReflectionMethod( LlmsTxtController::class, 'handle_conditional' );
+$sysmda_llms_hc_method->setAccessible( true );
+
+/** Runs the index's conditional check with a given If-None-Match header. */
+$sysmda_llms_hc = function ( $header, $etag ) use ( $sysmda_llms_hc_method, $sysmda_llms_controller ) {
+	$GLOBALS['sysmda_test_status'] = array();
+	if ( null === $header ) {
+		unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+	} else {
+		$_SERVER['HTTP_IF_NONE_MATCH'] = $header;
+	}
+	$result = $sysmda_llms_hc_method->invoke( $sysmda_llms_controller, $etag );
+	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+	return $result;
+};
+
+$sysmda_llms_etag = LlmsTxtController::body_etag( "# Site\n\n> Tagline\n" );
+
+check( 'llms: no If-None-Match => full body', false, $sysmda_llms_hc( null, $sysmda_llms_etag ) );
+check( 'llms: no 304 without the header', array(), $GLOBALS['sysmda_test_status'] );
+check( 'llms: matching validator => 304', true, $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag ) );
+check( 'llms: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_status'] );
+check( 'llms: stale validator => full body', false, $sysmda_llms_hc( '"outdated"', $sysmda_llms_etag ) );
+check( 'llms: no 304 for a stale validator', array(), $GLOBALS['sysmda_test_status'] );
+// Same weak comparison as the .md endpoint: the index reuses etag_matches().
+check( 'llms: weakened validator still revalidates', true, $sysmda_llms_hc( 'W/' . $sysmda_llms_etag, $sysmda_llms_etag ) );
+$GLOBALS['sysmda_test_status'] = array();
+
+// ─── Cache-Control on the URLs the plugin owns ────────────────────────
+//
+// Sending nothing was never "always revalidate": RFC 9111 §4.2.2 lets a cache
+// invent a lifetime, and on this route WordPress had already sent its own
+// no-store set before the plugin ran. The default grants storage and refuses
+// reuse, which is the only combination that cannot outlive an edit.
+
+check(
+	'cache-control: default grants storage and forbids reuse',
+	'public, max-age=0, must-revalidate',
+	MarkdownController::cache_control_value()
+);
+
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = 'public, s-maxage=600';
+check( 'cache-control: a site may impose its own freshness', 'public, s-maxage=600', MarkdownController::cache_control_value() );
+
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = '';
+check( 'cache-control: empty means no header at all', '', MarkdownController::cache_control_value() );
+
+// Hostile filter values are sanitized before reaching header(): a line break
+// would take the response down with a fatal error.
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = "public\r\nX-Injected: 1";
+check( 'cache-control: header injection stripped', true, false === strpos( MarkdownController::cache_control_value(), "\n" ) );
+
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = array( 'not', 'a', 'string' );
+check( 'cache-control: a non-string filter value sends nothing', '', MarkdownController::cache_control_value() );
+$GLOBALS['sysmda_test_filters'] = array();
+
 // lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
 check( 'llms: lastmod valid date', '(updated: 2026-07-01)', LlmsTxtController::lastmod_suffix( '2026-07-01 08:30:00' ) );
 check( 'llms: lastmod date only', '(updated: 2024-12-31)', LlmsTxtController::lastmod_suffix( '2024-12-31' ) );

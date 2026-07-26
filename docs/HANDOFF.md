@@ -35,7 +35,7 @@ variants are in `docs/f3-2-taxonomy-selection-plan.md`.
 | `docs/f3-2-taxonomy-selection-plan.md` | **Shipped in `0.25.0`**, kept for the reasoning: why the front-matter taxonomies moved from auto-detection to an explicit panel selection, and which variants were rejected. The binding rule is the `AGENTS.md` decision; retire this file when it stops earning its place. |
 | `docs/llms-txt-multilingual-plan.md` | The **only open plan**: list WPML/Polylang translations in the single `/llms.txt`. Greenlit but **not started** — needs the staging reconnaissance described inside before any code. |
 | `docs/strategy-review-2026-07.md` | The reasoning, the eliminated options, and the **future thoughts** (parked, not plans): server-side diagnostics, ACF structured extraction, WooCommerce, hardening, wider multilingual. |
-| `docs/etag-cache-review-2026-07.md` | The ETag/cache/validation review. F1–F3 shipped in `0.28.0`; **F4 is an open decision** (heuristic freshness on `.md` URLs, which touches a "do not propose again" decision) and F8 records the one trap to avoid if `/llms.txt` ever gets an `ETag`. |
+| `docs/etag-cache-review-2026-07.md` | The ETag/cache/validation review. F1–F3 shipped in `0.28.0`, F4 and F8 in `0.29.0`. Keep it for §4b (what each cache layer does with the caching policy) and for the production measurement that got a durable decision withdrawn — the `.md` URLs were inheriting WordPress's `no-store` while the docs claimed they sent nothing. |
 
 ## What to do next
 
@@ -78,6 +78,12 @@ agent is most likely to violate by accident:
    itself. Detection is advisory — candidate list, row label, migration seed.
 5. Already decided **NO**: rate limiting, `.md` XML sitemap, synthesized
    homepage index, auto-yield of `/llms.txt`.
+
+A durable decision is a record of a ruling, not a law: `0.29.0` withdrew one
+("NO freshness `Cache-Control` on the `.md` URLs") because a measurement showed
+its premise was false. The bar is evidence — bring the measurement, then change
+the decision *and* say in it what was measured, so the next session inherits the
+reasoning and not just the verdict.
 
 ## Working agreements
 

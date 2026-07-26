@@ -106,41 +106,103 @@ class LlmsTxtController {
 	}
 
 	/**
-	 * Prints the /llms.txt output, serving it from cache when available.
+	 * Prints the /llms.txt output, serving it from cache when available and
+	 * answering conditional requests with `304 Not Modified`.
+	 *
+	 * The index is the plugin's largest response and the one most likely to be
+	 * polled on a schedule, so it gets the same treatment as a `.md` URL:
+	 * validators, an explicit caching policy, and no reuse without asking.
 	 */
 	private function render(): void {
-		if ( ! headers_sent() ) {
-			status_header( 200 );
-			header( 'Content-Type: text/plain; charset=utf-8' );
-			header( 'X-Robots-Tag: noindex, follow' );
-		}
-
 		/** Filter: /llms.txt cache TTL in seconds. 0 disables caching. */
 		$ttl     = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
 		$version = $this->cache_version();
+		$body    = null;
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( self::CACHE_KEY );
 			if ( is_array( $cached ) && isset( $cached['v'], $cached['txt'] ) && $cached['v'] === $version ) {
-				echo $cached['txt']; // phpcs:ignore WordPress.Security.EscapeOutput
-				return;
+				$body = (string) $cached['txt'];
 			}
 		}
 
-		$body = $this->build();
+		if ( null === $body ) {
+			$body = $this->build();
 
-		if ( $ttl > 0 ) {
-			Cache::set(
-				self::CACHE_KEY,
-				array(
-					'v'   => $version,
-					'txt' => $body,
-				),
-				$ttl
-			);
+			if ( $ttl > 0 ) {
+				Cache::set(
+					self::CACHE_KEY,
+					array(
+						'v'   => $version,
+						'txt' => $body,
+					),
+					$ttl
+				);
+			}
+		}
+
+		$etag = self::body_etag( $body );
+
+		if ( $this->handle_conditional( $etag ) ) {
+			return; // 304 already sent, no body.
+		}
+
+		if ( ! headers_sent() ) {
+			status_header( 200 );
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'X-Robots-Tag: noindex, follow' );
+			header( 'ETag: ' . $etag );
+			MarkdownController::send_cache_control();
 		}
 
 		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput
+	}
+
+	/**
+	 * The index's `ETag`, hashed from the bytes about to be sent.
+	 *
+	 * Deliberately **not** derived from cache_version(), which is what the `.md`
+	 * endpoint has to do (it cannot afford to build a body only to discard it).
+	 * Here the body already exists before the response is written, so hashing it
+	 * costs nothing and buys a validator that cannot be wrong: the version does
+	 * not cover the posts listed in the file — a new post is picked up by
+	 * deleting the cache entry, not by moving the version — so using it as an
+	 * `ETag` would answer `304` with an index missing that post. Hashing the
+	 * bytes makes this the one strong `ETag` in the plugin, and it means an
+	 * index that was rebuilt but came out identical still revalidates.
+	 *
+	 * Public only so it can be tested in isolation (like markdown_url()).
+	 */
+	public static function body_etag( string $body ): string {
+		return '"' . md5( $body ) . '"';
+	}
+
+	/**
+	 * Answers a conditional request. Returns true (and sends the `304`) when the
+	 * client already holds this exact index.
+	 *
+	 * `If-None-Match` only: unlike a post, the index has no single modification
+	 * date to put in `Last-Modified` — it is built from many posts plus the site
+	 * identity — and inventing one would be a validator that lies. Without the
+	 * header there is nothing for `If-Modified-Since` to compare against, so it
+	 * is not honoured either.
+	 */
+	private function handle_conditional( string $etag ): bool {
+		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] )
+			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_NONE_MATCH'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: '';
+
+		if ( '' === $if_none_match || ! MarkdownController::etag_matches( $if_none_match, $etag ) ) {
+			return false;
+		}
+
+		if ( ! headers_sent() ) {
+			status_header( 304 );
+			header( 'ETag: ' . $etag );
+			MarkdownController::send_cache_control();
+		}
+
+		return true;
 	}
 
 	/**

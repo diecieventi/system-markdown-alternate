@@ -276,13 +276,28 @@ Two request paths reach the same Markdown:
   When the client accepts neither HTML nor Markdown, an optional `406 Not
   Acceptable` is returned (`sysmda_markdown_strict_406`, default on).
 
-**Caching distinction:** the dedicated `.md` URLs send **no** `Cache-Control`
-(they are their own cache key; revalidation is via `ETag`/`304`). The
-**negotiated** Markdown and `406` responses — which share their URL with the
-HTML page — are always sent no-cache
-(`Cache-Control: no-cache, no-store, must-revalidate, private`, plus the
-LiteSpeed-specific signals), because honouring `Vary` is a per-host property and
-safety must never depend on it.
+**Caching distinction.** The two paths get opposite policies, on purpose:
+
+- the dedicated `.md` URLs send `Cache-Control: public, max-age=0,
+  must-revalidate` (since `0.29.0`; before that they sent nothing of their own
+  and inherited WordPress's `no-store`). Any cache may store the body; none may
+  reuse it without revalidating first, so a `.md` can never outlive the article
+  behind it. This is not belt-and-braces: page-cache plugins purge the permalink
+  on save and do not know `permalink.md` exists, so nothing would clear a stored
+  copy early. Overridable through `sysmda_cache_control`, including a freshness
+  lifetime for infrastructure that has its own purge story, or `''` for no
+  header at all.
+- the **negotiated** Markdown and `406` responses — which share their URL with
+  the HTML page — are always sent no-cache
+  (`Cache-Control: no-cache, no-store, must-revalidate, private`, plus the
+  LiteSpeed-specific signals), because honouring `Vary` is a per-host property
+  and safety must never depend on it. Here the risk is not staleness but a cache
+  handing Markdown to a browser, which is why storage is refused outright.
+
+**`/llms.txt`** follows the `.md` policy and, since `0.29.0`, answers
+`If-None-Match` with `304`. Its `ETag` is the md5 of the body being sent — a
+strong validator, unlike the `.md` one, because the index already exists in full
+before the response is written.
 
 ## Related
 
