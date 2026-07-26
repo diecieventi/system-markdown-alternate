@@ -30,9 +30,35 @@ class MetadataBuilder {
 
 	/**
 	 * @param \WP_Post $post Reference post.
-	 * @return string Front matter block (--- ... ---) with a trailing newline.
+	 * @return string Front matter block (--- ... ---) with a trailing newline,
+	 *                or '' when the block is disabled by filter.
 	 */
 	public function build_front_matter( \WP_Post $post ): string {
+		/**
+		 * Filter: whether to emit the YAML front-matter block at all.
+		 *
+		 * Default on, and that default is a deliberate position rather than an
+		 * oversight: the block carries the title, canonical URL, dates, author,
+		 * description and terms, none of which a consumer can recover from the
+		 * body alone. A `.md` that lands in an agent's context window without
+		 * them is a document with no provenance — which is exactly what the
+		 * `url:` key exists to prevent.
+		 *
+		 * Some conventions nevertheless treat front matter as build-time input
+		 * that should be stripped before serving, so a site that answers to one
+		 * of them can opt out. Returning false emits the `# Title` heading as
+		 * the first line of the document; nothing else about the body changes.
+		 *
+		 * Toggling this from site code does not by itself invalidate cached
+		 * responses (it is a code change, invisible to the validator, like every
+		 * other output filter): bump the settings salt by saving the settings
+		 * page, or declare the switch through
+		 * `sysmda_markdown_cache_dependencies`.
+		 */
+		if ( ! apply_filters( 'sysmda_front_matter_enabled', true, $post ) ) {
+			return '';
+		}
+
 		$lines = array( '---' );
 
 		$lines[] = 'title: ' . $this->scalar( get_the_title( $post ) );

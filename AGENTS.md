@@ -174,9 +174,10 @@ The v1 scope is done and widely exceeded. Implemented:
   entries cached before activation carry no `Vary`); (2) opt-in **`.htaccess` rules** (Advanced →
   `sysmda_litespeed_htaccess` checkbox, default off) wrapped in
   `<IfModule LiteSpeed>` (inert elsewhere): requests whose `Accept` mentions
-  `text/markdown`, or allows neither HTML nor a wildcard (the 406 case), get
-  `[E=Cache-Control:no-cache]` and bypass the LiteSpeed cache, so PHP always
-  negotiates even when the HTML variant is already cached. The block is
+  `text/markdown` get `[E=Cache-Control:no-cache]` and bypass the LiteSpeed
+  cache, so PHP always negotiates even when the HTML variant is already cached.
+  That is the **only** rule since `0.30.0` (the 406 bypass was removed — see the
+  decision below). The block is
   written at the **top** of `.htaccess` — it MUST precede `# BEGIN WordPress`,
   whose `[L]` rules end every rewrite pass, so a block appended at the bottom
   is never evaluated (verified live; do not switch back to
@@ -247,7 +248,14 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Redis-aware cache** (`Cache` helper): persistent object cache when present,
   transients otherwise. Invalidation via global salt + `post_modified_gmt` +
   `SYSMDA_VERSION`; salt bump on settings save; cleanup on `save_post`/
-  `deleted_post` (skips revisions/autosaves).
+  `deleted_post` (skips revisions/autosaves). Optional **pre-warm** after a save
+  (`sysmda_markdown_prewarm`, default off — see the decision): a WP-Cron event
+  rebuilds the entry so the first reader does not pay for the conversion.
+- **Front matter is suppressible as a whole** (`sysmda_front_matter_enabled`,
+  default on): `false` starts the document at `# Title`. The layout lives in
+  `MarkdownController::assemble_document()` (public + static, so the join is
+  covered by golden tests), which owns the rule that the blank line after the
+  block belongs to the block.
 - **Admin panel** (single page, Settings API): General / Markdown output /
   llms.txt / Integrations / Advanced. Restyled UI (presentation only): page
   header + single Save button, native WP **tabs**, section **cards**, two-column
@@ -339,6 +347,27 @@ The v1 scope is done and widely exceeded. Implemented:
   A host that ignores `Cache-Control` on the way in
   (`fastcgi_ignore_headers`) would instead reintroduce staleness, and the
   answer there is a purge integration, not a header.
+- **`acceptmarkdown.com` guides: reviewed, closed** (July 2026 — the
+  *Generating the Markdown* and *Caching & CDN* pages, by Ben Word / Roots, which
+  is also why they present `roots/post-content-to-markdown` as *the* WordPress
+  approach). Recorded so the review is not redone from scratch. Outcome: three
+  changes, all shipped in `0.30.0` and all with a decision above — the `.htaccess`
+  406 bypass removed, `sysmda_front_matter_enabled`, `sysmda_markdown_prewarm` —
+  plus two FAQ entries (behind a CDN, and the three-request test that proves no
+  cache is mixing representations). Everything else was already covered, and in
+  places exceeded: their "what to strip" list is satisfied *by construction*
+  (rendering cleaned blocks rather than scraping the page means the chrome never
+  enters the pipeline, which also makes their "scope the conversion to `<main>`"
+  advice moot), and their "preserve what matters" list is satisfied item by item
+  plus absolute-URL resolution, highlighter line reconstruction, `<dl>` and
+  synced patterns. Their taxonomy of three approaches does not describe this
+  plugin at all: it is neither an SSG, nor write-time dual rendering, nor an
+  edge proxy re-fetching HTML, so two of the three tradeoffs they attribute to
+  "runtime conversion" (per-request cost, and output drifting with a CSS change)
+  do not apply. Deliberately NOT taken: their write-time "store both
+  representations" model (the `Cache` helper already covers it without growing
+  the DB) and every Nginx/Varnish/VCL/Worker snippet — the "do not ship
+  host-specific config" rule from the `0.29.0` measurement stands.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -549,6 +578,19 @@ The v1 scope is done and widely exceeded. Implemented:
   `Vary: Accept` keeps being emitted in append mode (never overwrite: sites
   already vary on `User-Agent` for mobile/desktop caches), still correct for
   browsers/CDNs that do honour it.
+  **Know exactly what `no-store` buys, and do not oversell it** (clarified July
+  2026 after the `0.30.0` FAQ claimed "no CDN configuration required" and a
+  review correctly called it out): it is one-directional. It stops the Markdown
+  variant from being *stored* and later handed to a browser — the harmful
+  direction — and that protection is genuinely server-agnostic. It does nothing
+  about the reverse: when a URL-keyed cache already holds the HTML for the
+  permalink, the Markdown request is answered at the edge and PHP never runs, so
+  no header the plugin sends can matter and the client gets HTML. Making
+  negotiation *work* on such a host needs a cache bypass (the opt-in `.htaccess`
+  rules on LiteSpeed, a cache rule elsewhere) or a cache that honours `Vary`.
+  Safety is unconditional; functioning negotiation on a shared URL is not. Any
+  user-facing text about caches must keep the two apart, and the `.md` URL is the
+  answer that never depends on the host.
 - **Purge the LiteSpeed cache on plugin activation and deactivation** (decided):
   entries cached before activation carry no `Vary` and produce ghost behaviour
   that is very hard to diagnose. Purge-all via the LSCWP API
@@ -558,6 +600,54 @@ The v1 scope is done and widely exceeded. Implemented:
   safety; the test would be informational only and would depend on loopback
   HTTP requests, already rejected as unreliable behind WAF/proxies (same
   reason they were removed from the conflict detector).
+- **The `.htaccess` block bypasses the page cache on Markdown negotiation and on
+  nothing else** (decided July 2026, `0.30.0` — prompted by the "never key on a
+  raw `Accept`" argument in `acceptmarkdown.com/guides/caching-cdn`): the second
+  rule, which bypassed the cache when `Accept` allowed neither HTML nor a
+  wildcard so PHP could answer `406`, is **removed. Do not add it back.**
+  `RewriteRule ^` matches every URL on the site, so any request carrying an
+  arbitrary media type — `Accept: application/json`, or a fresh random one per
+  request — skipped the page cache site-wide and paid a full WordPress boot.
+  That is exactly the cache-busting vector the guide describes, shipped as a
+  feature, and it was opt-in but enabled precisely on the hosts that need the
+  page cache most. What it bought was a `406` for clients that
+  `should_reject_unacceptable()` already documents as non-existent in practice
+  (browsers, crawlers and agents always send `text/html` or a wildcard). The
+  `406` behaviour itself is unchanged and still answered on every request that
+  reaches PHP — `.md` URLs, cache misses, logged-in traffic; only the bypass
+  that made it reachable *through an already-cached page* is gone. Narrowing the
+  rule by URL instead was rejected: `.htaccess` cannot know the permalinks of
+  the enabled post types, and the plugin ships no rewrite rules by design.
+- **The front matter is emitted by default, and the opt-out is a filter**
+  (decided July 2026, `0.30.0`): `sysmda_front_matter_enabled` (default `true`)
+  suppresses the whole block, starting the document at `# Title`. It exists
+  because a real convention argues the other way —
+  `acceptmarkdown.com/guides/generating-markdown` lists YAML front matter under
+  "what to *not* generate", as build-time input that is noise to agents — and a
+  site answering to that convention should not have to post-process
+  `sysmda_markdown_output` by hand. The default does **not** move: `url`,
+  `date_modified` and `author` are provenance the body cannot carry, which is
+  the whole point of a machine-readable representation, and that guide's own
+  `.md` pages replace the block with a prose attribution footer rather than
+  dropping the information. Corollary in `assemble_document()`: the blank line
+  after the block belongs to the block, so suppressing it must not leave the
+  document starting with an empty line (golden test).
+- **Cache pre-warming is opt-in and off by default** (decided July 2026,
+  `0.30.0`): `sysmda_markdown_prewarm` schedules a WP-Cron rebuild ~30 s after
+  `save_post` (`PREWARM_DELAY`, also a debounce; the delay exists because the
+  block editor writes terms and meta in separate REST calls and ACF saves on its
+  own hook, so an immediate rebuild would cache a document missing them). Off by
+  default for one reason: **cron is not a faithful stand-in for a front-end
+  request.** `build_markdown()` installs the post as the loop, so anything
+  reading the post is fine, but there is no main query — a dynamic block or
+  shortcode inspecting `is_singular()` or the queried object can render
+  differently there, and that difference is what would get cached. The payoff is
+  also modest: the measured `.md` TTFB is dominated by the WordPress boot, not
+  by the conversion, so pre-warming removes the cold start for the first reader
+  after an edit and nothing more. Doing it inline on `save_post` instead was
+  rejected: same missing request context, plus it slows every save. Queued
+  events are dropped on deactivation with `wp_unschedule_hook()` — they carry a
+  post-ID argument, which `wp_clear_scheduled_hook()` would not match.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again): a
@@ -722,7 +812,7 @@ running code at the WP level.
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
-        ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache, output, alternate link, invalidation
+        ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link, invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
         ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment()
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
@@ -780,6 +870,7 @@ apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post );
 apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' ); // Cache-Control on the URLs the plugin owns (.md and /llms.txt); '' = send no header at all (WordPress's included). A freshness lifetime here makes staleness possible: no page cache purges a .md
 apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
 apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );        // extra cache-validator/ETag inputs for output the plugin cannot fingerprint (dynamic blocks, shortcodes, site filters); list of scalars, [] = none
+apply_filters( 'sysmda_markdown_prewarm', false, $post_id );                  // true = rebuild the post's Markdown cache on WP-Cron ~30 s after each save, instead of on the first request. Default false: cron has no request context (see the decision). No-op when the TTL is 0
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 apply_filters( 'sysmda_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
@@ -787,6 +878,7 @@ apply_filters( 'sysmda_markdown_output', $markdown, $post );
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+apply_filters( 'sysmda_front_matter_enabled', true, $post );                 // false = emit no front matter at all; the document starts at `# Title` (no leading blank line). Per-site opt-out, NOT a change of default — see the decision
 apply_filters( 'sysmda_front_matter_taxonomies', ! empty( $slugs ) );        // kill switch for the nested `taxonomies:` block; default = at least one taxonomy is selected, false = never emit
 apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // $slugs = the selection saved in the panel (fed in at priority 5), NOT auto-detected. May narrow AND extend it (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
 apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source

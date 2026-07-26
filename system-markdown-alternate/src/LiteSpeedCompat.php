@@ -26,12 +26,12 @@ defined( 'ABSPATH' ) || exit;
  *    `Cache-Control` no-cache header that MarkdownController sends on the same
  *    responses (see MarkdownController::send_no_cache_headers()).
  * 2. Opt-in `.htaccess` rules (Advanced settings, `sysmda_litespeed_htaccess`
- *    option): requests that negotiate Markdown — or accept neither HTML nor a
- *    wildcard (the 406 case) — bypass the LiteSpeed cache entirely, so PHP
- *    performs the negotiation even when the HTML variant is already cached.
- *    The block is wrapped in `<IfModule LiteSpeed>`, so it is inert on Apache
- *    and ignored by nginx. Explicit `.md` URLs stay fully cacheable: they are
- *    their own cache key and always identify the Markdown representation.
+ *    option): requests whose `Accept` mentions `text/markdown` bypass the
+ *    LiteSpeed cache entirely, so PHP performs the negotiation even when the
+ *    HTML variant is already cached. The block is wrapped in
+ *    `<IfModule LiteSpeed>`, so it is inert on Apache and ignored by nginx.
+ *    Explicit `.md` URLs stay fully cacheable: they are their own cache key and
+ *    always identify the Markdown representation.
  */
 class LiteSpeedCompat {
 
@@ -86,14 +86,27 @@ class LiteSpeedCompat {
 	 * The .htaccess rules (one line per entry, without BEGIN/END markers).
 	 *
 	 * `E=Cache-Control:no-cache` is the documented LiteSpeed directive to
-	 * exclude a request from the page cache. The conditions only depend on the
-	 * Accept header, so they keep working in every rewrite pass.
+	 * exclude a request from the page cache. The condition only depends on the
+	 * Accept header, so it keeps working in every rewrite pass.
 	 *
-	 * Two separate rules: (1) any Accept mentioning Markdown reaches PHP,
-	 * which evaluates the q-values; (2) an Accept allowing neither HTML nor a
-	 * wildcard reaches PHP for the 406. A missing/empty Accept and wildcard
-	 * accepts (`text/*` and the full wildcard) deliberately stay on the
-	 * cached HTML: PHP would serve HTML for them anyway.
+	 * A single rule, deliberately: an Accept that mentions Markdown must reach
+	 * PHP, which evaluates the q-values. Everything else stays on the cached
+	 * HTML — a missing or empty Accept, the wildcard accepts (`text/*` and the
+	 * full wildcard), and any header mentioning neither Markdown nor HTML.
+	 *
+	 * Until `0.30.0` a second rule also bypassed the cache when Accept allowed
+	 * neither HTML nor a wildcard, so PHP could answer `406`. It was removed:
+	 * `RewriteRule ^` matches every URL on the site, so any request carrying an
+	 * arbitrary media type — `Accept: application/json`, or a fresh random one
+	 * per request — skipped the page cache site-wide and paid a full WordPress
+	 * boot. That is precisely the cache-busting vector that keying on a raw
+	 * `Accept` is known for, and what it bought was a `406` for clients that do
+	 * not exist in practice: real browsers, crawlers and agents always send
+	 * `text/html` or a wildcard (see
+	 * MarkdownController::should_reject_unacceptable()). The `406` itself is
+	 * unchanged and still answered on every request that reaches PHP — `.md`
+	 * URLs, cache misses, logged-in traffic — only the cache bypass that made it
+	 * reachable through an already-cached page is gone. Do not add it back.
 	 *
 	 * @return string[]
 	 */
@@ -104,13 +117,6 @@ class LiteSpeedCompat {
 			'# Requests that mention Markdown must reach WordPress,',
 			'# which evaluates the q-values.',
 			'RewriteCond %{HTTP:Accept} text/markdown [NC]',
-			'RewriteRule ^ - [E=Cache-Control:no-cache]',
-			'# Requests whose Accept allows neither HTML nor a wildcard',
-			'# must reach WordPress so it can answer 406.',
-			'RewriteCond %{HTTP:Accept} !^$',
-			'RewriteCond %{HTTP:Accept} !text/html [NC]',
-			'RewriteCond %{HTTP:Accept} !text/\* [NC]',
-			'RewriteCond %{HTTP:Accept} !\*/\* [NC]',
 			'RewriteRule ^ - [E=Cache-Control:no-cache]',
 			'</IfModule>',
 		);

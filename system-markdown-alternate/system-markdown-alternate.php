@@ -3,7 +3,7 @@
  * Plugin Name:       System Markdown Alternate
  * Plugin URI:        https://github.com/diecieventi/system-markdown-alternate
  * Description:       Exposes a clean Markdown version of your posts (readable by LLMs, agents and technical tools) by appending .md to the permalink.
- * Version:           0.29.0
+ * Version:           0.30.0
  * Requires at least: 6.1
  * Requires PHP:      7.4
  * Author:            Diecieventi Digital Marketing
@@ -19,7 +19,7 @@ namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SYSMDA_VERSION', '0.29.0' );
+define( 'SYSMDA_VERSION', '0.30.0' );
 define( 'SYSMDA_PLUGIN_FILE', __FILE__ );
 define( 'SYSMDA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SYSMDA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -57,6 +57,13 @@ require_once $sysmda_autoload;
  */
 register_activation_hook( __FILE__, array( LiteSpeedCompat::class, 'purge_litespeed_cache' ) );
 register_deactivation_hook( __FILE__, array( LiteSpeedCompat::class, 'purge_litespeed_cache' ) );
+
+/*
+ * Drop any queued cache pre-warm on deactivation: the events carry a post ID
+ * argument, so they would otherwise sit in the cron array until they fire against
+ * a hook nobody listens to any more.
+ */
+register_deactivation_hook( __FILE__, array( MarkdownController::class, 'clear_prewarm_events' ) );
 
 /*
  * Bootstrap. The application logic lives in src/Plugin.php (hook and controller registration).

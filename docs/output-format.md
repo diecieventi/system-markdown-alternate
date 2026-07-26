@@ -37,6 +37,9 @@ A `.md` response is a single UTF-8 text document, assembled as:
 ```
 
 - The **front matter** block (`--- … ---`) comes first, followed by a blank line.
+  Both belong together: with the block suppressed
+  (`sysmda_front_matter_enabled`, see below) the document starts directly at the
+  H1, with no leading blank line.
 - Then the **H1**: `# ` + the post title (tags stripped, entities decoded,
   whitespace collapsed), followed by a blank line.
 - Then an optional **preamble** (the `sysmda_markdown_preamble` filter — used by
@@ -50,9 +53,17 @@ site can post-process it.
 
 ## Front matter
 
-Built by `MetadataBuilder::build_front_matter()`. Keys are emitted **in this
-exact order**; conditional keys are omitted entirely when they have no value
-(they are not emitted empty):
+Built by `MetadataBuilder::build_front_matter()`. Present by default, and
+suppressible as a whole through **`sysmda_front_matter_enabled`** (since
+`0.30.0`): returning `false` emits no block at all, and the document begins with
+the `# Title` heading. This is a per-site opt-out, not a change of default —
+emitting the block stays the contract, because `url`, `date_modified` and
+`author` are provenance a consumer cannot recover from the body. Some
+conventions treat front matter as build-time input to be stripped before
+serving, which is the case the filter exists for.
+
+Keys are emitted **in this exact order**; conditional keys are omitted entirely
+when they have no value (they are not emitted empty):
 
 | Key | Always present? | Source |
 |---|---|---|

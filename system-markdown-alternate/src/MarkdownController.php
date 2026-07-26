@@ -13,6 +13,21 @@ defined( 'ABSPATH' ) || exit;
  */
 class MarkdownController {
 
+	/** WP-Cron hook that rebuilds one post's cached Markdown after a save. */
+	const PREWARM_HOOK = 'sysmda_prewarm_markdown';
+
+	/**
+	 * Delay before a queued pre-warm runs, in seconds.
+	 *
+	 * Not immediate on purpose. `save_post` fires before everything the document
+	 * reads has necessarily landed: the block editor writes terms and meta
+	 * through REST calls of their own, and ACF saves its fields on its own hook,
+	 * so a rebuild racing the save would cache a document missing them. The
+	 * window also debounces — a second save inside it finds the event already
+	 * queued and does not add another.
+	 */
+	const PREWARM_DELAY = 30;
+
 	/** @var ContentRenderer */
 	private $renderer;
 
@@ -162,6 +177,98 @@ class MarkdownController {
 
 		Cache::delete( 'sysmda_md_' . $post_id );
 		Cache::delete( LlmsTxtController::CACHE_KEY );
+	}
+
+	/**
+	 * Hook: save_post (priority 20, after invalidate_cache). Queues a background
+	 * rebuild of the post's Markdown, so the first reader after an edit does not
+	 * pay for the conversion.
+	 *
+	 * **Opt-in, off by default.** The cache fills itself on demand anyway, and
+	 * the rebuild runs under WP-Cron, where there is no main query and no
+	 * request context: a dynamic block or shortcode that inspects
+	 * `is_singular()` or the queried object can render differently there than on
+	 * a real front-end request, and the difference would be what gets cached.
+	 * build_markdown() installs the post as the loop (which is what the `.md`
+	 * route needs too), so anything reading the post itself is fine — it is the
+	 * request-shaped checks that cannot be reproduced. A site that knows its
+	 * Markdown does not depend on them can enable this and trade the risk for a
+	 * warm cache; the honest default is to leave the work where it is observable.
+	 */
+	public function schedule_prewarm( int $post_id ): void {
+		/**
+		 * Filter: rebuild a post's Markdown cache in the background after every
+		 * save, instead of on the first request that asks for it. Default false
+		 * — see schedule_prewarm() for why WP-Cron is not a faithful stand-in
+		 * for a front-end request. No effect when the body cache is disabled
+		 * through `sysmda_markdown_cache_ttl`.
+		 */
+		if ( ! apply_filters( 'sysmda_markdown_prewarm', false, $post_id ) ) {
+			return;
+		}
+
+		if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+			return;
+		}
+
+		$post = get_post( $post_id );
+
+		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
+			return;
+		}
+
+		if ( ! $this->cache_enabled( $post ) ) {
+			return;
+		}
+
+		$args = array( $post_id );
+
+		// Same hook, same args: WP-Cron would keep both, so check first.
+		if ( false !== wp_next_scheduled( self::PREWARM_HOOK, $args ) ) {
+			return;
+		}
+
+		wp_schedule_single_event( time() + self::PREWARM_DELAY, self::PREWARM_HOOK, $args );
+	}
+
+	/**
+	 * Hook: sysmda_prewarm_markdown (WP-Cron). Builds the post's Markdown and
+	 * stores it under the current validator, so the next request is a cache hit.
+	 *
+	 * Everything is re-checked rather than trusted from scheduling time: between
+	 * the save and this run the post may have been unpublished, password
+	 * protected, given a non-standard post format, or deleted outright.
+	 */
+	public function prewarm( int $post_id ): void {
+		$post = get_post( $post_id );
+
+		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
+			return;
+		}
+
+		if ( ! $this->cache_enabled( $post ) ) {
+			return;
+		}
+
+		// Idempotent: get_markdown() stores the body when the entry is missing or
+		// stale, and is a plain read when it is already warm.
+		$this->get_markdown( $post, $this->cache_version( $post ) );
+	}
+
+	/**
+	 * Hook: plugin deactivation. Drops every queued pre-warm event, including
+	 * the per-post argument variants wp_clear_scheduled_hook() cannot reach.
+	 */
+	public static function clear_prewarm_events(): void {
+		wp_unschedule_hook( self::PREWARM_HOOK );
+	}
+
+	/**
+	 * Whether the body cache is enabled for this post (TTL greater than zero).
+	 */
+	private function cache_enabled( \WP_Post $post ): bool {
+		/** Filter: cache TTL in seconds. 0 disables the cache. */
+		return (int) apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post ) > 0;
 	}
 
 	// ─── Resolution ───────────────────────────────────────────────────────────
@@ -796,7 +903,7 @@ class MarkdownController {
 			/** Filter: Markdown block between the # Title and body (subtitle, TL;DR, etc.). */
 			$preamble = (string) apply_filters( 'sysmda_markdown_preamble', '', $post );
 
-			$markdown = $front_matter . "\n# " . $title . "\n\n" . $preamble . $body;
+			$markdown = self::assemble_document( $front_matter, $title, $preamble, $body );
 
 			/** Filter: final Markdown (front matter + content). */
 			$markdown = apply_filters( 'sysmda_markdown_output', $markdown, $post );
@@ -811,6 +918,26 @@ class MarkdownController {
 		}
 
 		return rtrim( $markdown ) . "\n";
+	}
+
+	/**
+	 * Joins the document parts in the documented order (see
+	 * `docs/output-format.md` → *Document structure*).
+	 *
+	 * Public and static so the layout is testable without a live request, like
+	 * cache_control_value(). It deliberately does NOT right-trim: that happens
+	 * after `sysmda_markdown_output`, so a filter cannot leak trailing
+	 * whitespace into the response.
+	 */
+	public static function assemble_document( string $front_matter, string $title, string $preamble, string $body ): string {
+		// The blank line separating the front matter from the H1 belongs to the
+		// block, not to the heading. With the block suppressed
+		// (`sysmda_front_matter_enabled`) the document has to start with `# `,
+		// not with an empty line — a leading newline would be indistinguishable
+		// from a truncated front matter to anything parsing the response.
+		$prefix = '' !== $front_matter ? $front_matter . "\n" : '';
+
+		return $prefix . '# ' . $title . "\n\n" . $preamble . $body;
 	}
 
 	/**
