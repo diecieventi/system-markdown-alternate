@@ -411,7 +411,7 @@ does with the permission to store differs, and only the first row was measured.
 | Layer | Stores the body? | Serves it without asking? | Net effect |
 |---|---|---|---|
 | Browser | yes | no — revalidates with `If-None-Match` | `304`, no body on the wire. The gain the whole design was built for, and it was impossible under `no-store` |
-| nginx `fastcgi_cache` / `proxy_cache` | yes, unless configured to skip `max-age=0` | no | may answer `304` itself; `proxy_cache_revalidate on` makes it revalidate upstream instead of refetching |
+| nginx `fastcgi_cache` / `proxy_cache` | **no** — measured; see the correction below | n/a | never stores, so every request reaches PHP. The predicted "yes, unless configured to skip `max-age=0`" was wrong for the measured host |
 | Varnish | no (TTL 0) — unless VCL sets `beresp.keep` | n/a | behaves as a pass, like today, minus the heuristic 120 s window that `no-store` was accidentally protecting against |
 | LiteSpeed LSCache | no (it caches only what it is told to) | n/a | unchanged; the negotiated route keeps its own LiteSpeed signals |
 | Cloudflare / CDN | only if a Cache Rule opts `.md` in | no, with "respect origin headers" | safe by default (`.md` is not a default-cached extension) |
@@ -421,6 +421,45 @@ The one configuration that reintroduces staleness is a host that strips incoming
 cache headers (`fastcgi_ignore_headers Cache-Control`) and applies its own TTL.
 There is no header that defends against that; the answer would be a purge
 integration, which is deliberately not built — see below.
+
+### Correction to the nginx row, measured after `0.29.0` shipped
+
+The table above was written from the specification. The nginx row predicted that
+the cache would store the body and simply refuse to reuse it without asking. On
+the reference host (RunCloud/nginx behind Cloudflare) it does neither: it stores
+nothing at all, `x-runcache-status` is `MISS` on every `.md` request, and PHP runs
+every time. `max-age=0` marks the response stale on arrival, and this cache
+declines to keep something it would have to revalidate before every use. The same
+disposition is why no `304` is ever produced: it strips conditional headers from
+the upstream request wherever caching is configured for the location.
+
+That reading was confirmed by a control experiment on the same host, which is
+what makes it a diagnosis rather than a guess. Pointing `sysmda_cache_control` at
+a lifetime, from an mu-plugin and with nothing else changed:
+
+```php
+add_filter( 'sysmda_cache_control', fn() => 'public, max-age=0, s-maxage=600, must-revalidate' );
+```
+
+flipped the very same URL to `x-runcache-status: HIT`, with PHP out of the path.
+So the capability was always there and `max-age=0` was the whole reason it went
+unused. Two observations from the run, both worth keeping:
+
+- nginx adds **no `Age` header** on a hit, so its absence proves nothing;
+  `x-runcache-status` is the signal to read on this stack.
+- Cloudflare stayed `cf-cache-status: DYNAMIC` before and after, confirming the
+  CDN row exactly: `.md` is not a default-cached extension, and an explicit Cache
+  Rule is required to move the hit to the edge.
+
+**None of this argues for changing the default.** What a lifetime buys is
+narrower than it first looks: a one-pass crawl of the whole site is unaffected,
+because each URL is visited once and every visit is a first-time miss that boots
+WordPress regardless. It pays off on re-crawls, on concurrent requests for the
+same URL — the realistic way to exhaust PHP-FPM workers — and on ordinary repeat
+traffic. Against a single sweep the answer is rate limiting upstream. And the
+price is the one the policy exists to avoid: nothing purges a `.md`, so an edited
+article keeps serving its old Markdown for up to the lifetime. Correct by
+default, faster by explicit per-site choice.
 
 **Why no purge integration.** Making a shared cache hold `.md` copies *and* stay
 correct needs the cache to be purged on every edit. Page-cache plugins purge the
