@@ -269,6 +269,14 @@ class MarkdownController {
 			return false; // No Accept header means any representation is acceptable.
 		}
 
+		// A header whose every media range is malformed (no `/`, or an invalid
+		// qvalue) parses to nothing. That is a broken client, not a client
+		// refusing HTML: answering 406 would turn a typo into an error page,
+		// so it is treated exactly like a missing Accept.
+		if ( array() === AcceptNegotiator::parse( $accept ) ) {
+			return false;
+		}
+
 		return AcceptNegotiator::quality( $accept, 'text/html' ) <= 0.0
 			&& AcceptNegotiator::quality( $accept, 'text/markdown' ) <= 0.0;
 	}
@@ -471,11 +479,17 @@ class MarkdownController {
 	/**
 	 * Whether `post_modified_gmt` alone determines the emitted Markdown.
 	 *
-	 * False as soon as something can change the output without touching the
-	 * post's modification date — today only the optional taxonomy block.
+	 * False as soon as ANYTHING can change the output without touching the
+	 * post's modification date. That means both fingerprints, not just the
+	 * taxonomy one: a client sending `If-Modified-Since` without an
+	 * `If-None-Match` never presents the ETag, so folding the out-of-post
+	 * dependencies into the ETag alone would still answer `304` with a stale
+	 * body after a synced pattern, featured image, description or ACF change.
+	 * Every input added to cache_version() must be reflected here too.
 	 */
 	private function date_is_strong_validator( \WP_Post $post ): bool {
-		return '' === MetadataBuilder::taxonomies_fingerprint( $post );
+		return '' === MetadataBuilder::taxonomies_fingerprint( $post )
+			&& '' === MetadataBuilder::dependencies_fingerprint( $post );
 	}
 
 	/**
@@ -588,19 +602,28 @@ class MarkdownController {
 	 * or settings are saved (global salt).
 	 *
 	 * This value is also the strong ETag, so it must change whenever the emitted
-	 * Markdown changes. Term assignments and renames do NOT touch
-	 * `post_modified_gmt`, so when custom taxonomies are emitted their data is
-	 * fingerprinted in as well; without it a conditional request would keep
-	 * answering `304` with outdated terms, even with the body cache disabled.
-	 * The fingerprint is empty while the feature is off, which leaves the hash
-	 * byte-identical to earlier versions (no mass invalidation on upgrade).
+	 * Markdown changes. Two families of input do NOT touch `post_modified_gmt`
+	 * and are therefore fingerprinted in separately:
+	 *
+	 * - the emitted taxonomy terms (assignments and renames);
+	 * - everything read from outside the post row — synced patterns, featured
+	 *   image and its alt text, the Rank Math description, ACF fields, plus
+	 *   whatever a site declares through `sysmda_markdown_cache_dependencies`.
+	 *
+	 * Without them a conditional request keeps answering `304` with stale
+	 * content even when the body cache is disabled. Both fingerprints are empty
+	 * when they have nothing to describe, which leaves the hash byte-identical
+	 * for posts that have neither (no mass invalidation on upgrade).
 	 */
 	private function cache_version( \WP_Post $post ): string {
 		$salt       = (string) get_option( 'sysmda_cache_salt', '0' );
 		$taxonomies = MetadataBuilder::taxonomies_fingerprint( $post );
 		$taxonomies = '' !== $taxonomies ? '|' . $taxonomies : '';
 
-		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt . $taxonomies );
+		$dependencies = MetadataBuilder::dependencies_fingerprint( $post );
+		$dependencies = '' !== $dependencies ? '|' . $dependencies : '';
+
+		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt . $taxonomies . $dependencies );
 	}
 
 	/**

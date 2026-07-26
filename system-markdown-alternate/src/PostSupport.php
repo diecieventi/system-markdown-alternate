@@ -91,11 +91,21 @@ class PostSupport {
 	/**
 	 * Whether the post exposes a .md representation: supported type, published,
 	 * not password-protected, and not carrying an excluded post format.
+	 *
+	 * The password test reads `post_password` directly and deliberately NOT
+	 * `post_password_required()`, which answers a different question: "does this
+	 * visitor still have to supply it?". That returns false as soon as a valid
+	 * `wp-postpass_*` cookie exists, so a reader who had entered the password
+	 * once also unlocked the `.md`, the `rel="alternate"` link, the shortcode and
+	 * the dynamic tag. The rule is "protected content has no Markdown
+	 * representation at all" — see the decision in AGENTS.md — so having the
+	 * password is irrelevant. This also makes the endpoint agree with
+	 * `/llms.txt`, which has always filtered on `has_password => false`.
 	 */
 	public static function is_servable( \WP_Post $post ): bool {
 		return in_array( $post->post_type, self::supported_post_types(), true )
 			&& 'publish' === $post->post_status
-			&& ! post_password_required( $post )
+			&& '' === (string) $post->post_password
 			&& ! self::has_excluded_post_format( $post );
 	}
 

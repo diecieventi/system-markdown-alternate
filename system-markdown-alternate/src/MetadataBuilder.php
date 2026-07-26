@@ -250,6 +250,139 @@ class MetadataBuilder {
 	}
 
 	/**
+	 * Fingerprint of everything the emitted Markdown reads from OUTSIDE the post
+	 * row, and that therefore changes without moving `post_modified_gmt`.
+	 *
+	 * Same contract as taxonomies_fingerprint(), same reason: this value is
+	 * folded into MarkdownController::cache_version(), which is also the strong
+	 * ETag. Editing a synced pattern, swapping the featured image, rewriting the
+	 * Rank Math description or changing an ACF field all change the body while
+	 * the post row stays untouched — so without this a client holding the old
+	 * validator keeps receiving `304` with stale content, body cache or not.
+	 *
+	 * Covered here are only the dependencies the plugin itself reads and can
+	 * therefore fingerprint. Output that is dynamic by nature (dynamic blocks,
+	 * shortcodes, site filters reading options or remote data) cannot be:
+	 * `sysmda_markdown_cache_dependencies` is the documented way for a site to
+	 * contribute its own validator inputs.
+	 *
+	 * Returns an empty string when the post has none of them, which keeps the
+	 * validator byte-identical for plain posts (no mass invalidation on upgrade).
+	 */
+	public static function dependencies_fingerprint( \WP_Post $post ): string {
+		$parts = array();
+
+		$seen = array();
+		self::collect_pattern_refs( parse_blocks( (string) $post->post_content ), $seen, $parts );
+
+		$thumb_id = (int) get_post_thumbnail_id( $post );
+		if ( $thumb_id > 0 ) {
+			$thumb   = get_post( $thumb_id );
+			$parts[] = 'thumb:' . $thumb_id
+				. ':' . ( $thumb instanceof \WP_Post ? (string) $thumb->post_modified_gmt : '' )
+				. ':' . (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true );
+		}
+
+		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );
+		if ( is_string( $rank_math ) && '' !== $rank_math ) {
+			$parts[] = 'desc:' . md5( $rank_math );
+		}
+
+		$parts = array_merge( $parts, self::acf_dependencies( $post ) );
+
+		/**
+		 * Filter: extra cache-validator inputs for output this plugin cannot
+		 * fingerprint by itself (dynamic blocks, shortcodes, site filters).
+		 * Return a list of scalars; anything that changes the emitted Markdown
+		 * belongs here, or conditional requests will answer 304 with stale content.
+		 */
+		$extra = apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );
+		foreach ( (array) $extra as $value ) {
+			if ( is_scalar( $value ) ) {
+				$parts[] = 'x:' . (string) $value;
+			}
+		}
+
+		return empty( $parts ) ? '' : md5( implode( '|', $parts ) );
+	}
+
+	/**
+	 * Collects a fingerprint part for every `core/block` (synced pattern) the
+	 * body can contain, following references **transitively**.
+	 *
+	 * It has to walk into each referenced `wp_block`'s own content, not just the
+	 * article's parse tree: `BlockCleaner::expand_reusable()` expands patterns
+	 * recursively, so an article → pattern A → pattern B chain renders B's
+	 * content. Recording only A's timestamp would leave the validator stale when
+	 * B alone is edited — the exact failure this fingerprint exists to prevent,
+	 * one level down.
+	 *
+	 * `$seen` is both the cycle guard (a pattern that references itself, directly
+	 * or through another, would recurse forever — BlockCleaner guards the same
+	 * way) and the deduplicator for a pattern used more than once.
+	 *
+	 * @param array  $blocks Parsed blocks.
+	 * @param array  $seen   Reference IDs already visited, by ID.
+	 * @param array  $parts  Fingerprint parts, appended to.
+	 */
+	private static function collect_pattern_refs( array $blocks, array &$seen, array &$parts ): void {
+		foreach ( $blocks as $block ) {
+			if ( isset( $block['blockName'] ) && 'core/block' === $block['blockName'] ) {
+				$ref = isset( $block['attrs']['ref'] ) ? (int) $block['attrs']['ref'] : 0;
+
+				if ( $ref > 0 && ! isset( $seen[ $ref ] ) ) {
+					$seen[ $ref ] = true;
+					$pattern      = get_post( $ref );
+
+					if ( $pattern instanceof \WP_Post ) {
+						$parts[] = 'block:' . $ref . ':' . (string) $pattern->post_modified_gmt;
+						self::collect_pattern_refs( parse_blocks( (string) $pattern->post_content ), $seen, $parts );
+					} else {
+						$parts[] = 'block:' . $ref . ':missing';
+					}
+				}
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				self::collect_pattern_refs( $block['innerBlocks'], $seen, $parts );
+			}
+		}
+	}
+
+	/**
+	 * Fingerprint parts for the ACF fields the bundled integration appends.
+	 *
+	 * Reads the same fields through the same filters AcfIntegration uses, so the
+	 * validator cannot drift from what is actually emitted. Empty when ACF is
+	 * not active — `get_field()` is its own availability check, exactly as in
+	 * AcfIntegration.
+	 *
+	 * @return string[]
+	 */
+	private static function acf_dependencies( \WP_Post $post ): array {
+		if ( ! function_exists( 'get_field' ) ) {
+			return array();
+		}
+
+		$keys   = (array) apply_filters( 'sysmda_acf_field_keys', array(), $post );
+		$keys[] = (string) apply_filters( 'sysmda_acf_subtitle_key', '', $post );
+		$keys[] = (string) apply_filters( 'sysmda_acf_tldr_key', '', $post );
+
+		$parts = array();
+		foreach ( $keys as $key ) {
+			$key = (string) $key;
+			if ( '' === $key ) {
+				continue;
+			}
+
+			$value   = get_field( $key, $post->ID );
+			$parts[] = 'acf:' . $key . ':' . md5( (string) wp_json_encode( $value ) );
+		}
+
+		return $parts;
+	}
+
+	/**
 	 * Normalizes a raw "taxonomy slug => term names" map into the emitted shape.
 	 *
 	 * Pure (no WordPress calls) so the filtering and ordering rules are directly

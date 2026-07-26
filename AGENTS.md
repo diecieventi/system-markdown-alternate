@@ -93,8 +93,9 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Conditional requests**: the `.md` response honours `If-None-Match` /
   `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
   already holds the current version. Validator = the existing cache-version hash
-  (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt), so a `304` always means the
-  cached body would be identical; `If-None-Match` takes priority over
+  (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt + the taxonomy and
+  out-of-post dependency fingerprints, see "Technical notes" 6), so a `304`
+  always means the cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
   `If-Modified-Since` is honoured **only while the date is a strong validator**:
   when the taxonomy block is emitted the body can change without
@@ -309,6 +310,29 @@ The v1 scope is done and widely exceeded. Implemented:
   "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
   enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
   `/llms.txt` stays silent as well (see below).
+- **Password-protected content has NO Markdown representation, ever** (decided
+  July 2026, closes M1 of the 0.26.3 review): the test is
+  `'' === $post->post_password`, deliberately NOT `post_password_required()`.
+  That function answers "does this visitor still have to supply it?", so a
+  valid `wp-postpass_*` cookie made it false and a reader who had entered the
+  password once also unlocked the `.md`, the `rel="alternate"` link, the
+  shortcode and the dynamic tag. Having the password is irrelevant: the rule is
+  about the content, not the visitor. This also makes `is_servable()` agree with
+  `/llms.txt`, which always filtered on `has_password => false`. The old check
+  was invisible to the tests because the stub for `post_password_required()`
+  returned `! empty( $post->post_password )` — it encoded the assumption the
+  code was making instead of WordPress's actual behaviour; it now models the
+  cookie, which is what makes the regression test bite.
+- **`/llms.txt` invalidation covers the site identity, and deliberately NOT the
+  post format** (decided July 2026, closes M2 of the same review): the cached
+  index is versioned on the site name and tagline as well, because they are its
+  heading and subtitle and are edited in Settings → General, which never fires
+  `save_post`. A post's **format** is deliberately left out even though it does
+  change which posts are servable: it is set from the editor, where saving
+  already clears the cache, and post formats are not part of how this site
+  classifies content (see the decision below). Paying a `set_object_terms` hook
+  on every term write to close a gap only reachable through programmatic term
+  updates is not worth it. The residual risk is bounded by the TTL.
 - **Non-standard post formats are never served** (decided July 2026):
   `PostSupport::EXCLUDED_POST_FORMATS` covers all nine (aside, audio, chat,
   gallery, image, link, quote, status, video). Rationale: those are short,
@@ -641,6 +665,7 @@ apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   //
 apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
 apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
 apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
+apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );        // extra cache-validator/ETag inputs for output the plugin cannot fingerprint (dynamic blocks, shortcodes, site filters); list of scalars, [] = none
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 apply_filters( 'sysmda_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
@@ -706,6 +731,25 @@ Default exclusions:
    content, body cache or not. Custom taxonomies were the first such case
    (`MetadataBuilder::taxonomies_fingerprint()`); deleting the cache entry alone
    would NOT have been enough. Apply the same rule to any future addition.
+   **The rule was written for taxonomies and then broken by everything else**
+   (0.26.3 review, H1): synced patterns, the featured image and its alt text,
+   the Rank Math description and ACF fields all change the body from *outside
+   the post row*, so none of them moved the validator.
+   `MetadataBuilder::dependencies_fingerprint()` now covers exactly what the
+   plugin itself reads, and `sysmda_markdown_cache_dependencies` is the
+   documented way for a site to declare the rest (dynamic blocks, shortcodes,
+   filters reading options or remote data) — that filter is the answer to
+   "my output changes and the `.md` does not", not a new special case in the
+   controller. Both fingerprints stay empty when they have nothing to describe,
+   which is what keeps an upgrade from invalidating every plain post.
+   **Two traps, both hit while fixing exactly this:** (a) synced patterns must
+   be followed **transitively** — an article → pattern A → pattern B chain
+   renders B, so recording only A leaves the validator stale one level down
+   (cycle guard required, as in `BlockCleaner`); (b) every input added to
+   `cache_version()` MUST also be reflected in `date_is_strong_validator()` —
+   a client sending only `If-Modified-Since` never presents the ETag, so a
+   fingerprint that lives in the ETag alone still answers `304` with a stale
+   body.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

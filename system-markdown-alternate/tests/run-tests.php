@@ -21,6 +21,16 @@ define( 'SYSMDA_VERSION', '0.0.0-test' ); // Only used by the cache-validator te
 error_reporting( E_ALL );
 ini_set( 'display_errors', '1' );
 
+// Buffer everything this runner prints, flushed automatically on exit.
+// Under the CLI SAPI `headers_sent()` becomes true as soon as any output
+// reaches the SAPI, and MarkdownController::send_not_modified() returns early
+// when it does. So a single failing assertion — or one deprecation notice from
+// a newer PHP — printed above the conditional-request tests silently stopped
+// the 304 from being recorded and produced a phantom extra failure, which is
+// exactly the "CLI header observation" flakiness reported against PHP 8.5.
+// Buffering keeps the status observable no matter what ran before.
+ob_start();
+
 // ─── WordPress stubs (only what the tested classes need) ─────────────
 
 $GLOBALS['sysmda_test_posts']       = array(); // id → WP_Post
@@ -174,7 +184,22 @@ function get_the_terms( $post, $taxonomy ) {
 
 /** Stub: no magic quotes to strip in the tests. */
 function post_password_required( $post ) {
+	// Real WordPress semantics, which this stub used to get wrong: the answer is
+	// "does THIS VISITOR still have to supply the password", not "is the post
+	// protected". A valid wp-postpass_* cookie makes it false while the post is
+	// still protected. Modelling it correctly is what exposes the 0.26.3 defect;
+	// the previous version returned `! empty( $post->post_password )` and so
+	// quietly encoded the assumption the code was making.
+	if ( ! empty( $GLOBALS['sysmda_test_password_cookie'] ) ) {
+		return false;
+	}
+
 	return ! empty( $post->post_password );
+}
+
+/** Stub: site identity, part of the /llms.txt cache validity hash. */
+function get_bloginfo( $show = '', $filter = 'raw' ) {
+	return isset( $GLOBALS['sysmda_test_bloginfo'][ $show ] ) ? $GLOBALS['sysmda_test_bloginfo'][ $show ] : '';
 }
 
 /** Stub: post format, driven by a test-only property (false = standard format). */
@@ -315,7 +340,22 @@ function check( $label, $expected, $actual ) {
 check( 'parse: q default 1.0', array( 'text/html' => 1.0 ), AcceptNegotiator::parse( 'text/html' ) );
 check( 'parse: explicit q', array( 'text/html' => 0.5 ), AcceptNegotiator::parse( 'text/html;q=0.5' ) );
 check( 'parse: clamp to [0,1]', array( 'text/html' => 1.0 ), AcceptNegotiator::parse( 'text/html;q=7' ) );
-check( 'parse: non-numeric q => 1.0', array( 'text/html' => 1.0 ), AcceptNegotiator::parse( 'text/html;q=abc' ) );
+// A non-numeric weight used to default to 1.0, i.e. the STRONGEST preference:
+// `text/markdown;q=banana` then outranked `text/html` and served Markdown to a
+// client that never asked for it. The range is dropped instead. A numeric
+// weight is still kept and clamped, out of range included.
+check( 'parse: non-numeric q drops the range', array(), AcceptNegotiator::parse( 'text/html;q=abc' ) );
+check( 'parse: empty q drops the range', array(), AcceptNegotiator::parse( 'text/html;q=' ) );
+check(
+	'parse: malformed q cannot outrank a valid range',
+	array( 'text/html' => 1.0 ),
+	AcceptNegotiator::parse( 'text/html,text/markdown;q=banana' )
+);
+check(
+	'quality: malformed markdown weight loses to html',
+	0.0,
+	AcceptNegotiator::quality( 'text/html,text/markdown;q=banana', 'text/markdown' )
+);
 check( 'parse: duplicate => maximum q', array( 'text/html' => 0.9 ), AcceptNegotiator::parse( 'text/html;q=0.2, text/html;q=0.9' ) );
 check( 'parse: missing slash ignored', array(), AcceptNegotiator::parse( 'html, json' ) );
 check( 'parse: empty', array(), AcceptNegotiator::parse( '' ) );
@@ -905,6 +945,165 @@ check( 'cache_version: stable for unchanged terms', $sysmda_cv_on, $sysmda_cv( $
 $GLOBALS['sysmda_test_terms'][61]['genre'] = array( (object) array( 'name' => 'Ambient' ) );
 check( 'cache_version: term rename changes the ETag', true, $sysmda_cv_on !== $sysmda_cv( $sysmda_cv_post ) );
 
+// ─── cache_version: dependencies outside the post row ────────────────
+//
+// Same failure mode as the taxonomies above, found by the 0.26.3 review (H1):
+// a synced pattern, the featured image, the Rank Math description and ACF
+// fields all change the emitted Markdown while `post_modified_gmt` stays put.
+// Without them in the validator a conditional request answers 304 with stale
+// content — body cache or not. Each assertion below fails against 0.26.3.
+
+$GLOBALS['sysmda_test_filters'] = array();
+
+// A post whose only content is a reference to a synced pattern.
+$sysmda_dep_post = new WP_Post(
+	array(
+		'ID'                => 62,
+		'post_type'         => 'post',
+		'post_content'      => 'DEP',
+		'permalink'         => 'https://example.com/dep/',
+		'post_modified_gmt' => '2026-07-01 08:30:00',
+	)
+);
+$GLOBALS['sysmda_test_parsed']['DEP'] = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 99 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+$GLOBALS['sysmda_test_posts'][99] = new WP_Post(
+	array(
+		'ID'                => 99,
+		'post_type'         => 'wp_block',
+		'post_content'      => 'PATTERN V1',
+		'post_modified_gmt' => '2026-07-01 09:00:00',
+	)
+);
+
+$sysmda_dep_before = $sysmda_cv( $sysmda_dep_post );
+
+// The editor saves the synced pattern. The article is NOT touched.
+$GLOBALS['sysmda_test_posts'][99]->post_modified_gmt = '2026-07-02 11:00:00';
+check(
+	'cache_version: editing a synced pattern moves the ETag',
+	true,
+	$sysmda_dep_before !== $sysmda_cv( $sysmda_dep_post )
+);
+
+// Transitive references: the article points at pattern 99, which itself embeds
+// pattern 98. BlockCleaner expands both, so editing only 98 changes the body
+// while the article AND pattern 99 stay untouched.
+$GLOBALS['sysmda_test_posts'][99]->post_content = 'PATTERN V1';
+$GLOBALS['sysmda_test_parsed']['PATTERN V1']    = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 98 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+$GLOBALS['sysmda_test_posts'][98] = new WP_Post(
+	array(
+		'ID'                => 98,
+		'post_type'         => 'wp_block',
+		'post_content'      => 'NESTED',
+		'post_modified_gmt' => '2026-07-01 09:00:00',
+	)
+);
+
+$sysmda_nested_before = $sysmda_cv( $sysmda_dep_post );
+$GLOBALS['sysmda_test_posts'][98]->post_modified_gmt = '2026-07-03 12:00:00';
+check(
+	'cache_version: editing a nested synced pattern moves the ETag',
+	true,
+	$sysmda_nested_before !== $sysmda_cv( $sysmda_dep_post )
+);
+
+// A reference cycle must not recurse forever: 98 points back at 99.
+$GLOBALS['sysmda_test_posts'][98]->post_content = 'CYCLE';
+$GLOBALS['sysmda_test_parsed']['CYCLE']         = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 99 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+check( 'cache_version: reference cycle terminates', true, '' !== $sysmda_cv( $sysmda_dep_post ) );
+
+// A post with a featured image: swapping the image or rewriting its alt text
+// changes the front matter without touching the post row.
+$sysmda_img_post = new WP_Post(
+	array(
+		'ID'                => 63,
+		'post_type'         => 'post',
+		'permalink'         => 'https://example.com/img/',
+		'post_modified_gmt' => '2026-07-01 08:30:00',
+		'sysmda_thumb_id'   => 77,
+	)
+);
+$GLOBALS['sysmda_test_posts'][77] = new WP_Post(
+	array(
+		'ID'                => 77,
+		'post_type'         => 'attachment',
+		'post_modified_gmt' => '2026-06-01 07:00:00',
+	)
+);
+$GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'Before';
+
+$sysmda_img_before = $sysmda_cv( $sysmda_img_post );
+$GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'After';
+check(
+	'cache_version: featured-image alt change moves the ETag',
+	true,
+	$sysmda_img_before !== $sysmda_cv( $sysmda_img_post )
+);
+
+// The description comes from post meta, which update_post_meta() writes without
+// moving post_modified_gmt.
+$sysmda_desc_before = $sysmda_cv( $sysmda_cv_post );
+$GLOBALS['sysmda_test_meta'][61]['rank_math_description'] = 'A brand new description';
+check(
+	'cache_version: description meta change moves the ETag',
+	true,
+	$sysmda_desc_before !== $sysmda_cv( $sysmda_cv_post )
+);
+// Leave post 61 dependency-free: the conditional-request tests below use it as
+// the post whose date IS a strong validator, which a lingering description
+// would silently turn into the opposite case.
+unset( $GLOBALS['sysmda_test_meta'][61]['rank_math_description'] );
+
+// Escape hatch for output this plugin cannot fingerprint (dynamic blocks,
+// shortcodes, site filters reading options or remote data).
+$sysmda_extra_before = $sysmda_cv( $sysmda_img_post );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_cache_dependencies'] = array( 'stock:42' );
+check(
+	'cache_version: sysmda_markdown_cache_dependencies reaches the ETag',
+	true,
+	$sysmda_extra_before !== $sysmda_cv( $sysmda_img_post )
+);
+$GLOBALS['sysmda_test_filters'] = array();
+
+// ─── should_reject_unacceptable: a broken Accept is not a 406 ────────
+//
+// Dropping a malformed range can leave nothing parseable. That is a broken
+// client, not one refusing HTML, so it must keep getting the HTML page rather
+// than an error page.
+$sysmda_406_method = new ReflectionMethod( MarkdownController::class, 'should_reject_unacceptable' );
+$sysmda_406_method->setAccessible( true );
+$sysmda_406 = function ( $accept ) use ( $sysmda_406_method, $sysmda_controller ) {
+	$_SERVER['HTTP_ACCEPT'] = $accept;
+	$result                 = $sysmda_406_method->invoke( $sysmda_controller );
+	unset( $_SERVER['HTTP_ACCEPT'] );
+	return $result;
+};
+
+check( '406: unparseable Accept is not rejected', false, $sysmda_406( 'text/html;q=abc' ) );
+check( '406: Accept refusing both is still rejected', true, $sysmda_406( 'application/json' ) );
+check( '406: normal browser Accept is not rejected', false, $sysmda_406( 'text/html,*/*;q=0.8' ) );
+
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //
 // The ETag carries the taxonomy fingerprint, but Last-Modified is derived from
@@ -951,6 +1150,26 @@ $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
 check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 
+// The same rule for the out-of-post dependencies, and it is NOT covered by the
+// taxonomy check above: a client sending only If-Modified-Since never presents
+// the ETag, so folding synced patterns, the featured image, the description and
+// ACF into the ETag alone still answered 304 with a stale body. Reported as a P1
+// on the PR that introduced the fingerprint. Fails when date_is_strong_validator()
+// looks at the taxonomy fingerprint only.
+$GLOBALS['sysmda_test_filters'] = array();
+$sysmda_dep_since               = gmdate( 'D, d M Y H:i:s', strtotime( '2026-07-05 08:30:00 GMT' ) ) . ' GMT';
+check(
+	'conditional: IMS ignored while the post has out-of-post dependencies',
+	false,
+	$sysmda_ims( $sysmda_dep_post, $sysmda_dep_since )
+);
+check( 'conditional: no 304 for a post with dependencies', array(), $GLOBALS['sysmda_test_status'] );
+check(
+	'conditional: IMS still honoured for a post with none',
+	true,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_dep_since )
+);
+
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
 $GLOBALS['sysmda_test_taxonomies'] = array();
@@ -971,6 +1190,34 @@ check( 'llms: whitespace collapsed and trimmed', 'X Y', LlmsTxtController::escap
 // normalize_inline: single line only, no bracket escaping (description).
 check( 'llms: multiline description => single line', 'One two three', LlmsTxtController::normalize_inline( "One\ntwo\r\nthree" ) );
 check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtController::normalize_inline( 'see [1] and (2)' ) );
+
+// ─── LlmsTxtController: the cached index follows the site identity ────
+//
+// The site name is the `# ` heading of /llms.txt and the tagline the blockquote
+// under it, but both are edited in Settings → General, which never fires
+// save_post — so renaming the site used to leave the old name in the index for
+// a full TTL. Both assertions fail against 0.26.3.
+
+$sysmda_llms_cv_method = new ReflectionMethod( LlmsTxtController::class, 'cache_version' );
+$sysmda_llms_cv_method->setAccessible( true );
+$sysmda_llms_controller = new LlmsTxtController( $metadata );
+$sysmda_llms_cv         = function () use ( $sysmda_llms_cv_method, $sysmda_llms_controller ) {
+	return $sysmda_llms_cv_method->invoke( $sysmda_llms_controller );
+};
+
+$GLOBALS['sysmda_test_bloginfo'] = array(
+	'name'        => 'Old Site Name',
+	'description' => 'Old tagline',
+);
+$sysmda_llms_cv_before = $sysmda_llms_cv();
+
+$GLOBALS['sysmda_test_bloginfo']['name'] = 'New Site Name';
+check( 'llms: renaming the site invalidates the cached index', true, $sysmda_llms_cv_before !== $sysmda_llms_cv() );
+
+$sysmda_llms_cv_named                           = $sysmda_llms_cv();
+$GLOBALS['sysmda_test_bloginfo']['description'] = 'New tagline';
+check( 'llms: changing the tagline invalidates the cached index', true, $sysmda_llms_cv_named !== $sysmda_llms_cv() );
+check( 'llms: unchanged identity keeps the same version', $sysmda_llms_cv(), $sysmda_llms_cv() );
 
 // lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
 check( 'llms: lastmod valid date', '(updated: 2026-07-01)', LlmsTxtController::lastmod_suffix( '2026-07-01 08:30:00' ) );
@@ -1304,6 +1551,24 @@ check( 'servable: standard format post', true, PostSupport::is_servable( $sysmda
 check( 'servable: unsupported type', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_type' => 'product' ) ) ) );
 check( 'servable: draft', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_status' => 'draft' ) ) ) );
 check( 'servable: password protected', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) ) );
+
+// The whole point of reading post_password directly: a reader who has already
+// entered the password holds a valid wp-postpass_* cookie, which makes
+// post_password_required() return false. Protected content still has no
+// Markdown representation — not through .md, not through the alternate link,
+// the shortcode or the dynamic tag. Fails against 0.26.3.
+$GLOBALS['sysmda_test_password_cookie'] = true;
+check(
+	'servable: password protected, cookie supplied',
+	false,
+	PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) )
+);
+check(
+	'servable: unprotected post unaffected by the cookie',
+	true,
+	PostSupport::is_servable( $sysmda_mk_post() )
+);
+$GLOBALS['sysmda_test_password_cookie'] = false;
 
 // Non-standard post formats are snippets, not documents: excluded everywhere
 // is_servable() is consulted (.md, alternate link, /llms.txt, shortcode, tag).
