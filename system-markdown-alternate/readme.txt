@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.26.1
+Stable tag: 0.26.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -238,6 +238,17 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.26.2 =
+
+* **A failed `.htaccess` write no longer leaves the file empty or half-written.**
+  The in-place rewrite added in 0.26.1 empties the file before writing the new
+  rules, so if the write failed — a full disk, an I/O error — the site was left
+  with an empty or truncated `.htaccess`: broken permalinks, or a 500 from a rule
+  cut in two. The previous contents are now put back before the lock is released.
+* **Short writes are detected.** `fwrite()` reports a partial write as a byte
+  count rather than as a failure, so a half-written file was previously reported
+  as a success. The byte count is now compared with what was meant to be written.
 
 = 0.26.1 =
 

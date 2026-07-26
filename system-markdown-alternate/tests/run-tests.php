@@ -1437,6 +1437,132 @@ check( 'update: no backup for a file that did not exist', false, file_exists( $s
 check( 'update: file removable after the write', true, unlink( $sysmda_htaccess ) );
 @rmdir( $sysmda_tmp_dir );
 
+// ─── LiteSpeedCompat::update (rollback when the write fails) ─────────────────
+
+// The write is truncate-then-rewrite, so the file is empty for an instant. If
+// the write then fails (a full disk, an I/O error) or falls short, the site is
+// left with a broken .htaccess: dead permalinks or a 500 from a rule cut in
+// half. Simulated with a stream wrapper whose writes can be made to fail, since
+// a real ENOSPC is not reproducible in a test suite.
+class Sysmda_Test_Stream {
+	/** @var array<string,string> Contents of every path opened through the wrapper. */
+	public static $data = array();
+	/** @var int How many of the next write calls must fail. */
+	public static $fail_writes = 0;
+	/** @var bool Whether the first failing call writes half the payload first. */
+	public static $partial = false;
+
+	/** @var resource|null Set by PHP on the wrapper instance. */
+	public $context;
+	private $path = '';
+	private $pos  = 0;
+
+	public function stream_open( $path, $mode, $options, &$opened_path ) {
+		$this->path = $path;
+		if ( ! isset( self::$data[ $path ] ) || false !== strpos( $mode, 'w' ) ) {
+			self::$data[ $path ] = '';
+		}
+		$this->pos = 0;
+		return true;
+	}
+
+	public function stream_read( $count ) {
+		$chunk      = substr( self::$data[ $this->path ], $this->pos, $count );
+		$this->pos += strlen( $chunk );
+		return $chunk;
+	}
+
+	public function stream_write( $data ) {
+		// Only the file under test fails: the .sysmda-bak snapshot is written
+		// through the same wrapper and would otherwise absorb the failure.
+		if ( self::$fail_writes > 0 && false === strpos( $this->path, '.sysmda-bak' ) ) {
+			--self::$fail_writes;
+			if ( ! self::$partial ) {
+				return 0; // Nothing could be written at all.
+			}
+			self::$partial = false;
+			$data          = substr( $data, 0, (int) ( strlen( $data ) / 2 ) );
+		}
+
+		self::$data[ $this->path ] = substr_replace( self::$data[ $this->path ], $data, $this->pos, strlen( $data ) );
+		$this->pos                += strlen( $data );
+		return strlen( $data );
+	}
+
+	public function stream_truncate( $size ) {
+		self::$data[ $this->path ] = substr( str_pad( self::$data[ $this->path ], $size, "\0" ), 0, $size );
+		return true;
+	}
+
+	public function stream_seek( $offset, $whence = SEEK_SET ) {
+		$base = SEEK_CUR === $whence ? $this->pos : ( SEEK_END === $whence ? strlen( self::$data[ $this->path ] ) : 0 );
+		if ( $base + $offset < 0 ) {
+			return false;
+		}
+		$this->pos = $base + $offset;
+		return true;
+	}
+
+	public function stream_tell() {
+		return $this->pos;
+	}
+
+	public function stream_eof() {
+		return $this->pos >= strlen( self::$data[ $this->path ] );
+	}
+
+	public function stream_lock( $operation ) {
+		return true;
+	}
+
+	public function stream_flush() {
+		return true;
+	}
+
+	public function stream_stat() {
+		return array( 'size' => strlen( self::$data[ $this->path ] ) );
+	}
+
+	public function url_stat( $path, $flags ) {
+		return isset( self::$data[ $path ] ) ? array( 'size' => strlen( self::$data[ $path ] ) ) : false;
+	}
+
+	public function stream_close() {
+		return true;
+	}
+}
+
+stream_wrapper_register( 'sysmdatest', 'Sysmda_Test_Stream' );
+
+$sysmda_fake_htaccess = 'sysmdatest://htaccess';
+
+// Total write failure: the transform is lost, but the previous rules come back.
+Sysmda_Test_Stream::$data        = array( $sysmda_fake_htaccess => $sysmda_wp_rules );
+Sysmda_Test_Stream::$fail_writes = 1;
+Sysmda_Test_Stream::$partial     = false;
+
+check( 'update: failed write reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: failed write restores the file', $sysmda_wp_rules, Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
+// Short write: fwrite returns a byte count instead of false, so the count has to
+// be compared with the payload or half a rule stays on disk reported as success.
+Sysmda_Test_Stream::$data        = array( $sysmda_fake_htaccess => $sysmda_wp_rules );
+Sysmda_Test_Stream::$fail_writes = 2;
+Sysmda_Test_Stream::$partial     = true;
+
+check( 'update: short write reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: short write restores the file', $sysmda_wp_rules, Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
+// The successful path must still work through the same wrapper: the rollback
+// must not fire when the write went through.
+Sysmda_Test_Stream::$data        = array( $sysmda_fake_htaccess => $sysmda_wp_rules );
+Sysmda_Test_Stream::$fail_writes = 0;
+
+check( 'update: healthy write reports success', true, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: healthy write applies the transform', LiteSpeedCompat::prepend_rules( $sysmda_wp_rules ), Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
+stream_wrapper_unregister( 'sysmdatest' );
+
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 echo "\n{$GLOBALS['sysmda_asserts']} assertions, {$GLOBALS['sysmda_failures']} failed.\n";
