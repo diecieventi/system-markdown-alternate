@@ -428,9 +428,9 @@ class MarkdownController {
 	 * already has the current version of the resource.
 	 *
 	 * Validators:
-	 * - Strong ETag = "{cache_version}" (changes after an edit, plugin update, or
+	 * - Weak ETag = W/"{cache_version}" (changes after an edit, plugin update, or
 	 *   settings save: it uses the same cache hash, so a 304 always means the body
-	 *   would be identical to the cached one).
+	 *   would be identical to the cached one). See etag() for why it is weak.
 	 * - Last-Modified = post_modified_gmt (RFC 7231).
 	 *
 	 * If-None-Match takes precedence (RFC 9110): when present, it alone determines
@@ -439,7 +439,7 @@ class MarkdownController {
 	 * validator for this representation (see date_is_strong_validator()).
 	 */
 	private function handle_conditional( \WP_Post $post, string $version ): bool {
-		$etag        = '"' . $version . '"';
+		$etag        = self::etag( $version );
 		$modified_ts = $this->last_modified_timestamp( $post );
 
 		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] )
@@ -477,7 +477,10 @@ class MarkdownController {
 	}
 
 	/**
-	 * Whether `post_modified_gmt` alone determines the emitted Markdown.
+	 * Whether `post_modified_gmt` alone determines the emitted Markdown, i.e.
+	 * whether the date may be used as a validator at all. Unrelated to the
+	 * weak/strong distinction of the ETag: this asks whether the date knows
+	 * about every input, not how exactly the tag compares.
 	 *
 	 * False as soon as ANYTHING can change the output without touching the
 	 * post's modification date. That means both fingerprints, not just the
@@ -493,10 +496,37 @@ class MarkdownController {
 	}
 
 	/**
+	 * The response ETag for a cache validator, as a **weak** entity tag.
+	 *
+	 * Weak is the honest answer, not a downgrade. A strong ETag promises the
+	 * representation is identical **byte for byte** (RFC 9110 §8.8.1), and this
+	 * value cannot promise that: it is computed from the post's modification
+	 * date, the plugin version, the settings salt and the two dependency
+	 * fingerprints — never from the bytes, which would mean generating the body
+	 * before deciding whether to send it and giving up the whole point of the
+	 * `304`. Output that is dynamic by nature (dynamic blocks, shortcodes, site
+	 * filters) can still move without any of those inputs moving; that gap is
+	 * what `sysmda_markdown_cache_dependencies` exists to close, and a validator
+	 * with a documented escape hatch is by definition not byte-exact.
+	 *
+	 * Nothing is lost: strong comparison is only required by `If-Match` and
+	 * `If-Range`, and this endpoint implements neither (`GET`/`HEAD` of a whole
+	 * document). `If-None-Match` uses weak comparison in every case (RFC 9110
+	 * §13.1.2), so conditional requests behave exactly as before. Intermediaries
+	 * that weaken strong tags on their way out (Cloudflare does, on some plans)
+	 * no longer make the header a claim the plugin cannot back.
+	 */
+	private static function etag( string $version ): string {
+		return 'W/"' . $version . '"';
+	}
+
+	/**
 	 * Checks whether an If-None-Match header matches the resource ETag.
 	 *
-	 * Handles the `*` wildcard, comma-separated ETag lists, and the weak `W/`
-	 * prefix (removed before comparison, which still uses the quoted value).
+	 * Handles the `*` wildcard and comma-separated ETag lists, comparing with the
+	 * weak comparison function required for `If-None-Match` (RFC 9110 §8.8.3.2):
+	 * the `W/` flag is ignored on both sides, so a client that received a tag
+	 * before or after an intermediary weakened it still revalidates.
 	 *
 	 * Public only so it can be tested in isolation (pure string logic).
 	 */
@@ -507,19 +537,36 @@ class MarkdownController {
 			return true;
 		}
 
+		$etag = self::normalize_etag( $etag );
+
 		foreach ( explode( ',', $header ) as $candidate ) {
-			$candidate = trim( $candidate );
-
-			if ( 0 === stripos( $candidate, 'W/' ) ) {
-				$candidate = substr( $candidate, 2 );
-			}
-
-			if ( $candidate === $etag ) {
+			if ( self::normalize_etag( $candidate ) === $etag ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Reduces an entity tag to the opaque value both sides are compared on.
+	 *
+	 * Drops the `W/` weakness flag (weak comparison) and the content-coding
+	 * suffix Apache appends inside the quotes when it compresses a response:
+	 * `mod_deflate` turns `"abc"` into `"abc-gzip"` and `mod_brotli` into
+	 * `"abc-br"`, both by default (`DeflateAlterETag AddSuffix`). The client
+	 * echoes back what it received, so without this every compressed response on
+	 * a stock Apache revalidates with a full body instead of a `304` — silently,
+	 * since nothing looks broken.
+	 */
+	private static function normalize_etag( string $value ): string {
+		$value = trim( $value );
+
+		if ( 0 === stripos( $value, 'W/' ) ) {
+			$value = substr( $value, 2 );
+		}
+
+		return (string) preg_replace( '/-(?:gzip|br)"$/', '"', $value );
 	}
 
 	/**
@@ -601,7 +648,7 @@ class MarkdownController {
 	 * Cache validity hash: changes when the post is edited, the plugin is updated,
 	 * or settings are saved (global salt).
 	 *
-	 * This value is also the strong ETag, so it must change whenever the emitted
+	 * This value is also the ETag, so it must change whenever the emitted
 	 * Markdown changes. Two families of input do NOT touch `post_modified_gmt`
 	 * and are therefore fingerprinted in separately:
 	 *
@@ -688,7 +735,7 @@ class MarkdownController {
 
 		status_header( 200 );
 		header( 'Content-Type: text/markdown; charset=utf-8' );
-		header( 'ETag: "' . $version . '"' );
+		header( 'ETag: ' . self::etag( $version ) );
 
 		$modified_ts = $this->last_modified_timestamp( $post );
 		if ( $modified_ts > 0 ) {

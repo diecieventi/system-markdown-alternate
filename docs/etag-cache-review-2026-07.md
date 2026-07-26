@@ -1,0 +1,363 @@
+# ETag, cache and response-validation review — July 2026
+
+> **Status: triaged against the shipped code; F1–F3 fixed in `0.28.0`.** The
+> brief was an external checklist ("verify that the architecture does not give
+> ETags an excessive or unreliable role"), not a bug report, so every point was
+> re-derived from the code before being accepted or rejected. Several of its
+> assumptions do not hold for this plugin and are answered below rather than
+> silently dropped.
+>
+> | # | Finding | Outcome |
+> |---|---|---|
+> | F1 | The `ETag` was strong, and could not be | **Fixed in 0.28.0** — now `W/"…"` |
+> | F2 | Apache's compression suffix silently kills `304` | **Fixed in 0.28.0** |
+> | F3 | Three site-wide output inputs never moved the validator | **Fixed in 0.28.0** |
+> | F4 | No `Cache-Control` on `.md` leaves heuristic freshness open | **Decision required** — sits against a durable "do not propose again" decision |
+> | F5 | A later `header()` can overwrite `Vary: Accept` on the HTML branch | **Accepted, not fixed** — safety does not depend on `Vary` |
+> | F6 | Preconditions on non-GET/HEAD should be `412`, not `304` | **Not fixed** — unreachable in practice |
+> | F7 | `HEAD` renders a body it will not send | **Already triaged** (0.26.3 review, L2) |
+> | F8 | `/llms.txt` sends no validators at all | **Not implemented** — optimization, shape recorded |
+
+## 1. Current architecture
+
+**Request flow.** `template_redirect` priority 0, two entry points in
+`MarkdownController::maybe_render_markdown()`:
+
+1. **`.md` suffix** — `resolve_requested_post()` reads `REQUEST_URI`, redirects
+   `/slug.md/` → `/slug.md` (301), resolves the permalink with
+   `url_to_postid()`. The `Accept` header is ignored: the URL *is* the request
+   for Markdown.
+2. **Negotiation on the canonical permalink** — only when
+   `is_negotiable_request()` agrees (singular, enabled type, servable, and not a
+   feed / embed / trackback / comment page / `<!--nextpage-->` sub-page).
+   `AcceptNegotiator` decides with q-values; `?format=markdown` overrides.
+
+Both converge on `serve_markdown()`, so validators, headers and body are
+produced in exactly one place.
+
+**Markdown generation.** `build_markdown()` sets up the loop, then front matter
+(`MetadataBuilder`) + `# Title` + preamble + body (`ContentRenderer` →
+`MarkdownConverter`). Cached under `sysmda_md_{ID}` through the `Cache` helper
+(persistent object cache when present, transients otherwise), default TTL one
+day, `sysmda_markdown_cache_ttl` = `0` disables it.
+
+**Validator generation.** `cache_version()` = `md5( post_modified_gmt |
+SYSMDA_VERSION | settings salt [| taxonomies fingerprint] [| dependencies
+fingerprint] )`. The same string is the body-cache validity key **and** the
+`ETag`. Both fingerprints return `''` when they have nothing to describe, which
+is what keeps the hash byte-identical for plain posts across upgrades.
+
+**Invalidation.** Version hash first (a stale entry is never served, only
+ignored), plus proactive deletion on `save_post` / `deleted_post`, plus a global
+salt bumped by `AdminSettings` on any plugin option write and — since `0.28.0` —
+on the site-wide events in F3. The `ETag` is *not* an invalidation mechanism and
+never was.
+
+**Conditional requests.** `handle_conditional()` runs before any body work:
+`If-None-Match` first and alone when present (RFC 9110), `If-Modified-Since`
+only when `date_is_strong_validator()` confirms `post_modified_gmt` knows about
+every input. `send_not_modified()` emits status + `ETag` + `Last-Modified` and
+the caller `exit`s.
+
+**`Vary` and cache safety.** `send_vary_header()` appends `Vary: Accept`
+(never replaces, and skips if an existing `Vary` already covers `Accept`) on
+every negotiable URL, whichever representation wins. Because honouring `Vary` is
+a per-host property, safety does not rest on it: negotiated Markdown and `406`
+always carry `Cache-Control: no-cache, no-store, must-revalidate, private` plus
+the LiteSpeed-specific signals. The `.md` URLs are their own cache key and carry
+no `Cache-Control`.
+
+## 2. Findings
+
+### F1 — The `ETag` was strong, and the plugin cannot back a strong tag
+
+**Severity:** Medium. **Where:** `MarkdownController::send_headers()`,
+`handle_conditional()`. **Probability:** certain (every response).
+
+A strong entity tag asserts the representation is identical **byte for byte**
+(RFC 9110 §8.8.1). This validator is computed from metadata — modification date,
+plugin version, settings salt, the two fingerprints — and never from the bytes,
+which is deliberate: hashing the body would mean generating it before deciding
+whether to send it, giving up the entire benefit of the `304`. The gap is
+acknowledged in the code itself: `sysmda_markdown_cache_dependencies` exists
+because dynamic blocks, shortcodes and site filters can change the body with
+nothing else moving. A validator with a documented escape hatch is by definition
+not byte-exact.
+
+The 0.26.3 review raised the same point in passing and correctly noted that
+weakening the tag does not *fix* a false `304` — that is what the fingerprints
+introduced in `0.27.0` are for. What weakening fixes is the claim.
+
+**Fixed in `0.28.0`:** the tag is `W/"…"`. Nothing is given up — strong
+comparison is only required for `If-Match` and `If-Range`, and this endpoint
+implements neither (whole-document `GET`/`HEAD`); `If-None-Match` is defined to
+use weak comparison in all cases (RFC 9110 §13.1.2). `etag_matches()` now
+ignores the `W/` flag on **both** sides, so a client still holding a strong tag
+issued by ≤ `0.27.0`, or a tag weakened in transit by an intermediary
+(Cloudflare does this on some plans), keeps revalidating instead of
+re-downloading.
+
+### F2 — Apache's compression suffix silently disables every `304`
+
+**Severity:** Medium (performance, not correctness). **Where:**
+`MarkdownController::etag_matches()`. **Probability:** high on Apache/LiteSpeed
+configurations that compress `text/markdown`.
+
+`mod_deflate` rewrites the `ETag` of a compressed response by appending `-gzip`
+*inside* the quotes (`DeflateAlterETag AddSuffix` — the default); `mod_brotli`
+appends `-br`. The client stores and echoes back what it received, so
+`If-None-Match: "abc-gzip"` was compared against `"abc"`, never matched, and
+the endpoint re-sent the whole body on every visit. Nothing looks broken from
+the outside, which is why it is worth fixing rather than documenting.
+
+**Fixed in `0.28.0`:** a trailing `-gzip` / `-br` is stripped before comparison,
+alongside the `W/` flag. Only those two codings, only at the end of the value —
+the plugin's own validators are md5 hex and can never end that way.
+
+### F3 — Site-wide inputs of the output that no post save touches
+
+**Severity:** Medium. **Where:** `MetadataBuilder::build_front_matter()` (the
+`author:`, `url:` and `markdown_url:` keys), `ContentRenderer` (absolute URLs
+resolved against the permalink). **Probability:** low per site, but the
+consequence is unbounded.
+
+`0.27.0` closed this class of defect for everything the plugin reads *per post*
+(synced patterns, featured image, description, ACF). Three inputs are
+site-wide and were missed:
+
+| Input | What it changes | What used to move | 
+|---|---|---|
+| Author display name (`profile_update`) | the `author:` line of every post by that user | nothing |
+| `permalink_structure` | `url:`, `markdown_url:`, every absolute link in the body | nothing |
+| `home` (site address) | same | nothing |
+| `wp_delete_user()` with reassignment | `author:` of the reassigned posts (core rewrites `post_author` with a direct DB write, so `post_modified_gmt` stays put) | nothing |
+
+The consequence is the one this project treats as unacceptable: a client holding
+the old validator is answered `304` **forever**, since no TTL bounds a
+conditional response.
+
+**Fixed in `0.28.0`** by bumping the existing global salt from
+`update_option_permalink_structure`, `update_option_home`, `deleted_user`, and
+`profile_update` **guarded on an actual display-name change** — that hook fires
+on every user save, and on a store with customer accounts an unguarded bump
+would flush the whole cache routinely.
+
+Folding these into `cache_version()` instead was rejected deliberately: read per
+request they would make the dependency fingerprint non-empty for *every* post,
+which (a) invalidates the entire site on upgrade and (b) permanently disables
+the `If-Modified-Since` path, which `date_is_strong_validator()` switches off
+for any post with out-of-post dependencies. A rare event does not deserve a
+per-request cost.
+
+### F4 — No `Cache-Control` on `.md` leaves heuristic freshness open
+
+**Severity:** Low–Medium. **Where:** the durable decision "NO freshness
+`Cache-Control` on the dedicated `.md` URLs". **Probability:** depends entirely
+on the infrastructure. **Not implemented — this needs a ruling.**
+
+The decision rests on "revalidation via `ETag`/`304` never serves stale
+Markdown". That holds for a cache that revalidates. It does not hold for a cache
+that considers the response *fresh*: with no explicit freshness information, RFC
+9111 §4.2.2 explicitly permits a heuristic lifetime, and the common heuristic is
+a fraction of the age since `Last-Modified`. For a post last edited a year ago,
+10% is over a month. Varnish's stock `default_ttl` (120 s) is the same behaviour
+with a small constant.
+
+In practice the exposure is modest — Cloudflare does not cache unknown
+extensions by default, LiteSpeed and nginx cache only what they are configured
+to cache — but "no header" is not the same as "must revalidate", and the
+decision reads as though it were.
+
+The minimal change would be `Cache-Control: public, max-age=0, must-revalidate`
+on `.md` responses only: it removes the heuristic window while *keeping* the
+response storable and revalidatable, which is strictly closer to the decision's
+own stated goal ("never serve an outdated version") than sending nothing. It is
+not a freshness lifetime and does not conflict with page-cache plugins in the
+way `max-age > 0` would.
+
+It is nevertheless a header the project decided not to send, so it is recorded
+here as an explicit decision point rather than applied.
+
+### F5 — `Vary: Accept` can be overwritten downstream on the HTML branch
+
+**Severity:** Low. **Where:** `MarkdownController::send_vary_header()`.
+**Accepted, not fixed.**
+
+`Vary: Accept` is sent at `template_redirect`. On the Markdown branch the
+request `exit`s immediately, so nothing can touch it. On the HTML branch
+WordPress goes on rendering, and a theme or plugin calling
+`header( 'Vary: User-Agent' )` (replace defaults to true) would drop ours. The
+failure mode is a cache serving HTML to a Markdown-preferring client — an
+annoyance, never a leak, and the reverse direction is prevented by the no-cache
+invariant rather than by `Vary`. That is exactly the property the review asks
+for ("do not build correctness around `Vary`"), so no defensive re-assertion was
+added.
+
+### F6 — Preconditions on methods other than GET/HEAD
+
+**Severity:** Low (informational). **Not fixed.**
+
+RFC 9110 §13.2.2 says a matching `If-None-Match` on a method other than
+`GET`/`HEAD` must produce `412 Precondition Failed`, not `304`. A `POST` to a
+`.md` URL carrying `If-None-Match` would currently get a `304`. It requires a
+client doing something no client does, against an endpoint that is a read-only
+document; adding a method branch to serve it would be anticipation, which this
+project deliberately avoids.
+
+### F7 — `HEAD` generates a body it will not send
+
+Already found and ruled on in the 0.26.3 review (L2): real, bounded (usually a
+cache hit), revisit if the hit counter ever shows meaningful `HEAD` volume. No
+new information here.
+
+### F8 — `/llms.txt` sends no validators
+
+**Severity:** Low. **Where:** `LlmsTxtController::render()`. **Not implemented.**
+
+The index is served from a versioned server-side cache but carries no `ETag`,
+no `Last-Modified` and no `Cache-Control`, so every poll transfers the whole
+file. It is the largest single response the plugin produces and the one most
+likely to be fetched on a schedule.
+
+If it is ever added, the validator **must be `md5()` of the body about to be
+sent**, not the internal `cache_version()`: the latter deliberately does not
+cover the listed posts (a new post is picked up by deleting the cache entry, not
+by moving the version), so using it as an `ETag` would recreate the exact defect
+`0.27.0` fixed — a `304` with a stale index. Hashing the body is free-ish here,
+precisely because the body already exists before the response is written; that
+is also the one place a *strong* tag would be justified. Recorded, not built:
+this is an optimization, not a defect.
+
+### Verified as already correct
+
+Checked against the code and found sound; listed so they are not re-reviewed:
+
+- A `304` really does skip generation — `handle_conditional()` runs before
+  `get_markdown()`, and the plugin exits on the spot. What it does *not* skip is
+  the WordPress bootstrap and `cache_version()` itself (a `parse_blocks()` pass
+  plus a few meta reads). That is inherent to being a plugin.
+- `If-None-Match` parsing: wildcard, comma-separated lists, surrounding
+  whitespace, weak flags. A value that fails to match yields a normal `200`.
+- `If-None-Match` takes precedence over `If-Modified-Since`, and when it is
+  present but does not match, the date is not consulted at all.
+- `Last-Modified` is `post_modified_gmt`, formatted with `gmdate()`, second
+  precision, never in the future for published content, and suppressed for a
+  zero date.
+- `Vary: Accept` is present on negotiated `304`s: it is emitted before
+  `serve_markdown()`, together with the no-cache header, so both conditional and
+  full responses carry it.
+- Multisite needs no special handling: the object-cache group is not global and
+  transients live in the per-site options table, so `sysmda_md_61` on two blogs
+  are two different entries. `SYSMDA_VERSION` and the per-site salt are in the
+  hash on top of that.
+- Password-protected, draft, private, non-enabled and non-standard-format
+  content is excluded by `PostSupport::is_servable()` before any cache or
+  validator work, on every route at once.
+- WPML/Polylang translations are separate posts with separate IDs, so they get
+  separate cache entries and separate validators by construction.
+
+### Assumptions in the brief that do not apply here
+
+- *"The ETag may be acting as the invalidation mechanism."* It is not.
+  Invalidation is the version hash plus `save_post`/`deleted_post` plus the salt;
+  the tag is a validator only.
+- *"The ETag may represent the compressed or uncompressed body."* Neither: PHP
+  does not compress. Compression and `Vary: Accept-Encoding` belong to the web
+  server, which is also why F2 exists at all.
+- *"Cache keys should include the representation."* They do, by URL design: the
+  `.md` route has its own URL, and the negotiated variant is never stored
+  (`no-store`), so HTML and Markdown cannot share an entry.
+- *"Prefer `/article.md` as the primary mode."* Already the case. Every
+  advertisement of the Markdown representation — `rel="alternate"`,
+  `/llms.txt`, the shortcode, the dynamic tag — points at the `.md` URL;
+  negotiation exists for clients that ask, and is marked non-cacheable
+  precisely because it shares a URL with the HTML.
+- *"Responses for authenticated users must not reach a public cache."* The body
+  is built from cleaned blocks through `render_block()`, not `the_content`, so
+  the membership/personalisation filters that make HTML user-specific do not run.
+  A dynamic block could still vary by user; a site in that position should
+  declare it through `sysmda_markdown_cache_dependencies` or set
+  `sysmda_markdown_cache_ttl` to `0`. Unchanged, and worth stating explicitly.
+
+## 3. Output dependencies
+
+After `0.28.0`. "Moves `Last-Modified`" means the date remains usable as a
+validator; where it is *no*, `date_is_strong_validator()` disables the
+`If-Modified-Since` path for that post instead of answering with a stale date.
+
+| Dependency | Changes the Markdown | Invalidates the cache | Moves the `ETag` | Moves `Last-Modified` |
+|---|---|---|---|---|
+| Post content, title, excerpt, dates | yes | yes | yes | yes |
+| Categories / tags | yes | yes | yes (fingerprint) | no |
+| Selected custom taxonomies | yes (when selected) | yes | yes (fingerprint) | no |
+| Synced pattern, at any depth | yes | yes | yes (fingerprint) | no |
+| Featured image / alt text | yes | yes | yes (fingerprint) | no |
+| Rank Math description | yes | yes | yes (fingerprint) | no |
+| ACF fields read by the integration | yes | yes | yes (fingerprint) | no |
+| Author display name | yes | yes (salt, `0.28.0`) | yes | no |
+| Permalink structure, site address | yes | yes (salt, `0.28.0`) | yes | no |
+| User deleted with reassignment | yes | yes (salt, `0.28.0`) | yes | no |
+| Plugin settings | yes | yes (salt) | yes | no |
+| Plugin update | possibly | yes (`SYSMDA_VERSION`) | yes | no |
+| Dynamic blocks, shortcodes, site filters | yes | only via `sysmda_markdown_cache_dependencies` | same | no |
+| Post format assignment | changes servability | `save_post` from the editor only | n/a | n/a |
+| Site name / tagline | `/llms.txt` only | yes (its own version) | n/a | n/a |
+
+The last two rows are unchanged deliberate decisions, recorded in `AGENTS.md`.
+
+## 4. Infrastructure
+
+LiteSpeed is the only row verified live on this project (two production hosts,
+July 2026). The rest is documented behaviour, not measurement, and is listed to
+be checked rather than trusted.
+
+| Layer | Keeps the `ETag` | May transform it | Honours `Vary: Accept` | Risk here | Notes |
+|---|---|---|---|---|---|
+| Apache | yes | **yes** — `-gzip`/`-br` suffix when compressing | yes | none since F2 | `DeflateAlterETag NoChange` also avoids it, server-side |
+| Nginx (proxy/FastCGI cache) | yes | no | yes, when caching | low | `proxy_cache_revalidate on` makes `304` useful upstream |
+| LiteSpeed / OpenLiteSpeed | yes | no | **often not** — keys by URL | handled | no-cache signals always on for negotiated responses; opt-in `.htaccess` bypass |
+| Varnish | yes | no | yes (stock VCL) | F4 | stock `default_ttl` 120 s applies to responses with no `Cache-Control` |
+| Cloudflare / CDN | usually | **yes** — weakens strong tags on some plans | yes | none since F1/F2 | `.md` is not a default-cached extension |
+| WordPress page cache | n/a (bypasses PHP) | n/a | varies | handled | negotiated responses are `no-store`; `.md` has its own URL |
+
+## 5. What changed, and what did not
+
+**Applied in `0.28.0` (correctness):** F1, F2, F3.
+
+**Recorded as a decision for the maintainer:** F4.
+
+**Accepted and deliberately not changed:** F5 (safety does not depend on
+`Vary`), F6 (unreachable), F7 (already ruled on), F8 (optimization, with the
+implementation trap written down).
+
+**Rejected outright:** nothing in the brief was rejected as wrong except the
+assumptions listed in §2, which are answered there.
+
+## 6. Tests
+
+Fifteen assertions added to `tests/run-tests.php`, all failing against `0.27.0`:
+
+- the emitted tag is weak (`etag()` through reflection);
+- weak comparison in both directions, including a strong client tag against the
+  weak resource tag — the upgrade path;
+- `-gzip` and `-br` suffixes, alone and inside a list; and the negative cases
+  (a suffix in the middle of the value, an unknown coding) so the normalizer
+  cannot start eating real validators;
+- a full conditional round trip with the weak form of the current validator;
+- the salt bumps: no bump for an unchanged display name, for a profile update
+  with no usable data, or for an unrelated/excluded option; a bump for a real
+  rename; and one bump per request however many triggers fire.
+
+Suite: **315 assertions, 0 failed** on PHP 8.4; PHPCS clean.
+
+Not covered by the pure-logic suite, and worth doing once on staging:
+
+1. `curl -I` a `.md` URL, confirm `ETag: W/"…"`, replay it in `If-None-Match`,
+   expect `304`; replay the same value without the `W/` prefix, expect `304` too.
+2. Same against an Apache host with compression on for `text/markdown`
+   (`curl --compressed`): the browser-supplied `"…-gzip"` must now yield `304`.
+3. Rename an author's display name, then re-request an existing `.md` with the
+   old validator: expect `200` and the new name.
+4. Change the permalink structure on a staging copy: same expectation.
+5. Save any user profile without touching the display name and confirm the salt
+   did **not** move (`sysmda_cache_salt` in the options table).

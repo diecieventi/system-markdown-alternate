@@ -35,6 +35,7 @@ variants are in `docs/f3-2-taxonomy-selection-plan.md`.
 | `docs/f3-2-taxonomy-selection-plan.md` | **Shipped in `0.25.0`**, kept for the reasoning: why the front-matter taxonomies moved from auto-detection to an explicit panel selection, and which variants were rejected. The binding rule is the `AGENTS.md` decision; retire this file when it stops earning its place. |
 | `docs/llms-txt-multilingual-plan.md` | The **only open plan**: list WPML/Polylang translations in the single `/llms.txt`. Greenlit but **not started** — needs the staging reconnaissance described inside before any code. |
 | `docs/strategy-review-2026-07.md` | The reasoning, the eliminated options, and the **future thoughts** (parked, not plans): server-side diagnostics, ACF structured extraction, WooCommerce, hardening, wider multilingual. |
+| `docs/etag-cache-review-2026-07.md` | The ETag/cache/validation review. F1–F3 shipped in `0.28.0`; **F4 is an open decision** (heuristic freshness on `.md` URLs, which touches a "do not propose again" decision) and F8 records the one trap to avoid if `/llms.txt` ever gets an `ETag`. |
 
 ## What to do next
 
@@ -62,11 +63,14 @@ agent is most likely to violate by accident:
 2. **No HTTP loopback** anywhere ("NO Vary self-test"): content analysis runs
    **in-process**; the live cache check stays a manual curl in the readme FAQ.
 3. **Anything that can change the emitted Markdown without touching
-   `post_modified_gmt` must be folded into the cache validator**
-   (`cache_version()`), which is also the strong `ETag` — otherwise conditional
+   `post_modified_gmt` must reach the cache validator** — `cache_version()`,
+   which is also the (weak, since `0.28.0`) `ETag` — otherwise conditional
    requests answer `304` with stale content, body cache or not. Custom
    taxonomies were the first such case; `If-Modified-Since` additionally has to
-   be ignored while the date is not a strong validator.
+   be ignored while the date is not a strong validator. *Site-wide* inputs are
+   the exception to the shape, not to the rule: the author display name, the
+   permalink structure and the home URL bump the global salt from a hook instead
+   of being read on every request (see `docs/etag-cache-review-2026-07.md`).
 4. **Never publish anything the site owner did not select.** The front-matter
    taxonomies are an explicit panel selection: no auto-detection from the
    taxonomy registry (`public` / `publicly_queryable` describe routing, not

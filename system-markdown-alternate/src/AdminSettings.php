@@ -57,6 +57,20 @@ class AdminSettings {
 		add_action( 'added_option', array( $this, 'maybe_bump_cache_salt' ) );
 		add_action( 'updated_option', array( $this, 'maybe_bump_cache_salt' ) );
 
+		// …and when a site-wide input of the output changes. These are read by
+		// every post's Markdown but belong to no post, so nothing else moves the
+		// validator: without them a client holding the old ETag is told `304`
+		// for good, which no TTL ever bounds. All four are rare events, so
+		// bumping the global salt (and rebuilding everything once) is the cheap
+		// trade against reading them on every request — that would both
+		// invalidate every post on upgrade and permanently disable the
+		// `If-Modified-Since` path, which is switched off for any post with
+		// out-of-post dependencies.
+		add_action( 'update_option_permalink_structure', array( $this, 'bump_cache_salt' ) );
+		add_action( 'update_option_home', array( $this, 'bump_cache_salt' ) );
+		add_action( 'profile_update', array( $this, 'maybe_bump_for_author' ), 10, 2 );
+		add_action( 'deleted_user', array( $this, 'bump_cache_salt' ) );
+
 		// After init, so taxonomies registered by themes/plugins are all visible.
 		add_action( 'wp_loaded', array( $this, 'maybe_migrate_legacy_taxonomies' ) );
 
@@ -80,13 +94,51 @@ class AdminSettings {
 			return;
 		}
 
+		$this->bump_cache_salt();
+	}
+
+	/**
+	 * Bumps the cache salt unconditionally: every cached Markdown body is
+	 * rebuilt on the next request and every `ETag` changes once.
+	 *
+	 * Hooked directly to the site-wide changes listed in boot(); the option
+	 * handler above filters first and then calls this.
+	 */
+	public function bump_cache_salt(): void {
 		static $bumped = false;
 		if ( $bumped ) {
-			return; // Only one bump per request, even when multiple options change.
+			return; // Only one bump per request, even when several triggers fire.
 		}
 		$bumped = true;
 
 		update_option( 'sysmda_cache_salt', (string) time() );
+	}
+
+	/**
+	 * Hook: profile_update. Bumps the salt only when a user's **display name**
+	 * changed, because that is what the `author:` front-matter key prints.
+	 *
+	 * The guard is the whole point: `profile_update` fires on every user save,
+	 * and on a store with customer accounts that is often — bumping the salt
+	 * each time would flush the site's Markdown cache and reissue every `ETag`
+	 * for a change nothing in the output can see. An actual rename is rare, and
+	 * it moves no post's modification date, so it needs the bump.
+	 *
+	 * @param int   $user_id       Updated user.
+	 * @param mixed $old_user_data The user object as it was before the save.
+	 */
+	public function maybe_bump_for_author( $user_id, $old_user_data = null ): void {
+		if ( ! is_object( $old_user_data ) || ! isset( $old_user_data->display_name ) ) {
+			return;
+		}
+
+		$user = get_userdata( (int) $user_id );
+
+		if ( ! $user || (string) $old_user_data->display_name === (string) $user->display_name ) {
+			return;
+		}
+
+		$this->bump_cache_salt();
 	}
 
 	/**
