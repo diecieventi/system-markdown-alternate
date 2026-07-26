@@ -1553,6 +1553,17 @@ Sysmda_Test_Stream::$partial     = true;
 check( 'update: short write reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
 check( 'update: short write restores the file', $sysmda_wp_rules, Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
 
+// Short write on a file that was empty (or had just been created): the rollback
+// must still fire. "Empty is already the prior state" only holds when nothing
+// was written — half a directive on disk is a broken .htaccess like any other,
+// and truncating back to zero bytes is what undoes it.
+Sysmda_Test_Stream::$data        = array( $sysmda_fake_htaccess => '' );
+Sysmda_Test_Stream::$fail_writes = 2;
+Sysmda_Test_Stream::$partial     = true;
+
+check( 'update: short write on an empty file reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
+check( 'update: short write on an empty file leaves nothing behind', '', Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
 // The successful path must still work through the same wrapper: the rollback
 // must not fire when the write went through.
 Sysmda_Test_Stream::$data        = array( $sysmda_fake_htaccess => $sysmda_wp_rules );

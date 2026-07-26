@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.26.2
+Stable tag: 0.26.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -238,6 +238,14 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.26.3 =
+
+* **The `.htaccess` rollback added in 0.26.2 now also covers a file that was
+  empty.** A write that fell short left half a rule behind even when the file
+  had just been created, and the rollback skipped that case on the assumption
+  that "empty" was already the previous state. It is not, once something has
+  been written: the file is now truncated back to zero bytes.
 
 = 0.26.2 =
 
