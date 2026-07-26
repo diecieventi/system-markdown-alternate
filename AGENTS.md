@@ -100,7 +100,12 @@ The v1 scope is done and widely exceeded. Implemented:
   `If-Modified-Since` is honoured **only while the date is a strong validator**:
   when the taxonomy block is emitted the body can change without
   `post_modified_gmt` moving, so the date check is skipped and the (taxonomy-aware)
-  `ETag` is the sole validator.
+  `ETag` is the sole validator. The `ETag` itself is **weak** (`W/"…"`, since
+  `0.28.0` — see the decision below) and `If-None-Match` is compared with the
+  weak comparison RFC 9110 requires: the `W/` flag is ignored on both sides, and
+  so is the `-gzip`/`-br` suffix Apache appends inside the quotes when it
+  compresses a response (`DeflateAlterETag AddSuffix`, the default — without
+  that, gzip clients on a stock Apache never revalidate).
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
   against the source permalink** (document-relative, `../`, root-relative,
@@ -288,6 +293,17 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ### To check next time (not urgent, parked here)
 
+- **Decision pending — heuristic freshness on the `.md` URLs** (F4 of
+  `docs/etag-cache-review-2026-07.md`): sending *no* `Cache-Control` is not the
+  same as "must revalidate". RFC 9111 §4.2.2 lets a cache invent a lifetime when
+  none is given (Varnish's stock `default_ttl` is 120 s; the usual heuristic is a
+  fraction of the age since `Last-Modified`, which on an old post is long), so
+  the current headers do not actually guarantee what the "NO freshness
+  `Cache-Control`" decision assumes they do. The candidate is
+  `Cache-Control: public, max-age=0, must-revalidate` on `.md` only — the
+  opposite of a freshness lifetime, and strictly closer to that decision's own
+  goal. Not implemented: it is the maintainer's call, since the decision says
+  "do not propose again" about `max-age`.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -432,6 +448,21 @@ The v1 scope is done and widely exceeded. Implemented:
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
   (+ `featured_image_alt`).
+- **The `ETag` is weak (`W/"…"`) and stays weak** (decided July 2026, `0.28.0`,
+  outcome of the ETag/cache review — see `docs/etag-cache-review-2026-07.md`):
+  the validator is computed from metadata (modification date, plugin version,
+  settings salt, the two fingerprints), never from the bytes — computing it from
+  the bytes would mean generating the body before deciding whether to send it,
+  which is the entire point of the `304`. A strong tag promises byte-for-byte
+  identity (RFC 9110 §8.8.1) and this one cannot: `sysmda_markdown_cache_dependencies`
+  exists precisely because dynamic blocks, shortcodes and site filters can move
+  the body on their own, and a validator with a documented escape hatch is by
+  definition not byte-exact. Nothing is given up — strong comparison is only
+  required by `If-Match` and `If-Range`, neither of which this endpoint
+  implements, while `If-None-Match` always uses weak comparison. Do NOT "restore"
+  a strong tag: it would be a promise the plugin cannot keep. Corollary in
+  `etag_matches()`: compare with the `W/` flag ignored **on both sides**, and
+  ignore Apache's `-gzip`/`-br` suffix as well.
 - **NO freshness `Cache-Control` on the dedicated `.md` URLs** (decided, do not
   propose again; scope clarified July 2026): the `.md` URLs get no
   `Cache-Control`/`max-age` — they are their own cache key (no poisoning
@@ -727,7 +758,7 @@ Default exclusions:
    (`post_modified_gmt|SYSMDA_VERSION|salt`, plus the taxonomy fingerprint when
    that feature is on); `/llms.txt` cached under `sysmda_llms_txt`. Everything
    through the `Cache` helper (persistent object cache or transients). The
-   **same hash is the strong `ETag`** of the `.md` response
+   **same hash is the (weak) `ETag`** of the `.md` response
    (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
    work even when the body cache is off. **Anything that can change the emitted
@@ -755,6 +786,17 @@ Default exclusions:
    a client sending only `If-Modified-Since` never presents the ETag, so a
    fingerprint that lives in the ETag alone still answers `304` with a stale
    body.
+   **Not every input belongs in the hash, though** (0.28.0): three of them are
+   *site-wide* — the author's display name (`author:`), the permalink structure
+   and the home URL (`url:`, `markdown_url:`, every absolute link in the body).
+   Reading them per request would make both fingerprints non-empty for every
+   post, which invalidates the whole site on upgrade **and** permanently
+   disables the `If-Modified-Since` path. They are rare, one-off events, so
+   `AdminSettings` bumps the global salt instead
+   (`update_option_permalink_structure`, `update_option_home`, `profile_update`
+   guarded on an actual display-name change, `deleted_user` for the silent
+   reassignment `wp_delete_user()` performs with a direct DB write). Prefer that
+   shape for anything else that is site-wide and rare.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

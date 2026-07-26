@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.27.0
+Stable tag: 0.28.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -187,7 +187,10 @@ link.
 
 Yes (default 24h). It uses a persistent object cache when one is available and
 falls back to transients otherwise. The cache is regenerated automatically when
-the post is edited, when the plugin is updated, or when you save the settings.
+the post is edited, when the plugin is updated, or when you save the settings —
+and also when something outside the post changes what the Markdown says: a
+synced pattern, the featured image, the description, an ACF field, the author's
+display name, the permalink structure or the site address.
 
 = Can I customize the plugin from my own code? =
 
@@ -238,6 +241,37 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.28.0 =
+
+* **The `ETag` of a Markdown response is now a weak validator (`W/"…"`).** It is
+  built from the post's modification date, the plugin version, your settings and
+  the dependency fingerprints — never from the bytes of the response, which
+  would mean building the page before deciding whether to send it and would
+  defeat the point of a `304`. A strong `ETag` claims the response is identical
+  byte for byte, and with dynamic blocks, shortcodes or site filters in the mix
+  that is a promise the plugin cannot make. Nothing changes for clients:
+  `If-None-Match` has always been compared this way, and a validator issued by
+  an earlier version still revalidates.
+* **Revalidation now survives Apache's compression.** `mod_deflate` and
+  `mod_brotli` rewrite the `ETag` of a compressed response by appending `-gzip`
+  or `-br` inside the quotes — their default — and the browser sends that back.
+  It no longer matched, so a compressed `.md` on a stock Apache re-sent the
+  whole body on every visit instead of answering `304`. The suffix is now
+  ignored, as is the weak flag on either side.
+* **Renaming an author, changing the permalink structure or moving the site
+  address now refresh the Markdown.** The `author:` line comes from the user's
+  display name, and `url:` / `markdown_url:` (plus every absolute link in the
+  body) from the permalink settings — none of which touch a post, so nothing
+  invalidated the cached body or the `ETag` and a client that already had the
+  page was told "not modified" indefinitely. All three now rebuild the cache
+  once. Deleting a user and reassigning their posts does the same.
+  A profile save that does not change the display name changes nothing, so
+  ordinary user activity (customer accounts and the like) costs nothing.
+
+Upgrade note: every `.md` gets a new `ETag` once, in the `W/"…"` form, so the
+first conditional request after the update returns the full body instead of a
+`304`.
 
 = 0.27.0 =
 

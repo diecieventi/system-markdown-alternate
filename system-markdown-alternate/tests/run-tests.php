@@ -43,6 +43,7 @@ $GLOBALS['sysmda_test_terms']       = array(); // post ID => taxonomy => term ob
 $GLOBALS['sysmda_test_taxonomies']  = array(); // post type => taxonomy slug => object
 $GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return value
 $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
+$GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -65,6 +66,18 @@ function parse_blocks( $content ) {
 
 function get_option( $name, $default = false ) {
 	return array_key_exists( $name, $GLOBALS['sysmda_test_options'] ) ? $GLOBALS['sysmda_test_options'][ $name ] : $default;
+}
+
+/** Stub: option writes land in the map the get_option() stub reads. */
+function update_option( $name, $value ) {
+	$GLOBALS['sysmda_test_options'][ $name ] = $value;
+
+	return true;
+}
+
+/** Stub: user objects, read when a display-name change invalidates the cache. */
+function get_userdata( $user_id ) {
+	return isset( $GLOBALS['sysmda_test_users'][ $user_id ] ) ? $GLOBALS['sysmda_test_users'][ $user_id ] : false;
 }
 
 function get_permalink( $post ) {
@@ -1146,6 +1159,9 @@ $GLOBALS['sysmda_test_status'] = array();
 unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"' . $sysmda_cv( $sysmda_cv_post ) . '"';
 check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+// The tag this version issues comes back in its weak form, and revalidates too.
+$_SERVER['HTTP_IF_NONE_MATCH'] = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check( 'conditional: the weak tag we issue yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
 check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
@@ -1234,6 +1250,31 @@ check( 'etag: no match', false, MarkdownController::etag_matches( '"xyz"', '"abc
 check( 'etag: list containing match', true, MarkdownController::etag_matches( '"xyz", "abc"', '"abc"' ) );
 check( 'etag: weak W/ prefix', true, MarkdownController::etag_matches( 'W/"abc"', '"abc"' ) );
 check( 'etag: empty header', false, MarkdownController::etag_matches( '', '"abc"' ) );
+
+// The response tag is weak (the validator is computed from metadata, never from
+// the bytes, so byte-for-byte identity cannot be promised — see etag()).
+$sysmda_etag_method = new ReflectionMethod( MarkdownController::class, 'etag' );
+$sysmda_etag_method->setAccessible( true );
+check( 'etag: the emitted tag is weak', 'W/"abc"', $sysmda_etag_method->invoke( null, 'abc' ) );
+
+// Weak comparison ignores the flag on BOTH sides (RFC 9110 §8.8.3.2). The first
+// case is the upgrade path: a client still holding the strong tag issued before
+// this version must keep revalidating instead of re-downloading forever.
+check( 'etag: strong client tag vs weak resource tag', true, MarkdownController::etag_matches( '"abc"', 'W/"abc"' ) );
+check( 'etag: weak on both sides', true, MarkdownController::etag_matches( 'W/"abc"', 'W/"abc"' ) );
+check( 'etag: weak tags still compare by value', false, MarkdownController::etag_matches( 'W/"xyz"', 'W/"abc"' ) );
+
+// Apache rewrites the tag of a compressed response by appending the coding
+// inside the quotes (`DeflateAlterETag AddSuffix` / `BrotliAlterETag`, both the
+// default). The client echoes back what it received, so ignoring the suffix is
+// what keeps 304 working at all on a stock Apache serving gzip.
+check( 'etag: mod_deflate -gzip suffix', true, MarkdownController::etag_matches( '"abc-gzip"', 'W/"abc"' ) );
+check( 'etag: mod_brotli -br suffix', true, MarkdownController::etag_matches( 'W/"abc-br"', 'W/"abc"' ) );
+check( 'etag: suffix in a list', true, MarkdownController::etag_matches( '"xyz", W/"abc-gzip"', 'W/"abc"' ) );
+// Only a trailing suffix, and only those two: nothing else may be trimmed off a
+// validator before comparing it.
+check( 'etag: -gzip not stripped mid-value', false, MarkdownController::etag_matches( '"abc-gzip-x"', 'W/"abc"' ) );
+check( 'etag: unknown suffix is not stripped', false, MarkdownController::etag_matches( '"abc-zstd"', 'W/"abc"' ) );
 
 // ─── LiteSpeedCompat ─────────────────────────────────────────────────────────
 
@@ -1441,6 +1482,50 @@ check(
 	"gravityforms/form\nhttps://example.com/a:b",
 	$sysmda_admin->sanitize_lines( "gravityforms/form\nhttps://example.com/a:b" )
 );
+
+// ─── AdminSettings: the cache salt follows site-wide output inputs ────────────
+//
+// The `author:` front-matter key prints a user's display name, and `url:` /
+// `markdown_url:` (plus every absolute link in the body) are built from the
+// permalink structure and the home URL. None of those live in a post row, so
+// nothing moves `post_modified_gmt` when they change: without a salt bump a
+// client holding the old ETag is told `304` for good — staleness no TTL bounds.
+//
+// Order matters here. bump_cache_salt() deliberately bumps at most once per
+// request, so every "must NOT bump" case has to run before the first real bump.
+
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$GLOBALS['sysmda_test_users'][7]                     = (object) array( 'display_name' => 'Jamie Rivers' );
+
+// A profile save that leaves the display name alone: the output cannot change,
+// and on a store with customer accounts this fires constantly.
+$sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+check( 'salt: unchanged display name does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Hooks that pass no user object at all (or an unknown user) must be inert too.
+$sysmda_admin->maybe_bump_for_author( 7, null );
+$sysmda_admin->maybe_bump_for_author( 999, (object) array( 'display_name' => 'Ghost' ) );
+check( 'salt: a profile update without usable data does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Options that are not ours, and the two of ours that must never bump.
+$sysmda_admin->maybe_bump_cache_salt( 'blogname' );
+$sysmda_admin->maybe_bump_cache_salt( 'sysmda_cache_salt' );
+$sysmda_admin->maybe_bump_cache_salt( HitCounter::OPTION );
+check( 'salt: unrelated and excluded options do not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// The rename itself: the author line of every post by that user changes.
+$GLOBALS['sysmda_test_users'][7]->display_name = 'Jamie R.';
+$sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+check( 'salt: a display-name change bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// One bump per request, whatever else fires afterwards (a settings save can
+// write a dozen options; each would otherwise reissue every ETag again).
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = 'already-bumped';
+$sysmda_admin->bump_cache_salt();
+$sysmda_admin->maybe_bump_cache_salt( AdminSettings::OPTION_TAXONOMIES );
+check( 'salt: only one bump per request', 'already-bumped', get_option( 'sysmda_cache_salt' ) );
+
+unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'], $GLOBALS['sysmda_test_users'][7] );
 
 // ─── ContentRenderer::process_dom (DOM pipeline) ──────────────────────────────
 

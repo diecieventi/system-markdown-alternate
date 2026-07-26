@@ -251,10 +251,21 @@ successful `.md` response carries:
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
 - `ETag` + `Last-Modified`, with conditional `304 Not Modified` support
   (`If-None-Match` takes priority over `If-Modified-Since`). When the
-  `taxonomies:` block is emitted, `If-Modified-Since` is **ignored**: the body
-  can then change without `post_modified_gmt` moving, so only the
-  taxonomy-aware `ETag` can prove a cached copy is still current.
-  `Last-Modified` is still sent, as information.
+  `taxonomies:` block is emitted — or the post has any other dependency outside
+  its own row — `If-Modified-Since` is **ignored**: the body can then change
+  without `post_modified_gmt` moving, so only the fingerprinted `ETag` can prove
+  a cached copy is still current. `Last-Modified` is still sent, as information.
+
+  Since `0.28.0` the `ETag` is **weak** (`W/"…"`). It is derived from the post's
+  modification date, the plugin version, the settings salt and the dependency
+  fingerprints — not from the response bytes — so it asserts *semantic*
+  equivalence, not the byte-for-byte identity a strong tag claims. This changes
+  nothing for clients: `If-None-Match` is defined to use weak comparison, and
+  the endpoint implements neither `If-Match` nor `If-Range` (the only two things
+  that need a strong tag). Incoming validators are compared with the `W/` flag
+  ignored on both sides, so a tag issued by an earlier version, or weakened by
+  an intermediary, still revalidates; Apache's `-gzip`/`-br` compression suffix
+  is ignored as well.
 
 Two request paths reach the same Markdown:
 
