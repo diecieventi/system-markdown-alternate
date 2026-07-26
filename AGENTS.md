@@ -742,6 +742,14 @@ Default exclusions:
    "my output changes and the `.md` does not", not a new special case in the
    controller. Both fingerprints stay empty when they have nothing to describe,
    which is what keeps an upgrade from invalidating every plain post.
+   **Two traps, both hit while fixing exactly this:** (a) synced patterns must
+   be followed **transitively** — an article → pattern A → pattern B chain
+   renders B, so recording only A leaves the validator stale one level down
+   (cycle guard required, as in `BlockCleaner`); (b) every input added to
+   `cache_version()` MUST also be reflected in `date_is_strong_validator()` —
+   a client sending only `If-Modified-Since` never presents the ETag, so a
+   fingerprint that lives in the ETag alone still answers `304` with a stale
+   body.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

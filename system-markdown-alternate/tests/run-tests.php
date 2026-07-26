@@ -992,6 +992,47 @@ check(
 	$sysmda_dep_before !== $sysmda_cv( $sysmda_dep_post )
 );
 
+// Transitive references: the article points at pattern 99, which itself embeds
+// pattern 98. BlockCleaner expands both, so editing only 98 changes the body
+// while the article AND pattern 99 stay untouched.
+$GLOBALS['sysmda_test_posts'][99]->post_content = 'PATTERN V1';
+$GLOBALS['sysmda_test_parsed']['PATTERN V1']    = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 98 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+$GLOBALS['sysmda_test_posts'][98] = new WP_Post(
+	array(
+		'ID'                => 98,
+		'post_type'         => 'wp_block',
+		'post_content'      => 'NESTED',
+		'post_modified_gmt' => '2026-07-01 09:00:00',
+	)
+);
+
+$sysmda_nested_before = $sysmda_cv( $sysmda_dep_post );
+$GLOBALS['sysmda_test_posts'][98]->post_modified_gmt = '2026-07-03 12:00:00';
+check(
+	'cache_version: editing a nested synced pattern moves the ETag',
+	true,
+	$sysmda_nested_before !== $sysmda_cv( $sysmda_dep_post )
+);
+
+// A reference cycle must not recurse forever: 98 points back at 99.
+$GLOBALS['sysmda_test_posts'][98]->post_content = 'CYCLE';
+$GLOBALS['sysmda_test_parsed']['CYCLE']         = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 99 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+check( 'cache_version: reference cycle terminates', true, '' !== $sysmda_cv( $sysmda_dep_post ) );
+
 // A post with a featured image: swapping the image or rewriting its alt text
 // changes the front matter without touching the post row.
 $sysmda_img_post = new WP_Post(
@@ -1029,6 +1070,10 @@ check(
 	true,
 	$sysmda_desc_before !== $sysmda_cv( $sysmda_cv_post )
 );
+// Leave post 61 dependency-free: the conditional-request tests below use it as
+// the post whose date IS a strong validator, which a lingering description
+// would silently turn into the opposite case.
+unset( $GLOBALS['sysmda_test_meta'][61]['rank_math_description'] );
 
 // Escape hatch for output this plugin cannot fingerprint (dynamic blocks,
 // shortcodes, site filters reading options or remote data).
@@ -1104,6 +1149,26 @@ check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->i
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
 check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+
+// The same rule for the out-of-post dependencies, and it is NOT covered by the
+// taxonomy check above: a client sending only If-Modified-Since never presents
+// the ETag, so folding synced patterns, the featured image, the description and
+// ACF into the ETag alone still answered 304 with a stale body. Reported as a P1
+// on the PR that introduced the fingerprint. Fails when date_is_strong_validator()
+// looks at the taxonomy fingerprint only.
+$GLOBALS['sysmda_test_filters'] = array();
+$sysmda_dep_since               = gmdate( 'D, d M Y H:i:s', strtotime( '2026-07-05 08:30:00 GMT' ) ) . ' GMT';
+check(
+	'conditional: IMS ignored while the post has out-of-post dependencies',
+	false,
+	$sysmda_ims( $sysmda_dep_post, $sysmda_dep_since )
+);
+check( 'conditional: no 304 for a post with dependencies', array(), $GLOBALS['sysmda_test_status'] );
+check(
+	'conditional: IMS still honoured for a post with none',
+	true,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_dep_since )
+);
 
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();

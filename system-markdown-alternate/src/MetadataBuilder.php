@@ -272,12 +272,8 @@ class MetadataBuilder {
 	public static function dependencies_fingerprint( \WP_Post $post ): string {
 		$parts = array();
 
-		foreach ( self::synced_pattern_refs( parse_blocks( (string) $post->post_content ) ) as $ref ) {
-			$pattern = get_post( $ref );
-			$parts[] = $pattern instanceof \WP_Post
-				? 'block:' . $ref . ':' . (string) $pattern->post_modified_gmt
-				: 'block:' . $ref . ':missing';
-		}
+		$seen = array();
+		self::collect_pattern_refs( parse_blocks( (string) $post->post_content ), $seen, $parts );
 
 		$thumb_id = (int) get_post_thumbnail_id( $post );
 		if ( $thumb_id > 0 ) {
@@ -311,30 +307,46 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Reference IDs of every `core/block` (synced pattern) in a block tree,
-	 * nested ones included. Mirrors what BlockCleaner expands, so the validator
-	 * covers exactly what the body can contain.
+	 * Collects a fingerprint part for every `core/block` (synced pattern) the
+	 * body can contain, following references **transitively**.
 	 *
-	 * @param array $blocks Parsed blocks.
-	 * @return int[]
+	 * It has to walk into each referenced `wp_block`'s own content, not just the
+	 * article's parse tree: `BlockCleaner::expand_reusable()` expands patterns
+	 * recursively, so an article → pattern A → pattern B chain renders B's
+	 * content. Recording only A's timestamp would leave the validator stale when
+	 * B alone is edited — the exact failure this fingerprint exists to prevent,
+	 * one level down.
+	 *
+	 * `$seen` is both the cycle guard (a pattern that references itself, directly
+	 * or through another, would recurse forever — BlockCleaner guards the same
+	 * way) and the deduplicator for a pattern used more than once.
+	 *
+	 * @param array  $blocks Parsed blocks.
+	 * @param array  $seen   Reference IDs already visited, by ID.
+	 * @param array  $parts  Fingerprint parts, appended to.
 	 */
-	private static function synced_pattern_refs( array $blocks ): array {
-		$refs = array();
-
+	private static function collect_pattern_refs( array $blocks, array &$seen, array &$parts ): void {
 		foreach ( $blocks as $block ) {
 			if ( isset( $block['blockName'] ) && 'core/block' === $block['blockName'] ) {
 				$ref = isset( $block['attrs']['ref'] ) ? (int) $block['attrs']['ref'] : 0;
-				if ( $ref > 0 ) {
-					$refs[] = $ref;
+
+				if ( $ref > 0 && ! isset( $seen[ $ref ] ) ) {
+					$seen[ $ref ] = true;
+					$pattern      = get_post( $ref );
+
+					if ( $pattern instanceof \WP_Post ) {
+						$parts[] = 'block:' . $ref . ':' . (string) $pattern->post_modified_gmt;
+						self::collect_pattern_refs( parse_blocks( (string) $pattern->post_content ), $seen, $parts );
+					} else {
+						$parts[] = 'block:' . $ref . ':missing';
+					}
 				}
 			}
 
 			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-				$refs = array_merge( $refs, self::synced_pattern_refs( $block['innerBlocks'] ) );
+				self::collect_pattern_refs( $block['innerBlocks'], $seen, $parts );
 			}
 		}
-
-		return array_values( array_unique( $refs ) );
 	}
 
 	/**

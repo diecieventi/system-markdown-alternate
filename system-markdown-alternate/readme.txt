@@ -248,6 +248,10 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
   stays put — so a client that already had the page kept being told "not
   modified" and went on showing the old content, whether or not the body cache
   was enabled. Those inputs are now part of the validator.
+  A synced pattern that embeds another one is followed all the way down, and
+  the same rule now applies to the `If-Modified-Since` check, not only to the
+  `ETag`: a client that sends just a date is no longer told "not modified" when
+  one of those inputs has changed.
 * **New filter `sysmda_markdown_cache_dependencies`** for output the plugin
   cannot fingerprint on its own (dynamic blocks, shortcodes, site filters that
   read options or remote data): return any value that changes the Markdown and

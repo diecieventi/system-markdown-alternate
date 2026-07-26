@@ -479,11 +479,17 @@ class MarkdownController {
 	/**
 	 * Whether `post_modified_gmt` alone determines the emitted Markdown.
 	 *
-	 * False as soon as something can change the output without touching the
-	 * post's modification date — today only the optional taxonomy block.
+	 * False as soon as ANYTHING can change the output without touching the
+	 * post's modification date. That means both fingerprints, not just the
+	 * taxonomy one: a client sending `If-Modified-Since` without an
+	 * `If-None-Match` never presents the ETag, so folding the out-of-post
+	 * dependencies into the ETag alone would still answer `304` with a stale
+	 * body after a synced pattern, featured image, description or ACF change.
+	 * Every input added to cache_version() must be reflected here too.
 	 */
 	private function date_is_strong_validator( \WP_Post $post ): bool {
-		return '' === MetadataBuilder::taxonomies_fingerprint( $post );
+		return '' === MetadataBuilder::taxonomies_fingerprint( $post )
+			&& '' === MetadataBuilder::dependencies_fingerprint( $post );
 	}
 
 	/**
