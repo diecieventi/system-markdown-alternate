@@ -335,13 +335,17 @@ class LiteSpeedCompat {
 
 		$ok = self::overwrite( $handle, $new );
 
-		if ( ! $ok && '' !== $contents ) {
+		if ( ! $ok ) {
 			// The truncate has already emptied the live .htaccess, so a write that
 			// fails or falls short (a full disk is the usual cause) would leave the
 			// site with an empty or half-written config: dead permalinks, or a 500
 			// from a rule cut in two. Put the previous contents back before the lock
 			// is released. Best effort — if that write fails too there is nothing
 			// left to try, and the one-time .sysmda-bak snapshot is the fallback.
+			//
+			// Empty previous contents are restored too, and deliberately so: a short
+			// write leaves half a directive behind even on a file we just created,
+			// and truncating back to zero bytes is what undoes it.
 			self::overwrite( $handle, $contents );
 		}
 
