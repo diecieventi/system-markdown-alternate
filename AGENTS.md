@@ -700,8 +700,14 @@ The v1 scope is done and widely exceeded. Implemented:
   company name **must NEVER appear** in artifacts (code, commits, readme).
 - **GitHub home**: personal account **`diecieventi`**
   (`github.com/diecieventi/system-markdown-alternate`); `Plugin URI` and
-  `composer.json` point there. `Author URI` → `webdietrolequinte.it` (the site's
-  domain, unchanged).
+  `composer.json` point there. `Author URI` → **`https://diecieventi.com/`**
+  (changed in `0.30.1`; it used to be `webdietrolequinte.it`). The reason is
+  wordpress.org **entity validation**: the URI has to identify the entity named
+  in `Author`, and "Diecieventi Digital Marketing" is not what
+  `webdietrolequinte.it` represents — that domain is the reference *site*, which
+  is why it still appears throughout the measurement notes and must stay there.
+  Keep the two apart when editing: `Author URI` is the author's identity,
+  `webdietrolequinte.it` is the host things were measured on.
 - **wordpress.org**: `Contributors:` in `readme.txt` is set to **`system4pc`**
   (the existing account: the username cannot be renamed, only the Display Name
   can change). Publishing from a new `diecieventi` account and updating the field

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.30.0
+Stable tag: 0.30.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -321,6 +321,12 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.30.1 =
+
+* The plugin's **Author URI** now points to `https://diecieventi.com/`, the site
+  of the author named in the header, instead of a different site run by the same
+  author. Metadata only — no code, output or behaviour changes.
 
 = 0.30.0 =
 

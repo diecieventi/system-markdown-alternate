@@ -3,11 +3,11 @@
  * Plugin Name:       System Markdown Alternate
  * Plugin URI:        https://github.com/diecieventi/system-markdown-alternate
  * Description:       Exposes a clean Markdown version of your posts (readable by LLMs, agents and technical tools) by appending .md to the permalink.
- * Version:           0.30.0
+ * Version:           0.30.1
  * Requires at least: 6.1
  * Requires PHP:      7.4
  * Author:            Diecieventi Digital Marketing
- * Author URI:        https://webdietrolequinte.it
+ * Author URI:        https://diecieventi.com/
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       system-markdown-alternate
@@ -19,7 +19,7 @@ namespace Diecieventi\SystemMarkdownAlternate;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SYSMDA_VERSION', '0.30.0' );
+define( 'SYSMDA_VERSION', '0.30.1' );
 define( 'SYSMDA_PLUGIN_FILE', __FILE__ );
 define( 'SYSMDA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SYSMDA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
