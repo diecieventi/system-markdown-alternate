@@ -7,6 +7,11 @@ name: Deploy to WordPress.org
 # `release: published` event does not fire (observed to be unreliable for releases
 # created as drafts and published later, with distant `created_at` and
 # `published_at` timestamps).
+# It also does not fire for a Release published by the "Publish release"
+# workflow: GitHub raises no workflow-starting event from the default
+# GITHUB_TOKEN. Either run this one manually with the tag, or add a
+# RELEASE_TOKEN secret (a PAT with `contents: write`), which that workflow
+# prefers when present and whose events do start other workflows.
 # Once accepted on wordpress.org:
 #   1. add the SVN_USERNAME / SVN_PASSWORD repository secrets
 #      (Settings → Secrets and variables → Actions);
