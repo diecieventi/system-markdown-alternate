@@ -524,8 +524,13 @@ The v1 scope is done and widely exceeded. Implemented:
   3. **the user merges from the GitHub UI with "Squash and merge"** — `main`
      history stays linear, one commit per PR, no merge commits. Agents do
      NOT merge PRs themselves unless the user explicitly asks in that session.
-  4. CI (lint + pure-logic tests on PHP 7.4/8.4) runs on every PR: a red PR
-     must not be merged — fix the branch first.
+  4. CI runs on every PR and all three checks are **required** by the branch
+     protection on `main`: `PHP 7.4` and `PHP 8.4` (lint + pure-logic tests)
+     and `PHPCS (WordPress standards)`. A red PR cannot be merged — fix the
+     branch first. PHPCS blocks on **errors** only; warnings stay annotations
+     (see "Code conventions"). Adding a job to `ci.yml` does NOT make it
+     blocking: the check name has to be added to the required list in
+     Settings → Branches as well.
   If `main` moves while a PR is open, rebase the branch on `origin/main` and
   push with `--force-with-lease`. The user still syncs their Mac with a single
   `git pull origin main`, unchanged.

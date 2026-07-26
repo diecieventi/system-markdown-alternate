@@ -139,12 +139,10 @@ composer phpcs     # report violations
 composer phpcbf    # auto-fix the mechanical ones
 ```
 
-The ruleset lives in [`system-markdown-alternate/phpcs.xml.dist`](system-markdown-alternate/phpcs.xml.dist):
-`WordPress-Core` + `WordPress-Extra` plus `PHPCompatibilityWP` targeting PHP 7.4+.
-`WordPress.Files.FileName` is disabled because it conflicts with PSR-4 class
-filenames, and `WordPress-Docs` is not enabled because its mandatory `@param`
-tags are redundant with the native type declarations used throughout. CI fails
-on errors; warnings are reported as annotations.
+The ruleset lives in [`system-markdown-alternate/phpcs.xml.dist`](system-markdown-alternate/phpcs.xml.dist)
+— `WordPress-Core` + `WordPress-Extra` plus `PHPCompatibilityWP` — where every
+deliberately disabled sniff carries its rationale inline. CI runs PHPCS on every
+pull request and fails on errors; warnings are reported as annotations.
 
 ## Requirements
 
