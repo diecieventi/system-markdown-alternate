@@ -306,16 +306,39 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ### To check next time (not urgent, parked here)
 
-- **Verify the caching contract on a second stack** (`0.29.0` shipped it, and
-  the measurement that justified it came from one host): the useful check is
-  whether a `.md` starts producing `304`s once it is storable again. On
-  webdietrolequinte.it (nginx/RunCache behind Cloudflare) conditional requests
-  never reached PHP at all — even with the page cache in `BYPASS` — which points
-  at nginx stripping `If-None-Match` upstream when caching is configured for the
-  location. If it stays that way after `0.29.0`, the `304` will come from nginx
-  rather than PHP, which is fine; if a host ignores `Cache-Control` on the way
-  in (`fastcgi_ignore_headers`), staleness returns and the answer is a purge
-  integration, not a header.
+- **The caching contract is done; the `304` is a host property, not a gap.**
+  Measured on webdietrolequinte.it (RunCloud/nginx behind Cloudflare) right
+  after `0.29.0` shipped. Recorded as a closed measurement, NOT as pending
+  work — nothing here calls for a plugin change, and the maintainer has
+  explicitly declined to hand-tune the server for it. Re-measuring on a second,
+  differently configured stack is the only thing still worth doing, and only
+  out of curiosity. What was found:
+  - the headers are correct — `public, max-age=0, must-revalidate`, no
+    `Expires`, `ETag` and `Last-Modified` present, negotiated route still
+    `no-store` — and **no `304` is ever produced**;
+  - the reason is not the plugin: `If-None-Match: *` also answers `200`, and
+    that wildcard makes `etag_matches()` return true without comparing
+    anything, so PHP demonstrably never receives the header. Confirmed against
+    the origin directly (`--resolve`, `server: nginx-rc`): the header is gone
+    **before** Cloudflare, stripped by nginx, which removes conditional headers
+    from the upstream request when caching is configured for the location —
+    it wants the whole entity to store, then declines to store it because
+    `max-age=0` says it is stale on arrival. Fixable only in the host's nginx
+    config (exclude `.md` from the cached location), and **deliberately not
+    done**: a `304` saves the body, ~12 KB, not the ~1 s of WordPress boot that
+    dominates the response (measured: TTFB ~1.0–1.2 s on `.md`, ~0.4 s on a
+    page-cache hit of the same article in HTML). The bottleneck is the boot, and
+    no header touches it. Do not "fix" this by shipping host-specific config:
+    the plugin sends a standard header that is correct everywhere and needs
+    tuning nowhere; a stack that forwards conditional headers gets its `304`s
+    for free.
+  - Cloudflare **weakens strong ETags in transit**: `/llms.txt` emits `"…"` and
+    arrives as `W/"…"`. Live confirmation that the `0.28.0` weak-tag decision
+    was right, and that the symmetric comparison in `etag_matches()` is what
+    keeps the round trip possible at all.
+  A host that ignores `Cache-Control` on the way in
+  (`fastcgi_ignore_headers`) would instead reintroduce staleness, and the
+  answer there is a purge integration, not a header.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -628,7 +651,21 @@ The v1 scope is done and widely exceeded. Implemented:
 Developed and tested against a stack based on **GeneratePress/GenerateBlocks
 2.x**, **ACF** and **Rank Math**. When testing over HTTP, keep in mind that a
 **WAF/CDN** may block non-browser User-Agents (e.g. `curl` as a "bad bot"): use
-a browser User-Agent.
+a browser User-Agent. Observed on the reference site (RunCloud 8G firewall):
+`curl/*` **and `ClaudeBot`** are answered with a `302` to
+`/RUNCLOUD-8G-WAF-BLOCKED`, site-wide — HTML, `.md` and `/llms.txt` alike —
+while GPTBot, PerplexityBot, CCBot and the rest pass. A block page arriving
+instead of Markdown is a WAF, not a plugin bug; check the `Location` header
+before debugging anything else.
+
+Worth separating from the WAF, because the two look identical from a browser
+and are not: whether an AI client is *allowed* to fetch the `.md` is a
+`robots.txt` question, and Cloudflare can manage that file on the site's
+behalf (appending an AI-crawler section above WordPress's own rules). A site
+that blocks the training crawlers while allowing the user-initiated ones
+(`Claude-User`, `ChatGPT-User`, `OAI-SearchBot`, `PerplexityBot`) is not
+contradicting this plugin — that second group is exactly the audience the
+`.md` is for.
 
 **Test environment**: a staging site with GeneratePress/GenerateBlocks, ACF and
 WooCommerce on a recent WP / PHP 8.4, **without a persistent object cache**

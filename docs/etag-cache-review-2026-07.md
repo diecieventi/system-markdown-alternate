@@ -224,6 +224,35 @@ The fix is the candidate above, applied to the `.md` route and to `/llms.txt`,
 with `sysmda_cache_control` as the override. See the replacement decision in
 `AGENTS.md`.
 
+**Post-deploy measurement, same host.** The headers came out exactly as
+designed (`public, max-age=0, must-revalidate`, no `Expires`, negotiated route
+still `no-store`) and **still no `304`**. The prediction in the paragraph above
+— that the `304` would come back once the response was storable, delivered by
+nginx if not by PHP — was wrong, and for an instructive reason: `max-age=0`
+gives nginx nothing worth storing, so `x-runcache-status` stays `MISS`.
+
+The remaining cause was then isolated. `If-None-Match: *` also answers `200`,
+and that wildcard makes `etag_matches()` return true without comparing
+anything, so PHP demonstrably never sees the header. Tested against the origin
+directly (`--resolve`, `server: nginx-rc`, Cloudflare out of the path): still
+`200`. So it is **nginx**, not the CDN — it strips conditional headers from the
+upstream request wherever caching is configured for the location, `BYPASS`
+included.
+
+Closed without action, deliberately. The fix would be host-specific nginx
+configuration, and the prize is the ~12 KB body, not the ~1 s of WordPress boot
+that dominates the response (TTFB ~1.0–1.2 s on `.md` against ~0.4 s on a
+page-cache hit of the same article as HTML). **The conditional-request path is
+worth bandwidth, not time** — a good thing to have where the infrastructure
+allows it, never the answer to a slow origin. The plugin sends a standard
+header that is correct everywhere and needs tuning nowhere; a stack that
+forwards conditional headers gets its `304`s for free.
+
+One incidental confirmation: `/llms.txt` emits a strong `ETag` and it arrives
+at the client as `W/"…"`. Cloudflare weakens strong tags in transit, exactly as
+the `0.28.0` decision assumed — and the symmetric comparison in
+`etag_matches()` is what keeps that round trip viable.
+
 ### F5 — `Vary: Accept` can be overwritten downstream on the HTML branch
 
 **Severity:** Low. **Where:** `MarkdownController::send_vary_header()`.
