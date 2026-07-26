@@ -254,20 +254,31 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 
 = Does it work behind a CDN (Cloudflare, Fastly, Varnish)? =
 
-Yes, with no CDN configuration required, because the plugin never relies on the
-CDN keying its cache correctly:
+The `.md` URLs need nothing from you. The negotiated permalink depends on your
+CDN, and the difference matters:
 
 * the dedicated `.md` URLs are their own cache key — one URL, one
   representation, nothing to mix up. Any CDN may store them, and
   `Cache-Control: public, max-age=0, must-revalidate` means it must revalidate
-  before reuse, which is a cheap `304 Not Modified` when nothing changed;
-* the **negotiated** permalink (`Accept: text/markdown` on the HTML URL) is sent
-  `no-store` and is never cached by anyone. It shares its URL with the HTML
-  page, and whether a cache honours `Vary: Accept` depends on the host, so
-  safety cannot depend on it. `Vary: Accept` is still sent, for the caches that
-  do honour it.
+  before reuse, which is a cheap `304 Not Modified` when nothing changed. This
+  route works everywhere, with no configuration;
+* the **negotiated** permalink (`Accept: text/markdown` on the HTML page's own
+  URL) is sent `no-store`, so a Markdown response is never stored and can never
+  be handed to a browser that asked for HTML. That closes the harmful direction,
+  but it cannot fix the opposite one: if your CDN caches the HTML page by URL and
+  ignores `Vary: Accept`, a later Markdown request is answered at the edge, PHP
+  never runs, and the client simply gets HTML. `Vary: Accept` is sent on every
+  negotiable response, which is all a cache that honours it needs.
 
-Two things worth knowing. Some CDNs rewrite validators in transit — Cloudflare
+So for the negotiated route one of these has to be true: your CDN honours
+`Vary: Accept`, or you configure it to bypass the cache — or to vary its cache
+key — for requests whose `Accept` mentions `text/markdown`. On LiteSpeed the
+plugin ships that bypass for you: see the previous entry. If you are not sure
+which case you are in, the three-request test below tells you in a few seconds.
+And the `.md` URL keeps working regardless — it is what the `rel="alternate"`
+link and `/llms.txt` advertise, so agents following either one are unaffected.
+
+Two more things worth knowing. Some CDNs rewrite validators in transit — Cloudflare
 turns a strong `ETag` into a weak one — which the plugin handles: incoming
 validators are compared with the weak-comparison rules, so revalidation keeps
 working either way. And if you would rather have the CDN really cache the `.md`

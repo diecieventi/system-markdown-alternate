@@ -578,6 +578,19 @@ The v1 scope is done and widely exceeded. Implemented:
   `Vary: Accept` keeps being emitted in append mode (never overwrite: sites
   already vary on `User-Agent` for mobile/desktop caches), still correct for
   browsers/CDNs that do honour it.
+  **Know exactly what `no-store` buys, and do not oversell it** (clarified July
+  2026 after the `0.30.0` FAQ claimed "no CDN configuration required" and a
+  review correctly called it out): it is one-directional. It stops the Markdown
+  variant from being *stored* and later handed to a browser — the harmful
+  direction — and that protection is genuinely server-agnostic. It does nothing
+  about the reverse: when a URL-keyed cache already holds the HTML for the
+  permalink, the Markdown request is answered at the edge and PHP never runs, so
+  no header the plugin sends can matter and the client gets HTML. Making
+  negotiation *work* on such a host needs a cache bypass (the opt-in `.htaccess`
+  rules on LiteSpeed, a cache rule elsewhere) or a cache that honours `Vary`.
+  Safety is unconditional; functioning negotiation on a shared URL is not. Any
+  user-facing text about caches must keep the two apart, and the `.md` URL is the
+  answer that never depends on the host.
 - **Purge the LiteSpeed cache on plugin activation and deactivation** (decided):
   entries cached before activation carry no `Vary` and produce ghost behaviour
   that is very hard to diagnose. Purge-all via the LSCWP API
