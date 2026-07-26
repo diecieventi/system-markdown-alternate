@@ -717,7 +717,18 @@ The v1 scope is done and widely exceeded. Implemented:
   every release: bump `system-markdown-alternate.php` (both the `Version:` header
   **and** `SYSMDA_VERSION`), update `Stable tag` + changelog in `readme.txt`,
   `bash bin/build.sh`, commit, push the branch and open the PR (see the git
-  workflow below). **Tagging is automated**: merging a release PR triggers the
+  workflow below).
+  **The changelog is split, and it has to stay split** (from `0.30.2`): the
+  wordpress.org readme parser truncates a `Changelog` section longer than
+  **5000 characters** (`readme_parser_warnings_trimmed_section_changelog`), and
+  the full history had reached ~34 000. So `readme.txt` carries only the **three
+  most recent releases** and the complete history lives in
+  `system-markdown-alternate/changelog.txt`, which ships with the plugin (not
+  excluded by `.distignore` or `bin/build.sh` — keep it that way, it is the only
+  copy a user or reviewer gets). On every release: add the entry to **both**
+  files, then drop the now-fourth-oldest entry from `readme.txt`. Three entries
+  sit around 2500 characters, so there is headroom, but do not let it drift back
+  over the limit. **Tagging is automated**: merging a release PR triggers the
   `Release tag` workflow (`.github/workflows/release-tag.yml`), which runs
   `bin/release-tag.sh` and pushes the annotated `vX.Y.Z` tag with that version's
   changelog entries as notes (shown as "Notes" on the GitHub Tags page). It can
@@ -828,7 +839,8 @@ running code at the WP level.
 ├── DIST/                         ← distributable zip (versioned)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
-    ├── readme.txt                      ← wordpress.org format + changelog
+    ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
+    ├── changelog.txt                    ← full release history (shipped; readme.txt is capped at 5000 chars)
     ├── uninstall.php                   ← options + transients cleanup
     ├── .distignore                     ← exclusions for the WP.org package (SVN)
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4 (+ PHPCS dev tooling)
