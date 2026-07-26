@@ -782,9 +782,12 @@ WordPress.org Plugin Check.
   **deliberately not automatic** — publishing stays a decision, taken with one
   tap. Run the **`Publish release`** workflow
   (`.github/workflows/publish-release.yml`) from Actions → "Run workflow"; it
-  works from the GitHub mobile app, which is the point. The `tag` input defaults
+  works from the GitHub mobile app, which is the point. The `tags` input defaults
   to the most recent `vX.Y.Z`, so the usual case is a single tap with nothing to
-  fill in; name an older tag to catch one up. The job checks the tag out, runs
+  fill in; name older tags (one or several, space-separated) to backfill. Only
+  the newest tag in the repository is ever marked **"Latest"** — the API marks a
+  new Release as latest by default, which would drag the badge backwards on a
+  backfill. The job checks each tag out, runs
   `bin/build.sh` there and attaches the resulting
   `DIST/system-markdown-alternate.zip` (the auto-generated "Source code"
   archives are not an installable plugin), with the tag notes as the body. The

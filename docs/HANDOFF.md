@@ -84,7 +84,8 @@ agent is most likely to violate by accident:
   recovered with "Run workflow" from the Actions tab. **Publishing the GitHub
   Release is a manual button**, on purpose: the `Publish release` workflow,
   "Run workflow" from the Actions tab (the mobile app works), tag defaulting to
-  the most recent one, zip built from the tag and attached.
+  the most recent one (space-separate several to backfill), zip built from the
+  tag and attached.
 - After changes: `php -l` on touched files, `php system-markdown-alternate/tests/run-tests.php`,
   and `composer phpcs` (0 errors — warnings are pre-existing).
 - On a release: bump `Version:` + `SYSMDA_VERSION`, `readme.txt` (`Stable tag` +
