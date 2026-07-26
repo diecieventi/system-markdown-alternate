@@ -93,8 +93,9 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Conditional requests**: the `.md` response honours `If-None-Match` /
   `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
   already holds the current version. Validator = the existing cache-version hash
-  (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt), so a `304` always means the
-  cached body would be identical; `If-None-Match` takes priority over
+  (`post_modified_gmt` + `SYSMDA_VERSION` + settings salt + the taxonomy and
+  out-of-post dependency fingerprints, see "Technical notes" 6), so a `304`
+  always means the cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
   `If-Modified-Since` is honoured **only while the date is a strong validator**:
   when the taxonomy block is emitted the body can change without
@@ -641,6 +642,7 @@ apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   //
 apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
 apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
 apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
+apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );        // extra cache-validator/ETag inputs for output the plugin cannot fingerprint (dynamic blocks, shortcodes, site filters); list of scalars, [] = none
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 apply_filters( 'sysmda_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
@@ -706,6 +708,17 @@ Default exclusions:
    content, body cache or not. Custom taxonomies were the first such case
    (`MetadataBuilder::taxonomies_fingerprint()`); deleting the cache entry alone
    would NOT have been enough. Apply the same rule to any future addition.
+   **The rule was written for taxonomies and then broken by everything else**
+   (0.26.3 review, H1): synced patterns, the featured image and its alt text,
+   the Rank Math description and ACF fields all change the body from *outside
+   the post row*, so none of them moved the validator.
+   `MetadataBuilder::dependencies_fingerprint()` now covers exactly what the
+   plugin itself reads, and `sysmda_markdown_cache_dependencies` is the
+   documented way for a site to declare the rest (dynamic blocks, shortcodes,
+   filters reading options or remote data) — that filter is the answer to
+   "my output changes and the `.md` does not", not a new special case in the
+   controller. Both fingerprints stay empty when they have nothing to describe,
+   which is what keeps an upgrade from invalidating every plain post.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

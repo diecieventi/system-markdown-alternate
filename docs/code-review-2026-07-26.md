@@ -1,5 +1,25 @@
 # Complete code review — v0.26.3 (26 July 2026)
 
+> **Status: triaged, H1 and M3 fixed in `0.27.0`.** Every finding was verified
+> against the code before anything was changed; the outcome is recorded inline
+> under each one. Summary:
+>
+> | # | Outcome |
+> |---|---|
+> | H1 | **Fixed in 0.27.0** — reproduced first (body changed, ETag did not) |
+> | M1 | **Open — product decision**, not a code defect: needs a ruling on whether a reader who has entered the password may have the Markdown |
+> | M2 | **Open** — confirmed by inspection, same shape as H1 but for `/llms.txt` |
+> | M3 | **Fixed in 0.27.0** — reproduced |
+> | L1 | **Accepted, not fixed** — real but marginal, see the note under it |
+> | L2 | **Half accepted** — the wasted render is real; the counter claim was wrong and is corrected below |
+> | L3 | **Not reproduced as written, and misdiagnosed** — corrected below; the underlying flakiness was real and is fixed in `0.27.0` |
+> | L4 | **Accepted, not fixed** — requires a hostile/buggy site filter |
+>
+> Two corrections to this document are marked **[corrected]** where they occur:
+> the report was wrong about the hit counter (L2) and about the cause of the
+> test failure (L3). They are corrected in place with the reasoning rather than
+> quietly deleted, as with the `rename` advice in the previous review.
+
 ## Scope and outcome
 
 This review covers the functionality that is implemented and shipped today. It
@@ -99,6 +119,22 @@ fingerprint and inherently dynamic output.
 - Add integration tests that change each dependency without touching the parent
   post and assert that both the body cache and ETag change.
 
+**Outcome: confirmed by reproduction, fixed in `0.27.0`.** Reproduced against
+the real `BlockCleaner` before any change: an article referencing a synced
+pattern, the pattern edited, the article untouched — the body went from
+`Prezzo: 100 euro` to `Prezzo: 250 euro` while the validator stayed
+`c939d126b27b31c26f89a28aba1e4d4c`. A client holding that ETag keeps being told
+`304`.
+
+`MetadataBuilder::dependencies_fingerprint()` now folds in the synced patterns
+(nested ones included), the featured image plus its modification time and alt
+text, the Rank Math description, and the ACF fields the bundled integration
+reads — through the same filters, so the validator cannot drift from what is
+emitted. Inherently dynamic output cannot be fingerprinted and gets an explicit
+extension point instead: `sysmda_markdown_cache_dependencies`. The fingerprint
+is empty when a post has none of them, so plain posts keep the validator they
+already had. Four regression tests, all failing against `0.26.3`.
+
 ## Medium priority
 
 ### M1 — Password-cookie state defeats the “not password-protected” rule
@@ -125,6 +161,16 @@ never to be exposed as Markdown.
 `'' === (string) $post->post_password` in the centralized eligibility method.
 If cookie-authorized Markdown is intended instead, document it explicitly and
 align `/llms.txt` terminology/tests with that choice.
+
+**Outcome: open — this is a product decision, not a defect to fix.** The
+mechanics are confirmed: `post_password_required()` means "this visitor still
+has to supply it", so a valid `wp-postpass_*` cookie makes `is_servable()` true,
+while `/llms.txt` uses `has_password => false` and therefore applies a different
+rule. What is *not* settled is which behaviour is wanted: refusing Markdown to a
+reader who has already entered the password is defensible, and so is allowing
+it. Until that is ruled on, changing the predicate would be guessing. Whatever
+is decided, the two definitions must be made to agree and the rule written down
+in `AGENTS.md`.
 
 ### M2 — `/llms.txt` invalidation misses output-changing WordPress events
 
@@ -170,6 +216,19 @@ accepting every PHP `is_numeric()` form (for example exponent notation), and add
 cases for empty, alphabetic, signed, exponent, over-precision, and duplicated q
 parameters.
 
+**Outcome: fixed in `0.27.0`, reproduced first.** Run against the real parser:
+`text/html,text/markdown;q=banana` and `…;q=` both gave Markdown `q=1.00` versus
+HTML `q=1.00`, i.e. Markdown won. Negative values were already handled by the
+clamp, so the defect was exactly the non-numeric case. A media range with a
+non-numeric weight is now dropped; numeric weights keep their existing
+behaviour, out-of-range values clamped as before, because `q=7` still expresses
+a preference while `q=banana` expresses nothing.
+
+Dropping a range can leave an `Accept` header with nothing parseable in it, so
+`should_reject_unacceptable()` now treats that case like a missing `Accept` — a
+broken client gets the HTML page, never a `406`. Four regression tests plus
+three guarding the `406` path.
+
 ## Low priority
 
 ### L1 — `/llms.txt` structural text is insufficiently normalized
@@ -187,6 +246,13 @@ third-party registration/filter edge case rather than a security issue.
 single line and escape Markdown structural characters consistently. Keep the
 footer raw because it is intentionally documented as a free-form block.
 
+**Outcome: accepted, not fixed.** Confirmed by inspection and genuinely
+inconsistent — the summary paragraph is collapsed to a single line, the site
+name and tagline are not. But `blogname`/`blogdescription` are sanitized by
+core, so reaching it takes a third-party post-type label or filter containing a
+newline. Worth folding into the next `/llms.txt` change (M2 touches the same
+file) rather than a release of its own.
+
 ### L2 — `HEAD` requests render and count a body that should not be sent
 
 **Where:** `src/MarkdownController.php:382-396`,
@@ -195,11 +261,22 @@ footer raw because it is intentionally documented as a free-form block.
 There is no request-method branch. A `HEAD` request executes hit recording,
 validator calculation, cache lookup/generation and `echo`. A web server may
 discard the bytes on the wire, but WordPress/PHP still does the work; behavior
-also depends on the SAPI. Monitoring probes can inflate the opt-in hit counter.
+also depends on the SAPI.
 
-**Recommended direction:** send the same headers and conditional status as GET,
-but skip body generation/output for `HEAD`; decide and document whether a HEAD
-probe counts as a Markdown hit. Add GET/HEAD parity tests.
+**[corrected]** This finding originally added that "monitoring probes can
+inflate the opt-in hit counter", and that part was wrong. `AGENTS.md` settles it
+in the opposite direction: the counter deliberately records every served
+response, `200` and `304` alike, because *an access is an access*. A `HEAD` that
+reaches the endpoint is an access, so counting it is the documented behaviour,
+not inflation. Only the wasted body generation is a defect.
+
+**Recommended direction:** send the same headers and conditional status as GET
+but skip body generation/output for `HEAD`, **keeping the hit recorded**. Add
+GET/HEAD parity tests.
+
+**Outcome: accepted, not fixed in 0.27.0.** The waste is real but bounded (the
+body is usually a cache hit) and `HEAD` traffic on `.md` URLs is negligible
+today. Revisit if the hit counter ever shows meaningful `HEAD` volume.
 
 ### L3 — The current PHP runtime exposes test-suite compatibility debt
 
@@ -221,6 +298,26 @@ the response-status assertion independent of CLI header behavior (or use a
 purpose-built status stub). Add PHP 8.5 to CI when available while retaining the
 declared minimum job.
 
+**[corrected] Outcome: not reproduced as written; the diagnosis was wrong, and
+the real defect is worse.** On PHP 8.4 — the production runtime, and the top of
+the CI matrix — the suite is **270 assertions, 0 failed**. So this is not a
+plugin defect and not even a PHP 8.5 defect: PHP 8.5 is simply outside the
+declared matrix (7.4 and 8.4), which is a decision to take, not a bug to fix.
+
+The failure it points at is real but has nothing to do with 8.5. Under the CLI
+SAPI `headers_sent()` becomes true as soon as **any** output reaches the SAPI,
+and `MarkdownController::send_not_modified()` returns early when it does. So
+*any* line printed before the conditional-request tests — a deprecation notice,
+or simply an earlier failing assertion — silently stops the `304` from being
+recorded and produces a second, phantom failure. That is why the deprecation
+notices and the "304 actually sent" failure appeared together: the notices
+caused it. It reproduces on 8.4 the moment any earlier assertion fails.
+
+Fixed in `0.27.0` by buffering the runner's own output, so the status stays
+observable regardless of what ran before. The `setAccessible()` deprecations
+remain, harmless and out of the supported matrix; they should be addressed
+whenever PHP 8.5 is added to CI.
+
 ### L4 — Negative max-post values become an unbounded WordPress query
 
 **Where:** `src/LlmsTxtController.php:166-180`.
@@ -235,6 +332,13 @@ a bounded index build into a large memory/time operation. The enriched
 none or a documented minimum; negatives should never mean unlimited unless that
 is explicitly supported). Test zero, negative, huge, and main-limit-greater-than-
 maximum cases.
+
+**Outcome: accepted, not fixed.** Confirmed by inspection: the value is cast
+but never clamped, and WordPress reads `posts_per_page => -1` as "everything".
+Reaching it requires a site filter that returns a negative number, i.e. a bug in
+someone else's code — the same class of hostile-filter hardening already applied
+to the header and CSS-class filters, so it is legitimate, just not urgent. Clamp
+it the next time `LlmsTxtController` is opened.
 
 ## Validation results
 

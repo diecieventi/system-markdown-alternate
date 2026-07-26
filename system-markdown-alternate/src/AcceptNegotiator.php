@@ -21,7 +21,17 @@ class AcceptNegotiator {
 	 * Splits an Accept header into media-range => q (0..1) pairs.
 	 *
 	 * Duplicate ranges collapse to their highest q; malformed ranges (without `/`)
-	 * are ignored; a non-numeric `q` is treated as 1.0; values are clamped to [0,1].
+	 * are ignored; values are clamped to [0,1].
+	 *
+	 * A non-numeric `q` makes the whole media range unusable, so the range is
+	 * **dropped**. It used to be treated as the default 1.0, which turned
+	 * `text/markdown;q=banana` into the strongest possible preference and served
+	 * Markdown to a client that never asked for it — the opposite of the "only
+	 * when explicitly preferred" rule. A numeric weight is kept even when out of
+	 * range (`q=7` clamps to 1.0): it still expresses a preference.
+	 * Dropping it can leave no range at all; callers must treat an empty result
+	 * as "no usable preference", never as "nothing is acceptable" (see
+	 * MarkdownController::should_reject_unacceptable()).
 	 *
 	 * @return array<string,float>
 	 */
@@ -41,16 +51,28 @@ class AcceptNegotiator {
 				continue;
 			}
 
-			$q = 1.0;
+			$q       = 1.0;
+			$invalid = false;
 			foreach ( $segments as $param ) {
 				$param = trim( $param );
 				if ( 0 === stripos( $param, 'q=' ) ) {
-					$value = substr( $param, 2 );
+					$value = trim( substr( $param, 2 ) );
+
+					// A numeric weight is kept and clamped below, out-of-range
+					// values included: `q=7` still expresses a preference. A
+					// non-numeric one expresses nothing at all, so the range
+					// goes rather than silently becoming the strongest.
 					if ( is_numeric( $value ) ) {
 						$q = (float) $value;
+					} else {
+						$invalid = true;
 					}
 					break;
 				}
+			}
+
+			if ( $invalid ) {
+				continue;
 			}
 
 			$q = max( 0.0, min( 1.0, $q ) );

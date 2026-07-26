@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.26.3
+Stable tag: 0.27.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -238,6 +238,35 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.27.0 =
+
+* **The cache validator (and the `ETag`) now covers what the Markdown reads
+  outside the post itself.** Editing a synced pattern, swapping the featured
+  image or its alt text, rewriting the Rank Math description or changing an ACF
+  field all change the published Markdown while the post's modification date
+  stays put — so a client that already had the page kept being told "not
+  modified" and went on showing the old content, whether or not the body cache
+  was enabled. Those inputs are now part of the validator.
+* **New filter `sysmda_markdown_cache_dependencies`** for output the plugin
+  cannot fingerprint on its own (dynamic blocks, shortcodes, site filters that
+  read options or remote data): return any value that changes the Markdown and
+  it becomes part of the validator.
+* **A malformed `Accept` weight no longer counts as a preference.** A media
+  range with a non-numeric quality (`text/markdown;q=banana`, or an empty `q=`)
+  was read as the strongest possible preference and could serve Markdown to a
+  client that never asked for it; the range is now ignored. Numeric weights are
+  unchanged, out-of-range values included. A request whose `Accept` becomes
+  entirely unparseable is treated like one with no `Accept` header — it gets the
+  HTML page, never a `406`.
+* Test suite: the runner buffers its own output, so a failing assertion no
+  longer suppresses the `304` status recorded by a later conditional-request
+  test and produces a second, phantom failure.
+
+Upgrade note: posts with a featured image, a description or a synced pattern get
+a new `ETag` once, so the first conditional request after the update returns the
+full body instead of a `304`. Posts with none of them keep the validator they
+already had, so nothing else is invalidated.
 
 = 0.26.3 =
 
