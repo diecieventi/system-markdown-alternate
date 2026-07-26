@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.28.0
+Stable tag: 0.29.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ The output is customizable through filters:
   Markdown (default `true`; `false` always serves the HTML default).
 * `sysmda_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
 * `sysmda_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
+* `sysmda_cache_control` — the `Cache-Control` sent on the URLs the plugin owns
+  (`.md` and `/llms.txt`); default `public, max-age=0, must-revalidate`, `''` =
+  no header at all. Setting a freshness lifetime here (`s-maxage`, `max-age`)
+  makes stale Markdown possible: no page cache purges a `.md` on save.
 * `sysmda_markdown_source_content` — raw source content before rendering.
 * `sysmda_markdown_rendered_html` — cleaned HTML before conversion.
 * `sysmda_markdown_preamble` — Markdown inserted between the H1 and the body.
@@ -192,6 +196,17 @@ and also when something outside the post changes what the Markdown says: a
 synced pattern, the featured image, the description, an ACF field, the author's
 display name, the permalink structure or the site address.
 
+That is the cache inside WordPress. Caches *outside* it — your browser, a page
+cache, Varnish, a CDN — are told
+`Cache-Control: public, max-age=0, must-revalidate`: they may keep a copy, but
+they must ask the site whether it is still current before serving it, and the
+answer is a small `304 Not Modified` when nothing changed. So a `.md` cannot
+keep circulating after you edit the article, without depending on anyone
+purging it — which matters, because page caches purge the article's URL and do
+not know its `.md` version exists. If your infrastructure has its own purge
+mechanism and you would rather trade that guarantee for raw speed, the
+`sysmda_cache_control` filter lets you set a real lifetime.
+
 = Can I customize the plugin from my own code? =
 
 Yes: the plugin is developer-extensible through WordPress filters — every
@@ -241,6 +256,31 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.29.0 =
+
+* **Markdown URLs can be cached again — but never reused without checking
+  first.** The plugin used to send no caching policy of its own on `.md` URLs,
+  on the assumption that saying nothing meant "always ask me". It does not, and
+  in practice the responses were not silent at all: WordPress had already
+  marked them `no-store` (its standard headers for this kind of request), which
+  forbids browsers and caches from keeping any copy. The result was the worst of
+  both worlds — nobody could reuse a `.md`, nobody ever revalidated one, and
+  every single request rebuilt the whole document from scratch, so the `ETag`
+  work of the last releases could never pay off. `.md` URLs and `/llms.txt` now
+  send `Cache-Control: public, max-age=0, must-revalidate`: any cache may store
+  the file, none may serve it without asking the site whether it changed. A
+  Markdown file can no longer outlive the article behind it, which matters
+  because page-cache plugins clear the article's URL on save and have no idea
+  the `.md` version exists.
+* **`/llms.txt` now answers "not modified".** The index is the largest file the
+  plugin produces and the one crawlers re-fetch most often; it now carries an
+  `ETag` computed from its exact contents and replies `304` when the client
+  already has that version. A rebuilt index that comes out identical still
+  counts as unchanged.
+* **New filter `sysmda_cache_control`** to override that policy — including an
+  `s-maxage` for infrastructure with its own purge mechanism, or an empty string
+  to send no header at all.
 
 = 0.28.0 =
 

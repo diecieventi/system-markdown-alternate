@@ -1,6 +1,7 @@
 # ETag, cache and response-validation review — July 2026
 
-> **Status: triaged against the shipped code; F1–F3 fixed in `0.28.0`.** The
+> **Status: triaged against the shipped code; F1–F3 fixed in `0.28.0`, F4 and F8
+> in `0.29.0` after a production measurement.** The
 > brief was an external checklist ("verify that the architecture does not give
 > ETags an excessive or unreliable role"), not a bug report, so every point was
 > re-derived from the code before being accepted or rejected. Several of its
@@ -12,11 +13,11 @@
 > | F1 | The `ETag` was strong, and could not be | **Fixed in 0.28.0** — now `W/"…"` |
 > | F2 | Apache's compression suffix silently kills `304` | **Fixed in 0.28.0** |
 > | F3 | Three site-wide output inputs never moved the validator | **Fixed in 0.28.0** |
-> | F4 | No `Cache-Control` on `.md` leaves heuristic freshness open | **Decision required** — sits against a durable "do not propose again" decision |
+> | F4 | No `Cache-Control` on `.md` leaves heuristic freshness open | **Fixed in 0.29.0** — and it was worse than reported, see the measurement below |
 > | F5 | A later `header()` can overwrite `Vary: Accept` on the HTML branch | **Accepted, not fixed** — safety does not depend on `Vary` |
 > | F6 | Preconditions on non-GET/HEAD should be `412`, not `304` | **Not fixed** — unreachable in practice |
 > | F7 | `HEAD` renders a body it will not send | **Already triaged** (0.26.3 review, L2) |
-> | F8 | `/llms.txt` sends no validators at all | **Not implemented** — optimization, shape recorded |
+> | F8 | `/llms.txt` sends no validators at all | **Implemented in 0.29.0** |
 
 ## 1. Current architecture
 
@@ -178,6 +179,51 @@ way `max-age > 0` would.
 It is nevertheless a header the project decided not to send, so it is recorded
 here as an explicit decision point rather than applied.
 
+**Outcome: measured in production, and it was worse than written above. Fixed in
+`0.29.0` after the maintainer withdrew the decision.**
+
+The finding assumed the `.md` responses were going out with no `Cache-Control`.
+They were not. Anonymous `curl` against a live post
+(`webdietrolequinte.it/…-acf.md`, 26 July 2026):
+
+```
+cache-control: no-cache, must-revalidate, max-age=0, no-store, private
+expires: Wed, 11 Jan 1984 05:00:00 GMT
+etag: W/"e350aa502dfd8851fb627f130be2a31a"
+x-runcache-status: MISS
+```
+
+That `Cache-Control` is not the plugin's — the plugin's own string, visible on
+the negotiated route in the same session, is `no-cache, no-store,
+must-revalidate, private`, with no `max-age=0` and no `Expires`. It is
+`wp_get_nocache_headers()` verbatim: this route resolves as an error inside
+WordPress, so `WP::send_headers()` had already sent it, and the plugin — by
+never touching the header — inherited it. **A policy of omission cannot be
+implemented by omission.**
+
+The consequence is the opposite of the heuristic-freshness worry, and worse:
+`no-store` forbids any cache, browsers included, from keeping a copy. So no
+client ever revalidates, `x-runcache-status` is permanently `MISS`, every single
+hit pays for a full render, and the entire `ETag`/`304` mechanism built in
+`0.18.0` and refined in `0.27.0`/`0.28.0` was inert. Confirmed by measurement:
+`If-None-Match` in weak form, in strong form, with a `-gzip` suffix, and
+`If-Modified-Since` — four requests, four `200`s, on `.md`, on `.md?query` with
+the page cache in `BYPASS`, on the negotiated route and on `?format=markdown`.
+
+A second, secondary defect surfaced while testing this: those manual
+conditional headers never reached PHP at all (the plugin answered with a freshly
+generated `ETag`, which only happens when `handle_conditional()` saw no match).
+Cloudflare answers `304` for static assets but from its own cache, so it does
+not prove forwarding to origin; the likelier culprit is nginx, which strips
+client conditional headers from the upstream request when caching is configured
+for the location — `BYPASS` included. That is infrastructure, not plugin, and it
+resolves itself either way once the response is storable: whoever stores it
+answers the revalidation.
+
+The fix is the candidate above, applied to the `.md` route and to `/llms.txt`,
+with `sysmda_cache_control` as the override. See the replacement decision in
+`AGENTS.md`.
+
 ### F5 — `Vary: Accept` can be overwritten downstream on the HTML branch
 
 **Severity:** Low. **Where:** `MarkdownController::send_vary_header()`.
@@ -212,7 +258,9 @@ new information here.
 
 ### F8 — `/llms.txt` sends no validators
 
-**Severity:** Low. **Where:** `LlmsTxtController::render()`. **Not implemented.**
+**Severity:** Low. **Where:** `LlmsTxtController::render()`. **Implemented in
+`0.29.0`**, once F4 turned the caching contract into a decision being taken
+anyway — leaving the other public endpoint out of it would have been arbitrary.
 
 The index is served from a versioned server-side cache but carries no `ETag`,
 no `Last-Modified` and no `Cache-Control`, so every poll transfers the whole
@@ -225,8 +273,13 @@ cover the listed posts (a new post is picked up by deleting the cache entry, not
 by moving the version), so using it as an `ETag` would recreate the exact defect
 `0.27.0` fixed — a `304` with a stale index. Hashing the body is free-ish here,
 precisely because the body already exists before the response is written; that
-is also the one place a *strong* tag would be justified. Recorded, not built:
-this is an optimization, not a defect.
+is also the one place a *strong* tag would be justified.
+
+That is exactly how it was built: `LlmsTxtController::body_etag()` hashes the
+bytes, `handle_conditional()` answers `If-None-Match` with `304`, and the
+response carries the same `Cache-Control` as a `.md`. No `Last-Modified`: the
+index has no single modification date, and inventing one would be a validator
+that lies, so `If-Modified-Since` is not honoured either.
 
 ### Verified as already correct
 
@@ -316,19 +369,48 @@ be checked rather than trusted.
 | Apache | yes | **yes** — `-gzip`/`-br` suffix when compressing | yes | none since F2 | `DeflateAlterETag NoChange` also avoids it, server-side |
 | Nginx (proxy/FastCGI cache) | yes | no | yes, when caching | low | `proxy_cache_revalidate on` makes `304` useful upstream |
 | LiteSpeed / OpenLiteSpeed | yes | no | **often not** — keys by URL | handled | no-cache signals always on for negotiated responses; opt-in `.htaccess` bypass |
-| Varnish | yes | no | yes (stock VCL) | F4 | stock `default_ttl` 120 s applies to responses with no `Cache-Control` |
+| Varnish | yes | no | yes (stock VCL) | none since F4 | stock `default_ttl` 120 s applied while no `Cache-Control` was sent; `max-age=0` now means pass (or revalidate, with `beresp.keep` in VCL) |
 | Cloudflare / CDN | usually | **yes** — weakens strong tags on some plans | yes | none since F1/F2 | `.md` is not a default-cached extension |
 | WordPress page cache | n/a (bypasses PHP) | n/a | varies | handled | negotiated responses are `no-store`; `.md` has its own URL |
+
+## 4b. What each layer does with `public, max-age=0, must-revalidate`
+
+Added when F4 was applied. The property that matters is the same everywhere —
+**no layer may hand out a `.md` without checking first** — but what each one
+does with the permission to store differs, and only the first row was measured.
+
+| Layer | Stores the body? | Serves it without asking? | Net effect |
+|---|---|---|---|
+| Browser | yes | no — revalidates with `If-None-Match` | `304`, no body on the wire. The gain the whole design was built for, and it was impossible under `no-store` |
+| nginx `fastcgi_cache` / `proxy_cache` | yes, unless configured to skip `max-age=0` | no | may answer `304` itself; `proxy_cache_revalidate on` makes it revalidate upstream instead of refetching |
+| Varnish | no (TTL 0) — unless VCL sets `beresp.keep` | n/a | behaves as a pass, like today, minus the heuristic 120 s window that `no-store` was accidentally protecting against |
+| LiteSpeed LSCache | no (it caches only what it is told to) | n/a | unchanged; the negotiated route keeps its own LiteSpeed signals |
+| Cloudflare / CDN | only if a Cache Rule opts `.md` in | no, with "respect origin headers" | safe by default (`.md` is not a default-cached extension) |
+| WP page-cache plugins | generally no | n/a | unchanged |
+
+The one configuration that reintroduces staleness is a host that strips incoming
+cache headers (`fastcgi_ignore_headers Cache-Control`) and applies its own TTL.
+There is no header that defends against that; the answer would be a purge
+integration, which is deliberately not built — see below.
+
+**Why no purge integration.** Making a shared cache hold `.md` copies *and* stay
+correct needs the cache to be purged on every edit. Page-cache plugins purge the
+permalink and have no idea `permalink.md` exists, so this would mean per-plugin
+integrations (LSCWP, WP Rocket, nginx-helper, …), each partial, none covering
+Varnish or a CDN without credentials. `max-age=0, must-revalidate` gets the same
+correctness with none of that surface, at the cost of one revalidation round
+trip — which is exactly what an `ETag` is for.
 
 ## 5. What changed, and what did not
 
 **Applied in `0.28.0` (correctness):** F1, F2, F3.
 
-**Recorded as a decision for the maintainer:** F4.
+**Applied in `0.29.0`:** F4 — after the production measurement showed the
+premise was wrong in the plugin's disfavour, and the maintainer withdrew the
+durable decision that blocked it — and F8 alongside it.
 
 **Accepted and deliberately not changed:** F5 (safety does not depend on
-`Vary`), F6 (unreachable), F7 (already ruled on), F8 (optimization, with the
-implementation trap written down).
+`Vary`), F6 (unreachable), F7 (already ruled on).
 
 **Rejected outright:** nothing in the brief was rejected as wrong except the
 assumptions listed in §2, which are answered there.
@@ -348,7 +430,13 @@ Fifteen assertions added to `tests/run-tests.php`, all failing against `0.27.0`:
   with no usable data, or for an unrelated/excluded option; a bump for a real
   rename; and one bump per request however many triggers fire.
 
-Suite: **315 assertions, 0 failed** on PHP 8.4; PHPCS clean.
+`0.29.0` adds fifteen more: the index's body `ETag` (stability, and that two
+different bodies differ), its conditional path (no header → body, match → `304`
+actually sent, stale → body, weakened tag → still `304`), and the
+`Cache-Control` value (default, a site-imposed `s-maxage`, `''`, a header
+injection attempt, a non-string return).
+
+Suite: **330 assertions, 0 failed** on PHP 8.4; PHPCS clean.
 
 Not covered by the pure-logic suite, and worth doing once on staging:
 
@@ -361,3 +449,9 @@ Not covered by the pure-logic suite, and worth doing once on staging:
 4. Change the permalink structure on a staging copy: same expectation.
 5. Save any user profile without touching the display name and confirm the salt
    did **not** move (`sysmda_cache_salt` in the options table).
+6. Confirm the `.md` now answers `Cache-Control: public, max-age=0,
+   must-revalidate` with **no** `Expires`, and that `/llms.txt` answers `304`
+   for its own `ETag`.
+7. Edit the post, re-request immediately with the previous validator: `200` with
+   the new body. This is the one that matters — it is the property the whole
+   policy exists to guarantee.

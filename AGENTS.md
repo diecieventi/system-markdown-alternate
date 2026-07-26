@@ -88,8 +88,11 @@ The v1 scope is done and widely exceeded. Implemented:
   `Vary: Accept` (on negotiable URLs), **`ETag` + `Last-Modified`**. Negotiated
   Markdown and `406` responses additionally send
   `Cache-Control: no-cache, no-store, must-revalidate, private` (server-agnostic
-  no-cache invariant — see "Product decisions"); `.md` URLs get no
-  `Cache-Control` at all (their own cache key, revalidation via `ETag`/`304`).
+  no-cache invariant — see "Product decisions"); the `.md` URLs send
+  **`public, max-age=0, must-revalidate`** and drop WordPress's inherited
+  `Expires` — storable anywhere, never reusable without revalidating. Set
+  explicitly *because* WordPress had already put `no-store` on this route (see
+  the decision; filter `sysmda_cache_control`).
 - **Conditional requests**: the `.md` response honours `If-None-Match` /
   `If-Modified-Since` and replies **`304 Not Modified`** (no body) when the client
   already holds the current version. Validator = the existing cache-version hash
@@ -135,6 +138,16 @@ The v1 scope is done and widely exceeded. Implemented:
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
 - **`/llms.txt`** (cached, excludes protected content) with an on/off toggle.
+  Since `0.29.0` it answers conditional requests like the `.md` endpoint:
+  **`ETag` + `304`** and the same `Cache-Control`. Its `ETag` is the **md5 of the
+  body about to be sent** — the one strong validator in the plugin, and
+  deliberately NOT `cache_version()`, which does not cover the posts listed in
+  the file (a new post is picked up by deleting the cache entry, not by moving
+  the version, so a version-derived `ETag` would answer `304` with an index
+  missing it). Hashing the bytes is free here precisely because the body already
+  exists before the response is written, which is exactly what the `.md`
+  endpoint cannot do. No `Last-Modified`: the index has no single modification
+  date, so `If-Modified-Since` is not honoured either.
   Optional **enriched mode** (`sysmda_llms_txt_enriched` toggle, default off;
   off = base output unchanged): site summary, curated "Key content" section
   (IDs/URLs from the settings page), per-entry description (Rank Math → excerpt →
@@ -293,17 +306,16 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ### To check next time (not urgent, parked here)
 
-- **Decision pending — heuristic freshness on the `.md` URLs** (F4 of
-  `docs/etag-cache-review-2026-07.md`): sending *no* `Cache-Control` is not the
-  same as "must revalidate". RFC 9111 §4.2.2 lets a cache invent a lifetime when
-  none is given (Varnish's stock `default_ttl` is 120 s; the usual heuristic is a
-  fraction of the age since `Last-Modified`, which on an old post is long), so
-  the current headers do not actually guarantee what the "NO freshness
-  `Cache-Control`" decision assumes they do. The candidate is
-  `Cache-Control: public, max-age=0, must-revalidate` on `.md` only — the
-  opposite of a freshness lifetime, and strictly closer to that decision's own
-  goal. Not implemented: it is the maintainer's call, since the decision says
-  "do not propose again" about `max-age`.
+- **Verify the caching contract on a second stack** (`0.29.0` shipped it, and
+  the measurement that justified it came from one host): the useful check is
+  whether a `.md` starts producing `304`s once it is storable again. On
+  webdietrolequinte.it (nginx/RunCache behind Cloudflare) conditional requests
+  never reached PHP at all — even with the page cache in `BYPASS` — which points
+  at nginx stripping `If-None-Match` upstream when caching is configured for the
+  location. If it stays that way after `0.29.0`, the `304` will come from nginx
+  rather than PHP, which is fine; if a host ignores `Cache-Control` on the way
+  in (`fastcgi_ignore_headers`), staleness returns and the answer is a purge
+  integration, not a header.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -463,15 +475,43 @@ The v1 scope is done and widely exceeded. Implemented:
   a strong tag: it would be a promise the plugin cannot keep. Corollary in
   `etag_matches()`: compare with the `W/` flag ignored **on both sides**, and
   ignore Apache's `-gzip`/`-br` suffix as well.
-- **NO freshness `Cache-Control` on the dedicated `.md` URLs** (decided, do not
-  propose again; scope clarified July 2026): the `.md` URLs get no
-  `Cache-Control`/`max-age` — they are their own cache key (no poisoning
-  possible) and conditional requests (`ETag`/`Last-Modified` → `304`) already
-  give efficient revalidation without ever serving stale Markdown. A `max-age`
-  would risk conflicting with page-cache/CDN plugins and could keep serving an
-  outdated version after an edit; freshness policy belongs to the
-  infrastructure/CDN, not the plugin. This decision does NOT cover the
-  negotiated responses — see the next one.
+- **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
+  (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
+  `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
+  evidence). Applies to the `.md` endpoint and `/llms.txt`; the negotiated
+  responses keep `no-store`, see the next decision. The old rule assumed that
+  sending nothing meant "always revalidate". It is wrong twice over:
+  - **"No header" is not "no freshness".** RFC 9111 §4.2.2 lets a cache invent a
+    lifetime when a response carries none — typically a fraction of the age
+    since `Last-Modified` (weeks, on an old post), and a flat 120 s in Varnish's
+    stock config. The old rule's own goal ("never serve an outdated version
+    after an edit") was therefore not enforced by it.
+  - **The plugin was not sending "nothing" at all.** Measured live on
+    webdietrolequinte.it: every `.md` went out with
+    `Cache-Control: no-cache, must-revalidate, max-age=0, no-store, private`
+    and `Expires: Wed, 11 Jan 1984`, to anonymous clients too. That is
+    `wp_get_nocache_headers()`: this route resolves as an error inside
+    WordPress, so `WP::send_headers()` sends it long before the plugin runs, and
+    the plugin — by never touching the header — simply inherited it. `no-store`
+    forbids keeping a copy at all, so no client ever revalidated, the whole
+    `ETag`/`304` path was dead weight, and every single hit paid for a full
+    render. **A policy of omission cannot be implemented by omission**: the
+    header has to be set explicitly, or WordPress's wins.
+  Why this exact value: `max-age=0` makes the response stale on arrival and
+  `must-revalidate` makes that binding, so a cache may store the body but must
+  revalidate before serving it — a `.md` cannot outlive the article behind it.
+  This matters more than it looks, because **no page cache purges a `.md`**:
+  cache plugins purge the permalink on save and have no idea `permalink.md`
+  exists, so correctness cannot rest on purging and has to come from
+  revalidation. `public` states what is true by construction — the
+  representation never varies by visitor (protected content has no `.md`,
+  drafts 404, and the body comes from cleaned blocks rather than `the_content`,
+  so personalisation filters never run). Freshness is still not imposed, but it
+  is now reachable: `sysmda_cache_control` may return an `s-maxage`, and whoever
+  does that accepts the staleness the missing purge implies. Returning `''`
+  removes the header entirely (WordPress's included).
+  Do not go back to sending nothing, and do not "restore" `no-store` here: both
+  were measured and both are worse.
 - **Negotiated Markdown and `406` responses are always no-cache** (decided,
   binding — outcome of the July 2026 LiteSpeed/Vary diagnosis on two production
   hosts): they share their URL with the HTML page, and honouring `Vary: Accept`
@@ -700,6 +740,7 @@ apply_filters( 'sysmda_markdown_excluded_post_formats', $formats, $post );    //
 apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header (sanitized before reaching header())
 apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
 apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
+apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' ); // Cache-Control on the URLs the plugin owns (.md and /llms.txt); '' = send no header at all (WordPress's included). A freshness lifetime here makes staleness possible: no page cache purges a .md
 apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
 apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );        // extra cache-validator/ETag inputs for output the plugin cannot fingerprint (dynamic blocks, shortcodes, site filters); list of scalars, [] = none
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
