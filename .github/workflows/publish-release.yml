@@ -1,16 +1,22 @@
 name: Publish release
 
-# Publishes the GitHub Release for a version tag, with the installable plugin
-# zip attached — the auto-generated "Source code" archives are not installable.
+# Publishes the GitHub Release for one or more version tags, with the
+# installable plugin zip attached — the auto-generated "Source code" archives
+# are not installable.
 #
 # Manual on purpose: this is the one release step that stays a decision, so it
 # runs only when started from Actions → "Publish release" → "Run workflow".
 # That button works from the GitHub mobile app, which is the point: no
 # workstation, no `git fetch --tags`, no forgotten asset.
 #
-# The tag defaults to the most recent vX.Y.Z, so the usual case is a single tap
-# with nothing to fill in. Fill `tag` in only to publish an older one.
+# The `tags` input defaults to the most recent vX.Y.Z, so the usual case is a
+# single tap with nothing to fill in. Fill it in to publish older tags, one or
+# several separated by spaces — handy for backfilling.
 # Idempotent: a tag that already has a Release is reported and left alone.
+#
+# Only the newest tag in the repository is ever marked "Latest". Without that,
+# backfilling an old tag would move the Latest badge backwards, because the API
+# marks a newly created Release as latest by default.
 #
 # NOTE — this does not start the SVN deploy. "Deploy to WordPress.org" triggers
 # on `release: published`, and GitHub deliberately raises no workflow-starting
@@ -22,8 +28,8 @@ name: Publish release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to publish (leave empty for the most recent one)'
+      tags:
+        description: 'Tags to publish, space-separated (leave empty for the most recent one)'
         type: string
         default: ''
 
@@ -48,69 +54,89 @@ jobs:
           # tag's message locally.
           fetch-depth: 0
 
-      - name: Resolve the tag
-        id: tag
+      - name: Resolve the tags
+        id: resolve
         env:
-          REQUESTED: ${{ inputs.tag }}
+          REQUESTED: ${{ inputs.tags }}
         run: |
-          TAG="$REQUESTED"
-
-          if [ -z "$TAG" ]; then
-            TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
-            if [ -z "$TAG" ]; then
-              echo '::error::the repository has no vX.Y.Z tag yet — run "Release tag" first.'
-              exit 1
-            fi
-            echo "==> No tag given, using the most recent one: $TAG"
-          elif ! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
-            echo "::error::tag $TAG does not exist."
+          NEWEST=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -z "$NEWEST" ]; then
+            echo '::error::the repository has no vX.Y.Z tag yet — run "Release tag" first.'
             exit 1
           fi
 
-          echo "value=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Check whether the Release already exists
-        id: existing
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.value }}
-        run: |
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            echo "::notice::$TAG already has a Release — nothing to publish."
-            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          TAGS="$REQUESTED"
+          if [ -z "$TAGS" ]; then
+            TAGS="$NEWEST"
+            echo "==> No tag given, using the most recent one: $NEWEST"
           else
-            echo 'skip=false' >> "$GITHUB_OUTPUT"
+            for TAG in $TAGS; do
+              if ! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+                echo "::error::tag $TAG does not exist."
+                exit 1
+              fi
+            done
           fi
 
+          echo "newest=$NEWEST" >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Skip the tags that already have a Release
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ steps.resolve.outputs.tags }}
+        run: |
+          PENDING=''
+          for TAG in $TAGS; do
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              echo "--  $TAG already has a Release, skipped."
+            else
+              PENDING="${PENDING:+$PENDING }$TAG"
+            fi
+          done
+
+          if [ -z "$PENDING" ]; then
+            echo '::notice::nothing to publish — every requested tag already has a Release.'
+          else
+            echo "==> To publish: $PENDING"
+          fi
+
+          echo "tags=$PENDING" >> "$GITHUB_OUTPUT"
+
       - name: Set up PHP
-        if: steps.existing.outputs.skip == 'false'
+        if: steps.pending.outputs.tags != ''
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           coverage: none
           tools: composer
 
-      - name: Build the plugin zip from the tag
-        if: steps.existing.outputs.skip == 'false'
-        env:
-          TAG: ${{ steps.tag.outputs.value }}
-        # Built from the tagged tree rather than taken from the committed DIST/,
-        # so the asset always matches the released source.
-        run: |
-          git checkout --quiet --detach "$TAG"
-          bash bin/build.sh
-
-      - name: Publish the Release
-        if: steps.existing.outputs.skip == 'false'
+      - name: Build the zip and publish a Release for each tag
+        if: steps.pending.outputs.tags != ''
         env:
           # A PAT in RELEASE_TOKEN, when present, makes the published Release
           # able to start other workflows (see the note at the top).
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-          TAG: ${{ steps.tag.outputs.value }}
-        # Body = the tag notes, i.e. that version's readme.txt changelog entries.
+          TAGS: ${{ steps.pending.outputs.tags }}
+          NEWEST: ${{ steps.resolve.outputs.newest }}
         run: |
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes-from-tag \
-            DIST/system-markdown-alternate.zip
-          echo "==> $TAG published with the plugin zip attached."
+          for TAG in $TAGS; do
+            # Built from the tagged tree rather than taken from the committed
+            # DIST/, so the asset always matches the released source.
+            git checkout --quiet --detach "$TAG"
+            bash bin/build.sh
+
+            # Body = the tag notes, i.e. that version's readme.txt changelog.
+            LATEST=false
+            if [ "$TAG" = "$NEWEST" ]; then
+              LATEST=true
+            fi
+
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-from-tag \
+              --latest="$LATEST" \
+              DIST/system-markdown-alternate.zip
+            echo "==> $TAG published with the plugin zip attached (latest=$LATEST)."
+          done
