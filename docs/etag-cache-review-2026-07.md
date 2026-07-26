@@ -414,7 +414,7 @@ specification, and each layer's own configuration can move it.
 | Layer | Stores the body? | Serves it without asking? | Net effect |
 |---|---|---|---|
 | Browser | yes | no — revalidates with `If-None-Match` | `304`, no body on the wire. The gain the whole design was built for, and it was impossible under `no-store` |
-| nginx `fastcgi_cache` / `proxy_cache` | configuration-dependent — **no** on the reference host (measured, see below) | no | in principle it may store and answer `304` itself, and `proxy_cache_revalidate on` makes it revalidate upstream instead of refetching. On the one host measured it stores nothing at all, so every request reaches PHP |
+| nginx `fastcgi_cache` / `proxy_cache` | configuration-dependent — **no** on the reference host (measured, see below) | no while it honours the upstream `Cache-Control`; **yes** once configured to ignore it, which is the stale-body case below | in principle it may store and answer `304` itself; `proxy_cache_revalidate on` makes the refresh of an *expired* entry conditional instead of a full refetch. On the one host measured it stores nothing at all, so every request reaches PHP |
 | Varnish | no (TTL 0) — unless VCL sets `beresp.keep` | n/a | behaves as a pass, like today, minus the heuristic 120 s window that `no-store` was accidentally protecting against |
 | LiteSpeed LSCache | no (it caches only what it is told to) | n/a | unchanged; the negotiated route keeps its own LiteSpeed signals |
 | Cloudflare / CDN | only if a Cache Rule opts `.md` in | no, with "respect origin headers" | safe by default (`.md` is not a default-cached extension) |
@@ -436,11 +436,18 @@ declines to keep something it would have to revalidate before every use. The sam
 disposition is why no `304` is ever produced: it strips conditional headers from
 the upstream request wherever caching is configured for the location.
 
-**This is one configuration, not nginx as such.** `proxy_cache_valid`,
-`proxy_cache_revalidate` and `fastcgi_ignore_headers` all move the behaviour, so
-another nginx deployment may well store the body exactly as the table first
-predicted. Read the row as the reference-host result, and measure before assuming
-it describes a stack you are diagnosing.
+**This is one configuration, not nginx as such** — and the directive that decides
+it is more specific than "the cache settings". nginx honours an upstream
+`Cache-Control`, and it takes precedence over `proxy_cache_valid`, so adding a TTL
+does not by itself override `max-age=0`. What overrides it is
+`proxy_ignore_headers Cache-Control` (`fastcgi_ignore_headers` for the FastCGI
+variant): after that a lifetime from `proxy_cache_valid` or `X-Accel-Expires`
+applies, the entry counts as fresh, and it is served without contacting PHP —
+the stale body this policy exists to prevent, and the case named under the table.
+`proxy_cache_revalidate on` is orthogonal to both: it only makes the refresh of an
+already-expired entry conditional. So another nginx deployment may well store the
+body exactly as the table first predicted; read the row as the reference-host
+result, and measure before assuming it describes a stack you are diagnosing.
 
 That reading was confirmed by a control experiment on the same host, which is
 what makes it a diagnosis rather than a guess. Pointing `sysmda_cache_control` at
