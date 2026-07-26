@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Creates and pushes the missing annotated release tags (vX.Y.Z) on origin,
-# deriving each tag's notes from that version's changelog entries in readme.txt.
+# deriving each tag's notes from that version's entries in CHANGELOG.md (the full
+# history; readme.txt only carries the most recent releases, see AGENTS.md).
 # Run from the Mac after merging a release PR — agents cannot push tags from
 # the Claude Code web environment (the git proxy rejects tag pushes).
 #
@@ -24,7 +25,12 @@ fi
 cd "$(git rev-parse --show-toplevel)"
 
 PLUGIN_FILE='system-markdown-alternate/system-markdown-alternate.php'
-README='system-markdown-alternate/readme.txt'
+# The FULL history, deliberately not readme.txt: that file is capped at the three
+# most recent releases (wordpress.org truncates a Changelog section over 5000
+# characters), so parsing it would find no version older than the last few — and
+# no `0.17.1` to anchor the gate below.
+CHANGELOG='CHANGELOG.md'
+MIN_VERSION='0.17.1'
 
 echo '==> Fetching origin…'
 git fetch origin main --prune --quiet
@@ -32,11 +38,27 @@ git fetch origin main --prune --quiet
 # Tags already on origin (one network call, authoritative).
 REMOTE_TAGS=$(git ls-remote --tags origin | awk -F'refs/tags/' '{ print $2 }' | sed 's/\^{}$//' | sort -u)
 
-# Versions listed in the changelog, oldest first, from 0.17.1 onward.
-VERSIONS=$(git show "origin/main:$README" \
-	| sed -n 's/^= \([0-9][0-9.]*\) =$/\1/p' \
-	| sort -V \
-	| awk '$0 == "0.17.1" { seen = 1 } seen')
+ALL_VERSIONS=$(git show "origin/main:$CHANGELOG" \
+	| sed -n 's/^## \([0-9][0-9.]*\)$/\1/p' \
+	| sort -V)
+
+# Both guards exist because the failure they catch is silent: an empty version
+# list makes the loop below a no-op, and the script then reports "nothing to do"
+# and exits 0 — a green workflow run that tagged nothing. That is exactly what
+# happened when the changelog moved out of readme.txt, so fail loudly instead.
+if [ -z "$ALL_VERSIONS" ]; then
+	echo "!!  No '## X.Y.Z' version headings found in $CHANGELOG — refusing to continue." >&2
+	exit 1
+fi
+
+if ! printf '%s\n' "$ALL_VERSIONS" | grep -qx "$MIN_VERSION"; then
+	echo "!!  $MIN_VERSION is not in $CHANGELOG, so the version gate cannot be applied." >&2
+	echo "!!  Releases before it are intentionally untagged; fix the gate before tagging." >&2
+	exit 1
+fi
+
+# Oldest first, from MIN_VERSION onward (earlier releases are intentionally untagged).
+VERSIONS=$(printf '%s\n' "$ALL_VERSIONS" | awk -v min="$MIN_VERSION" '$0 == min { seen = 1 } seen')
 
 CREATED=0
 for VERSION in $VERSIONS; do
@@ -56,10 +78,9 @@ for VERSION in $VERSIONS; do
 
 	# Changelog entries of this version = tag notes ("Notes" on the GitHub
 	# Tags page). git tag strips leading/trailing blank lines itself.
-	NOTES=$(git show "origin/main:$README" | awk -v v="$VERSION" '
-		$0 == "= " v " =" { grab = 1; next }
-		grab && /^= [0-9]/ { exit }
-		grab && /^== /     { exit }
+	NOTES=$(git show "origin/main:$CHANGELOG" | awk -v v="$VERSION" '
+		$0 == "## " v { grab = 1; next }
+		grab && /^## / { exit }
 		grab { print }
 	')
 
