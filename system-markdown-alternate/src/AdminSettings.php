@@ -66,6 +66,14 @@ class AdminSettings {
 		// invalidate every post on upgrade and permanently disable the
 		// `If-Modified-Since` path, which is switched off for any post with
 		// out-of-post dependencies.
+		//
+		// All four fire AFTER the write, which is the half that matters and is
+		// easy to get wrong: `update_option_{$option}` is a post-write hook
+		// despite its name (the pre-write one is the suffix-less
+		// `update_option`), and `profile_update` / `deleted_user` run once the
+		// user rows are saved. Bumping *before* the write would let a concurrent
+		// request cache the old output under the new salt, with nothing left to
+		// invalidate it afterwards. Do not move these to a pre-write hook.
 		add_action( 'update_option_permalink_structure', array( $this, 'bump_cache_salt' ) );
 		add_action( 'update_option_home', array( $this, 'bump_cache_salt' ) );
 		add_action( 'profile_update', array( $this, 'maybe_bump_for_author' ), 10, 2 );
