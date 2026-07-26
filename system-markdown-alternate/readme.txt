@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.29.0
+Stable tag: 0.30.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,8 @@ The output is customizable through filters:
   Markdown (default `true`; `false` always serves the HTML default).
 * `sysmda_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
 * `sysmda_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
+* `sysmda_markdown_prewarm` — rebuild a post's Markdown cache in the background
+  after every save instead of on the first request (default `false`).
 * `sysmda_cache_control` — the `Cache-Control` sent on the URLs the plugin owns
   (`.md` and `/llms.txt`); default `public, max-age=0, must-revalidate`, `''` =
   no header at all. Setting a freshness lifetime here (`s-maxage`, `max-age`)
@@ -89,6 +91,8 @@ The output is customizable through filters:
 * `sysmda_markdown_excluded_block_names` — Gutenberg blocks to drop.
 * `sysmda_markdown_excluded_shortcodes` — shortcodes to drop.
 * `sysmda_markdown_excluded_classes` — CSS classes whose elements are dropped.
+* `sysmda_front_matter_enabled` — emit the YAML front-matter block at all
+  (default `true`; `false` starts the document at the `# Title` heading).
 * `sysmda_front_matter_taxonomies` — kill switch for the `taxonomies:` block
   (default: on as soon as one taxonomy is selected; `false` = never emit it).
 * `sysmda_front_matter_taxonomy_slugs` — which taxonomies are emitted. Receives
@@ -248,6 +252,56 @@ If the response is HTML (often with an `x-litespeed-cache: hit` header) instead
 of Markdown, your server ignores `Vary: Accept` and you need the option. The
 browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 
+= Does it work behind a CDN (Cloudflare, Fastly, Varnish)? =
+
+Yes, with no CDN configuration required, because the plugin never relies on the
+CDN keying its cache correctly:
+
+* the dedicated `.md` URLs are their own cache key — one URL, one
+  representation, nothing to mix up. Any CDN may store them, and
+  `Cache-Control: public, max-age=0, must-revalidate` means it must revalidate
+  before reuse, which is a cheap `304 Not Modified` when nothing changed;
+* the **negotiated** permalink (`Accept: text/markdown` on the HTML URL) is sent
+  `no-store` and is never cached by anyone. It shares its URL with the HTML
+  page, and whether a cache honours `Vary: Accept` depends on the host, so
+  safety cannot depend on it. `Vary: Accept` is still sent, for the caches that
+  do honour it.
+
+Two things worth knowing. Some CDNs rewrite validators in transit — Cloudflare
+turns a strong `ETag` into a weak one — which the plugin handles: incoming
+validators are compared with the weak-comparison rules, so revalidation keeps
+working either way. And if you would rather have the CDN really cache the `.md`
+instead of revalidating it, set a lifetime with the `sysmda_cache_control`
+filter, keeping in mind that nothing purges a `.md` when you edit the post.
+
+= How do I check my cache is not mixing HTML and Markdown? =
+
+Send three requests to the same permalink, in this order, and compare the
+`content-type` of each:
+
+`curl -sI -A "Mozilla/5.0" -H "Accept: text/markdown" https://example.com/my-post/`
+`curl -sI -A "Mozilla/5.0" -H "Accept: text/html" https://example.com/my-post/`
+`curl -sI -A "Mozilla/5.0" -H "Accept: text/markdown" https://example.com/my-post/`
+
+The first and third must answer `text/markdown`, the second `text/html`. If the
+second returns Markdown, or the third returns HTML, something in front of PHP is
+serving one stored representation to everyone: look at the `age`, `x-cache`,
+`cf-cache-status` or `x-litespeed-cache` headers to see which layer, and purge it
+(on LiteSpeed, see the entry above).
+
+To check revalidation on a `.md` URL, read its `etag` and send it back:
+
+`curl -sI -A "Mozilla/5.0" https://example.com/my-post.md`
+`curl -sI -A "Mozilla/5.0" -H 'If-None-Match: W/"paste-the-etag-here"' https://example.com/my-post.md`
+
+The second request should answer `304` with no body. A `200` instead is usually
+not the plugin: some stacks strip conditional headers from the request before PHP
+ever sees them (observed with nginx configured to cache the location). It is a
+missed optimisation, not a correctness problem — the response is still current.
+
+As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser
+user agents outright, and a block page is easy to mistake for a plugin bug.
+
 == Screenshots ==
 
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
@@ -256,6 +310,34 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.30.0 =
+
+* **The LiteSpeed `.htaccess` rules no longer let an odd `Accept` header bypass
+  your page cache.** The optional block contained a second rule that sent any
+  request whose `Accept` allowed neither HTML nor a wildcard straight to PHP, so
+  the plugin could answer `406`. Because the rule matched every URL on the site,
+  a client sending an arbitrary media type — `Accept: application/json`, or a
+  different random one on each request — skipped the page cache site-wide and
+  paid a full WordPress boot every time. What it bought was a `406` for clients
+  that do not exist in practice: browsers, crawlers and agents always send
+  `text/html` or a wildcard. The rule is gone; Markdown negotiation still
+  bypasses the cache exactly as before, and the `406` itself is unchanged on
+  every request that reaches PHP. If you have the option enabled, the block is
+  rewritten automatically the next time you open the settings page.
+* **New filter `sysmda_front_matter_enabled`** to serve the Markdown without its
+  YAML front matter, for setups whose consumers expect the document to start at
+  the `# Title` heading. On by default: the block carries the canonical URL,
+  dates and author, which nothing in the body can replace.
+* **New filter `sysmda_markdown_prewarm`** to rebuild a post's Markdown in the
+  background after each save, so the first reader after an edit is served from
+  the cache instead of waiting for the conversion. Off by default, deliberately:
+  the rebuild runs under WP-Cron, where a dynamic block or shortcode that
+  inspects the current request can render differently than it would on a real
+  page view.
+* Documentation: new FAQ entries on running behind a CDN (Cloudflare, Fastly,
+  Varnish) and on testing that no cache is mixing the HTML and Markdown
+  representations of a URL.
 
 = 0.29.0 =
 

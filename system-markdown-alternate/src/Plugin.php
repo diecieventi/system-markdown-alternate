@@ -38,6 +38,11 @@ class Plugin {
 		add_action( 'save_post', array( $this->controller, 'invalidate_cache' ) );
 		add_action( 'deleted_post', array( $this->controller, 'invalidate_cache' ) );
 
+		// Opt-in background rebuild after a save (sysmda_markdown_prewarm, default
+		// off). Priority 20: the entry is dropped by invalidate_cache at 10 first.
+		add_action( 'save_post', array( $this->controller, 'schedule_prewarm' ), 20 );
+		add_action( MarkdownController::PREWARM_HOOK, array( $this->controller, 'prewarm' ) );
+
 		// Endpoint /llms.txt.
 		$llms = new LlmsTxtController( $metadata );
 		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );

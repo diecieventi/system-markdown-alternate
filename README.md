@@ -83,6 +83,13 @@ add_filter( 'sysmda_markdown_excluded_classes', function ( $classes ) {
 add_filter( 'sysmda_markdown_excluded_post_formats', function () {
     return array();
 } );
+
+// Serve the body without the YAML front matter (document starts at the H1).
+add_filter( 'sysmda_front_matter_enabled', '__return_false' );
+
+// Rebuild a post's Markdown cache in the background after each save, so the
+// first reader after an edit does not pay for the conversion.
+add_filter( 'sysmda_markdown_prewarm', '__return_true' );
 ```
 
 The full public contract (every filter with its default value) is documented in

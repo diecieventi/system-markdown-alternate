@@ -656,6 +656,32 @@ $sysmda_min_expected = implode(
 ) . "\n";
 check( 'front matter: minimal fixture, conditional keys absent', $sysmda_min_expected, $metadata->build_front_matter( $sysmda_min_post ) );
 
+// (2b) Opt-out: `sysmda_front_matter_enabled` suppresses the whole block. The
+// filter must not leave a stray `---` behind, and the default must stay on.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_enabled'] = false;
+check( 'front matter: filter off returns an empty block', '', $metadata->build_front_matter( $sysmda_min_post ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_front_matter_enabled'] );
+check( 'front matter: on by default', $sysmda_min_expected, $metadata->build_front_matter( $sysmda_min_post ) );
+
+// assemble_document: the blank line after the front matter belongs to the block,
+// so suppressing it must start the document at `# `, not at an empty line. With
+// the block present the layout is byte-identical to the pre-0.30.0 formula.
+check(
+	'assemble: front matter present, layout unchanged',
+	"---\ntitle: \"X\"\n---\n\n# Title\n\nBody\n",
+	MarkdownController::assemble_document( "---\ntitle: \"X\"\n---\n", 'Title', '', "Body\n" )
+);
+check(
+	'assemble: no front matter, document starts with the H1',
+	"# Title\n\nBody\n",
+	MarkdownController::assemble_document( '', 'Title', '', "Body\n" )
+);
+check(
+	'assemble: preamble sits between the H1 and the body',
+	"# Title\n\n*Subtitle*\n\nBody\n",
+	MarkdownController::assemble_document( '', 'Title', "*Subtitle*\n\n", "Body\n" )
+);
+
 // (3) Scalar escaping: the title line exercises MetadataBuilder::scalar()
 // (entity-decode → strip tags → collapse whitespace → escape \ then ").
 $sysmda_title_line = function ( $title ) use ( $metadata ) {
@@ -1352,17 +1378,25 @@ check( 'litespeed: Apache is not LiteSpeed', false, LiteSpeedCompat::is_litespee
 check( 'litespeed: nginx is not LiteSpeed', false, LiteSpeedCompat::is_litespeed( 'nginx/1.27.0' ) );
 check( 'litespeed: empty signature', false, LiteSpeedCompat::is_litespeed( '' ) );
 
-// htaccess_rules: guarded by <IfModule LiteSpeed>, bypasses on Markdown
-// negotiation and on Accept headers without HTML or a wildcard.
+// htaccess_rules: guarded by <IfModule LiteSpeed>, bypasses the page cache on
+// Markdown negotiation and on nothing else.
 $sysmda_ls_rules = LiteSpeedCompat::htaccess_rules();
 check( 'litespeed rules: IfModule guard opens', '<IfModule LiteSpeed>', $sysmda_ls_rules[0] );
 check( 'litespeed rules: IfModule guard closes', '</IfModule>', $sysmda_ls_rules[ count( $sysmda_ls_rules ) - 1 ] );
 check( 'litespeed rules: markdown condition', true, in_array( 'RewriteCond %{HTTP:Accept} text/markdown [NC]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: empty Accept stays cached', true, in_array( 'RewriteCond %{HTTP:Accept} !^$', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: no text/html condition', true, in_array( 'RewriteCond %{HTTP:Accept} !text/html [NC]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: no text/* condition', true, in_array( 'RewriteCond %{HTTP:Accept} !text/\* [NC]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: no */* condition', true, in_array( 'RewriteCond %{HTTP:Accept} !\*/\* [NC]', $sysmda_ls_rules, true ) );
-check( 'litespeed rules: no-cache env', 2, count( array_keys( $sysmda_ls_rules, 'RewriteRule ^ - [E=Cache-Control:no-cache]', true ) ) );
+check( 'litespeed rules: single no-cache env', 1, count( array_keys( $sysmda_ls_rules, 'RewriteRule ^ - [E=Cache-Control:no-cache]', true ) ) );
+
+// Regression (0.30.0): the 406 bypass is gone. `RewriteRule ^` matches every
+// URL, so those conditions let any request with an arbitrary media type skip the
+// page cache site-wide — the cache-busting vector of keying on a raw Accept —
+// to serve a 406 to clients that do not exist in practice. Must not come back.
+$sysmda_ls_406_conds = array(
+	'RewriteCond %{HTTP:Accept} !^$',
+	'RewriteCond %{HTTP:Accept} !text/html [NC]',
+	'RewriteCond %{HTTP:Accept} !text/\* [NC]',
+	'RewriteCond %{HTTP:Accept} !\*/\* [NC]',
+);
+check( 'litespeed rules: no 406 cache bypass', array(), array_values( array_intersect( $sysmda_ls_406_conds, $sysmda_ls_rules ) ) );
 
 // A manual block with the SAME directives but different comments/indentation
 // must be recognized as equivalent (directive-only comparison in sync).
@@ -1372,12 +1406,6 @@ $sysmda_ls_manual = array(
 	'',
 	'    # Le richieste che citano Markdown devono arrivare a WordPress.',
 	'    RewriteCond %{HTTP:Accept} text/markdown [NC]',
-	'    RewriteRule ^ - [E=Cache-Control:no-cache]',
-	'',
-	'    RewriteCond %{HTTP:Accept} !^$',
-	'    RewriteCond %{HTTP:Accept} !text/html [NC]',
-	'    RewriteCond %{HTTP:Accept} !text/\* [NC]',
-	'    RewriteCond %{HTTP:Accept} !\*/\* [NC]',
 	'    RewriteRule ^ - [E=Cache-Control:no-cache]',
 	'</IfModule>',
 );
