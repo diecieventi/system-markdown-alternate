@@ -322,16 +322,11 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
-Only the most recent releases are listed here. The complete history ships
-with the plugin in `changelog.txt`.
-
 = 0.30.2 =
-
 * Fixed: the WordPress.org readme parser truncated the changelog, because a
   `Changelog` section may not exceed 5000 characters and this one had grown to
-  roughly 34000. `readme.txt` now lists the three most recent releases and the
-  complete history ships with the plugin in `changelog.txt`. No code, output or
-  behaviour change.
+  roughly 34000. `readme.txt` now lists the three most recent releases and links
+  to the full history on GitHub. No code, output or behaviour change.
 
 = 0.30.1 =
 
@@ -366,6 +361,8 @@ with the plugin in `changelog.txt`.
 * Documentation: new FAQ entries on running behind a CDN (Cloudflare, Fastly,
   Varnish) and on testing that no cache is mixing the HTML and Markdown
   representations of a URL.
+
+[View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
 

@@ -53,7 +53,7 @@ composer --working-dir=system-markdown-alternate phpcbf   # auto-fix what is fix
 # Build the distributable zip with vendor/ bundled → DIST/system-markdown-alternate.zip
 bash bin/build.sh
 
-# Create + push any missing release tag, notes from the readme.txt changelog.
+# Create + push any missing release tag, notes from the CHANGELOG.md history.
 # Usually NOT needed by hand: the "Release tag" GitHub Action runs this on every
 # push to main that changes the version. Run it locally only to catch up offline;
 # --dry-run previews. (Agents cannot push tags: the web proxy rejects them.)
@@ -721,17 +721,28 @@ The v1 scope is done and widely exceeded. Implemented:
   **The changelog is split, and it has to stay split** (from `0.30.2`): the
   wordpress.org readme parser truncates a `Changelog` section longer than
   **5000 characters** (`readme_parser_warnings_trimmed_section_changelog`), and
-  the full history had reached ~34 000. So `readme.txt` carries only the **three
-  most recent releases** and the complete history lives in
-  `system-markdown-alternate/changelog.txt`, which ships with the plugin (not
-  excluded by `.distignore` or `bin/build.sh` — keep it that way, it is the only
-  copy a user or reviewer gets). On every release: add the entry to **both**
-  files, then drop the now-fourth-oldest entry from `readme.txt`. Three entries
-  sit around 2500 characters, so there is headroom, but do not let it drift back
-  over the limit. **Tagging is automated**: merging a release PR triggers the
+  the full history had reached ~34 000. So:
+  - `readme.txt` carries only the **three most recent releases** (~2500
+    characters) and closes the section with a
+    `[View the full changelog](…/blob/main/CHANGELOG.md)` link — the same shape
+    ACF uses, pointing at GitHub instead of a plugin site.
+  - The complete history lives in **`CHANGELOG.md` at the repo root**, with
+    markdown `## X.Y.Z` headings so it renders with anchors on GitHub. Root
+    files are outside the plugin folder, so it is never shipped in the package —
+    deliberate: the link replaces it, and a 34 KB history in every install is
+    dead weight.
+  - On every release: add the entry to **both** files, then drop the
+    now-fourth-oldest entry from `readme.txt`.
+  - **`bin/release-tag.sh` parses `CHANGELOG.md`**, not `readme.txt`, for both
+    the version list and the tag notes. It used to read `readme.txt` and gate on
+    finding the literal `0.17.1`; trimming that file left no such heading, so the
+    version list came out empty, the loop did nothing and the workflow reported
+    success **without creating the tag** (caught in review on `0.30.2`, before it
+    shipped). The script now fails loudly on an empty list or a missing gate
+    anchor. If the changelog ever moves again, move that parsing with it. **Tagging is automated**: merging a release PR triggers the
   `Release tag` workflow (`.github/workflows/release-tag.yml`), which runs
   `bin/release-tag.sh` and pushes the annotated `vX.Y.Z` tag with that version's
-  changelog entries as notes (shown as "Notes" on the GitHub Tags page). It can
+  `CHANGELOG.md` entries as notes (shown as "Notes" on the GitHub Tags page). It can
   also be started by hand from the Actions tab ("Run workflow", with a
   `dry_run` option) — handy from a phone. The script stays available locally for
   offline catch-up; agents still cannot push tags (the web proxy rejects them).
@@ -827,6 +838,7 @@ running code at the WP level.
 ├── AGENTS.md                     ← this file (tool-agnostic guide, English)
 ├── CLAUDE.md                     ← symlink → AGENTS.md
 ├── README.md                     ← repo overview (GitHub, English)
+├── CHANGELOG.md                   ← full release history (NOT shipped; readme.txt links here)
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
@@ -840,7 +852,6 @@ running code at the WP level.
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
-    ├── changelog.txt                    ← full release history (shipped; readme.txt is capped at 5000 chars)
     ├── uninstall.php                   ← options + transients cleanup
     ├── .distignore                     ← exclusions for the WP.org package (SVN)
     ├── composer.json / composer.lock   ← league/html-to-markdown + PSR-4 (+ PHPCS dev tooling)

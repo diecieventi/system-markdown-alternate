@@ -1,7 +1,7 @@
 name: Release tag
 
 # Creates and pushes any missing vX.Y.Z release tag, with that version's
-# readme.txt changelog entries as the tag notes. Runs `bin/release-tag.sh`,
+# CHANGELOG.md entries as the tag notes. Runs `bin/release-tag.sh`,
 # the same idempotent script used from a workstation: versions already tagged
 # on origin are skipped, so an extra run is always harmless.
 #
@@ -13,11 +13,13 @@ name: Release tag
 on:
   push:
     branches: [main]
-    # A release always bumps SYSMDA_VERSION in the plugin file; readme.txt is
-    # watched too so a changelog-only follow-up can still trigger a catch-up.
+    # A release always bumps SYSMDA_VERSION in the plugin file; CHANGELOG.md (the
+    # source of the tag notes) and readme.txt are watched too, so a changelog-only
+    # follow-up can still trigger a catch-up.
     paths:
       - 'system-markdown-alternate/system-markdown-alternate.php'
       - 'system-markdown-alternate/readme.txt'
+      - 'CHANGELOG.md'
   workflow_dispatch:
     inputs:
       dry_run:

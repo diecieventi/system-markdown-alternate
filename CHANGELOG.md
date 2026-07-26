@@ -1,27 +1,27 @@
-System Markdown Alternate - full changelog
-==========================================
+# Changelog
 
-The complete release history, oldest entries last.
+Full release history of **System Markdown Alternate**, newest first.
 
-readme.txt carries only the most recent releases: the WordPress.org readme
-parser truncates a Changelog section longer than 5000 characters, so the full
-history lives here instead.
+The plugin's `readme.txt` carries only the three most recent releases: the
+wordpress.org readme parser truncates a `Changelog` section longer than 5000
+characters, so the complete history lives here and `readme.txt` links to it.
 
-= 0.30.2 =
+Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
+notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.30.2
 * Fixed: the WordPress.org readme parser truncated the changelog, because a
   `Changelog` section may not exceed 5000 characters and this one had grown to
-  roughly 34000. `readme.txt` now lists the three most recent releases and the
-  complete history ships with the plugin in `changelog.txt`. No code, output or
-  behaviour change.
+  roughly 34000. `readme.txt` now lists the three most recent releases and links
+  to the full history on GitHub. No code, output or behaviour change.
 
-= 0.30.1 =
+## 0.30.1
 
 * The plugin's **Author URI** now points to `https://diecieventi.com/`, the site
   of the author named in the header, instead of a different site run by the same
   author. Metadata only — no code, output or behaviour changes.
 
-= 0.30.0 =
+## 0.30.0
 
 * **The LiteSpeed `.htaccess` rules no longer let an odd `Accept` header bypass
   your page cache.** The optional block contained a second rule that sent any
@@ -49,7 +49,7 @@ history lives here instead.
   Varnish) and on testing that no cache is mixing the HTML and Markdown
   representations of a URL.
 
-= 0.29.0 =
+## 0.29.0
 
 * **Markdown URLs can be cached again — but never reused without checking
   first.** The plugin used to send no caching policy of its own on `.md` URLs,
@@ -74,7 +74,7 @@ history lives here instead.
   `s-maxage` for infrastructure with its own purge mechanism, or an empty string
   to send no header at all.
 
-= 0.28.0 =
+## 0.28.0
 
 * **The `ETag` of a Markdown response is now a weak validator (`W/"…"`).** It is
   built from the post's modification date, the plugin version, your settings and
@@ -105,7 +105,7 @@ Upgrade note: every `.md` gets a new `ETag` once, in the `W/"…"` form, so the
 first conditional request after the update returns the full body instead of a
 `304`.
 
-= 0.27.0 =
+## 0.27.0
 
 * **The cache validator (and the `ETag`) now covers what the Markdown reads
   outside the post itself.** Editing a synced pattern, swapping the featured
@@ -148,7 +148,7 @@ a new `ETag` once, so the first conditional request after the update returns the
 full body instead of a `304`. Posts with none of them keep the validator they
 already had, so nothing else is invalidated.
 
-= 0.26.3 =
+## 0.26.3
 
 * **The `.htaccess` rollback added in 0.26.2 now also covers a file that was
   empty.** A write that fell short left half a rule behind even when the file
@@ -156,7 +156,7 @@ already had, so nothing else is invalidated.
   that "empty" was already the previous state. It is not, once something has
   been written: the file is now truncated back to zero bytes.
 
-= 0.26.2 =
+## 0.26.2
 
 * **A failed `.htaccess` write no longer leaves the file empty or half-written.**
   The in-place rewrite added in 0.26.1 empties the file before writing the new
@@ -167,7 +167,7 @@ already had, so nothing else is invalidated.
   count rather than as a failure, so a half-written file was previously reported
   as a success. The byte count is now compared with what was meant to be written.
 
-= 0.26.1 =
+## 0.26.1
 
 * **`.htaccess` is now read and rewritten under a single exclusive lock.** The
   atomic replacement added in 0.26.0 prevented a half-written file from ever
@@ -179,7 +179,7 @@ already had, so nothing else is invalidated.
   what WordPress core itself does, so concurrent writers block each other
   properly instead of overwriting each other's rules.
 
-= 0.26.0 =
+## 0.26.0
 
 Correctness and robustness pass over the whole conversion pipeline, from a full
 code review of the shipped code. Two fixes change the output on real content.
@@ -255,7 +255,7 @@ code review of the shipped code. Two fixes change the output on real content.
   which is where every output bug above lived — now have golden coverage
   (260 assertions, up from 211). PHPCS is clean with zero warnings.
 
-= 0.25.0 =
+## 0.25.0
 * Changed: the *Custom taxonomies* setting is now a **list of checkboxes, one per
   taxonomy**, instead of a single on/off switch. Only the taxonomies you tick are
   added to the front matter; nothing is selected by default, and a taxonomy
@@ -276,7 +276,7 @@ code review of the shipped code. Two fixes change the output on real content.
   `ETag`s are refreshed once during the upgrade. Sites that had the checkbox off
   see no change at all.
 
-= 0.24.0 =
+## 0.24.0
 * Added: optional **custom taxonomies in the front matter**. A new *Custom
   taxonomies* checkbox under "Markdown output" (off by default) appends a
   nested `taxonomies:` block listing the post type's public custom taxonomies
@@ -291,7 +291,7 @@ code review of the shipped code. Two fixes change the output on real content.
 * Note: with the toggle off, both the Markdown output and the `ETag` are
   identical to 0.23.3, so upgrading does not invalidate any cached response.
 
-= 0.23.3 =
+## 0.23.3
 * Fixed: links using an uppercase or mixed-case scheme (`MAILTO:`, `TEL:`,
   `DATA:`) are now preserved instead of being mistaken for relative paths and
   rewritten into a broken absolute URL. Scheme names are case-insensitive per
@@ -302,7 +302,7 @@ code review of the shipped code. Two fixes change the output on real content.
   filter, not only when it comes from the settings page. The filtered list is
   also normalized (entries trimmed, empty and duplicate values dropped).
 
-= 0.23.2 =
+## 0.23.2
 * Fixed: normalize excluded CSS-class entries with WordPress's class-specific
   sanitizer (`sanitize_html_class`), addressing the WordPress.org Plugin Check
   `register_setting()` sanitization notice. Whitespace-separated tokens are
@@ -310,18 +310,18 @@ code review of the shipped code. Two fixes change the output on real content.
   other multiline settings (shortcodes, block names, key content) are
   unchanged. No change to the Markdown output.
 
-= 0.23.1 =
+## 0.23.1
 * Packaging: exclude the bundled `league/html-to-markdown` command-line
   binaries (`vendor/bin` and `vendor/league/html-to-markdown/bin`) from the
   distributed plugin. They are never used at runtime (the plugin calls the
   library classes directly) and are flagged as not-permitted files by the
   WordPress.org Plugin Check. No functional change.
 
-= 0.23.0 =
+## 0.23.0
 * New "Settings" action link on the plugin row in the Plugins list, pointing
   to the settings page (Settings → Markdown Alternate).
 
-= 0.22.1 =
+## 0.22.1
 * Clearer guidance for the LiteSpeed cache compatibility option: when LiteSpeed
   is detected and the option is off, the settings page now shows an explicit
   recommendation (whether a host honours `Vary: Accept` cannot be detected
@@ -329,7 +329,7 @@ code review of the shipped code. Two fixes change the output on real content.
   FAQ now also documents a quick manual test to check whether a host ignores
   `Vary: Accept`. No change to behaviour or output.
 
-= 0.22.0 =
+## 0.22.0
 * New optional `.md` hit counter (Advanced → "Count `.md` requests", off by
   default): counts how many times the Markdown endpoint is served — `200` and
   `304` alike, for both the `.md` suffix and the negotiated permalink — split
@@ -344,7 +344,7 @@ code review of the shipped code. Two fixes change the output on real content.
 * Documented the developer filter API in the user-facing docs: new FAQ entry
   with examples and a pointer to the full filter list in the GitHub repository.
 
-= 0.21.4 =
+## 0.21.4
 * Cache hardening: the negotiated Markdown and `406` responses now always send
   the standard `Cache-Control: no-cache, no-store, must-revalidate, private`
   header. These responses share their URL with the HTML page and some caches
@@ -358,12 +358,12 @@ code review of the shipped code. Two fixes change the output on real content.
   activation carry no `Vary` header and could produce mixed HTML/Markdown
   responses that are hard to diagnose.
 
-= 0.21.3 =
+## 0.21.3
 * Fix: removing the LiteSpeed `.htaccess` block (disabling the option or
   uninstalling) no longer leaves blank lines at the top of the file when the
   block was the first thing in `.htaccess`.
 
-= 0.21.2 =
+## 0.21.2
 * Refined the LiteSpeed `.htaccess` rules: two separate bypass rules instead of
   one combined condition. Requests with an empty Accept header or a wildcard
   Accept (`text/*`, `*/*`) now stay on the cached HTML (PHP would serve HTML
@@ -373,7 +373,7 @@ code review of the shipped code. Two fixes change the output on real content.
   ignored), so a hand-maintained block with equivalent directives is left
   untouched by the settings-page sync instead of being rewritten.
 
-= 0.21.1 =
+## 0.21.1
 * Fix: the LiteSpeed compatibility block is now written at the TOP of
   `.htaccess`. Appended at the bottom (the `insert_with_markers` default) it
   landed after the `# BEGIN WordPress` block, whose `[L]` rules end every
@@ -385,7 +385,7 @@ code review of the shipped code. Two fixes change the output on real content.
   position; previously the settings page always reported the rules as missing
   and re-wrote the block (with a LiteSpeed purge) on every load.
 
-= 0.21.0 =
+## 0.21.0
 * LiteSpeed cache compatibility. Some LiteSpeed servers cache the permalink by
   URL only and ignore `Vary: Accept`, so a cached Markdown variant could be
   served to HTML clients (and cached HTML to Markdown clients). The negotiated
@@ -398,12 +398,12 @@ code review of the shipped code. Two fixes change the output on real content.
   the settings page, purges the LiteSpeed cache on change, and is removed on
   uninstall.
 
-= 0.20.2 =
+## 0.20.2
 * Packaging fix: keep `composer.json` alongside the bundled `vendor/` directory
   so WordPress.org Plugin Check can review the production dependencies. Tests
   and `composer.lock` remain excluded from the distributable package.
 
-= 0.20.1 =
+## 0.20.1
 * Removed duplicate Settings API success notices from the plugin settings page;
   WordPress now remains the single source that renders these notices.
 * Description fallbacks now remove complete `script`, `style` and `iframe`
@@ -415,7 +415,7 @@ code review of the shipped code. Two fixes change the output on real content.
   English. Official translations remain delivered exclusively through
   translate.wordpress.org language packs.
 
-= 0.20.0 =
+## 0.20.0
 * All internal names now use the distinctive `sysmda_` / `SYSMDA_` prefix and
   the `Diecieventi\SystemMarkdownAlternate` namespace, per the wordpress.org
   plugin review guidelines (options, settings, filters, shortcode, Dynamic Tag,
@@ -426,7 +426,7 @@ code review of the shipped code. Two fixes change the output on real content.
 * Removed bundled translation files and manual translation loading:
   translations are delivered as language packs by translate.wordpress.org.
 
-= 0.19.0 =
+## 0.19.0
 * `/llms.txt`: new optional **last modified dates** toggle (off by default —
   when off the output is unchanged). When enabled, every entry gets an
   `(updated: YYYY-MM-DD)` note (ISO date, taken from the post's last
@@ -434,7 +434,7 @@ code review of the shipped code. Two fixes change the output on real content.
   spot changed content without re-fetching each `.md` URL. New
   `sysmda_llms_txt_lastmod` filter.
 
-= 0.18.0 =
+## 0.18.0
 * Conditional requests on the `.md` endpoint: the Markdown response now sends
   `ETag` and `Last-Modified`, and honours `If-None-Match` / `If-Modified-Since`,
   replying `304 Not Modified` (no body) when the client already has the current
@@ -445,14 +445,14 @@ code review of the shipped code. Two fixes change the output on real content.
   so titles or descriptions containing `[`, `]`, `(`, `)`, backslashes, newlines
   or control characters can no longer break a link or the file structure.
 
-= 0.17.1 =
+## 0.17.1
 * Plugin Check compliance (wordpress.org): escape the post-type checkbox state via
   the core `checked()` helper, and annotate the deliberate direct transient cleanup
   query in `uninstall.php`. No change to behaviour or Markdown output.
 * Minimum WordPress bumped to 6.1 (the object-cache group flush on uninstall uses
   `wp_cache_flush_group()`, available since 6.1).
 
-= 0.17.0 =
+## 0.17.0
 * Admin settings page restyle (presentation only — no change to options, saving,
   sanitization, security or Markdown output): a page header with a single Save
   button, native WordPress tabs (General, Markdown output, llms.txt, Integrations,
@@ -461,7 +461,7 @@ code review of the shipped code. Two fixes change the output on real content.
   `details` disclosure. Fully responsive, admin-scoped CSS, and a tiny dependency-
   free vanilla-JS enhancement for the tabs (the page stays usable without JS).
 
-= 0.16.0 =
+## 0.16.0
 * Optional enriched `/llms.txt` output (new toggle, off by default — when off the
   output is unchanged): site summary paragraph, curated "Key content" section
   (post IDs or URLs from the settings page), a description for each entry (Rank
@@ -469,7 +469,7 @@ code review of the shipped code. Two fixes change the output on real content.
   beyond the most recent posts moved to an `Optional` section, and a
   `sysmda_llms_txt_footer` filter as a hook for future LLM signals.
 
-= 0.15.0 =
+## 0.15.0
 * Synced patterns (reusable blocks) are now expanded and cleaned like regular
   content: excluded blocks and shortcodes inside a pattern no longer leak into
   the Markdown output.
@@ -482,7 +482,7 @@ code review of the shipped code. Two fixes change the output on real content.
 * Internal: post eligibility rules centralized in a single helper; local test
   suite and CI added.
 
-= 0.14.0 =
+## 0.14.0
 * Content negotiation is now RFC 9110 compliant. The `Accept` header is parsed with
   q-values: Markdown is served only when explicitly preferred, so clients that prefer
   HTML (or send a wildcard such as `*/*`) keep getting HTML.
@@ -492,12 +492,12 @@ code review of the shipped code. Two fixes change the output on real content.
   (new `sysmda_markdown_strict_406` filter, on by default; real browsers and crawlers are
   never affected).
 
-= 0.13.1 =
+## 0.13.1
 * Repository moved to the Web Dietro le Quinte GitHub organization: updated the
   Plugin URI and Composer package name accordingly, and added an Author URI.
   No functional changes.
 
-= 0.13.0 =
+## 0.13.0
 * Internationalization (i18n): all admin panel strings (and the plugin header
   description) are now translatable through the `system-markdown-alternate` text
   domain, with English as the source language. A bundled `it_IT` translation
@@ -505,13 +505,13 @@ code review of the shipped code. Two fixes change the output on real content.
   translation (`.po`, `.mo` and a `.l10n.php` preferred by WordPress 6.5+) ship
   in `/languages`, and the text domain is loaded on `init`.
 
-= 0.12.1 =
+## 0.12.1
 * Removed the on-demand HTTP "Check /llms.txt now" button and the loopback
   request: it was unreliable behind a WAF/CDN and added no real value. The
   /llms.txt conflict detection now relies only on stable local signals (active
   SEO plugins + physical file).
 
-= 0.12.0 =
+## 0.12.0
 * Settings page UX overhaul (single page, native Settings API): sections grouped
   into Generale, Output Markdown, llms.txt, Integrazioni, Avanzate; supported
   post types moved to the top; compact exclusion textareas with defaults shown
@@ -521,26 +521,26 @@ code review of the shipped code. Two fixes change the output on real content.
 * ACF settings are registered only when ACF is active, so saving while ACF is
   inactive no longer wipes the saved field names.
 
-= 0.11.0 =
+## 0.11.0
 * Simpler, low-maintenance `/llms.txt` conflict detection: it now only checks
   whether known SEO plugins (Rank Math, Yoast, AIOSEO, SEOPress) are active and
   whether a physical llms.txt file exists, then warns. It no longer reads those
   plugins' internal options to guess if their feature is on (brittle and
   maintenance-heavy). The on-demand HTTP check is kept.
 
-= 0.10.1 =
+## 0.10.1
 * The on-demand `/llms.txt` HTTP check now uses a browser User-Agent (avoids
   false negatives from WAFs that block bot user agents) and uses the response
   content type to tell a real text llms.txt from an HTML block/soft-404 page.
 
-= 0.10.0 =
+## 0.10.0
 * Automatic conflict detection for `/llms.txt`: warns in the settings if another
   SEO plugin (Rank Math, Yoast, AIOSEO, SEOPress) has an llms.txt feature active,
   if a physical `llms.txt` file exists at the site root, or (on demand) if the
   URL already responds. Detection checks the feature state, not just whether the
   plugin is installed.
 
-= 0.9.1 =
+## 0.9.1
 * No `rel="alternate"` link is printed when no post type is enabled (previously
   it could appear on any singular content).
 * Relative links and images are now resolved against the source permalink, not
@@ -550,7 +550,7 @@ code review of the shipped code. Two fixes change the output on real content.
 * The ACF TL;DR now goes through the same DOM pipeline as the body (exclusions,
   code normalization, absolute URLs).
 
-= 0.9.0 =
+## 0.9.0
 * Performance: the `/llms.txt` index is now cached and skips priming meta/term
   caches; password-protected posts are excluded from it.
 * Caching now uses the persistent object cache (Redis/Memcached) when available,
@@ -558,42 +558,42 @@ code review of the shipped code. Two fixes change the output on real content.
 * Cache invalidation skips revisions and autosaves.
 * Added `uninstall.php` to remove all plugin options and cached data on deletion.
 
-= 0.8.0 =
+## 0.8.0
 * The GenerateBlocks `{{sysmda_md_url}}` Dynamic Tag now registers automatically
   whenever GenerateBlocks 2.x is active (the on/off toggle has been removed). It
   resolves to an empty value for non-servable posts, so leftover tags never
   render as literal text while the plugin and GenerateBlocks are active.
 
-= 0.7.0 =
+## 0.7.0
 * Admin panel reorganized into sections; ACF and GenerateBlocks integrations are
   shown only when the related plugin is active.
 * Dedicated Shortcode section.
 
-= 0.6.0 =
+## 0.6.0
 * Single `[sysmda_md_url]` shortcode.
 * GenerateBlocks 2.x `{{sysmda_md_url}}` Dynamic Tag, with an on/off toggle.
 
-= 0.5.0 =
+## 0.5.0
 * Shortcodes to output the Markdown URL.
 
-= 0.4.1 =
+## 0.4.1
 * Cache invalidation on plugin update and settings change.
 
-= 0.4.0 =
+## 0.4.0
 * ACF subtitle and TL;DR rendered as a preamble between the H1 and the body.
 
-= 0.3.0 =
+## 0.3.0
 * `Link: rel="canonical"` header on `.md` responses.
 
-= 0.2.1 =
+## 0.2.1
 * Settings-driven filters now apply on front-end requests too.
 
-= 0.2.0 =
+## 0.2.0
 * `/llms.txt` endpoint, custom post type support, content negotiation,
   proactive cache invalidation, ACF integration, admin settings panel and the
   `sysmda_markdown_excluded_classes` filter.
 
-= 0.1.0 =
+## 0.1.0
 * Initial release: `.md` endpoint, alternate link, front matter, block/shortcode
   cleaning and transient cache.
 
