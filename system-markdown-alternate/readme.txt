@@ -259,6 +259,16 @@ browser-like `-A` value matters: a WAF/CDN may block non-browser user agents.
   unchanged, out-of-range values included. A request whose `Accept` becomes
   entirely unparseable is treated like one with no `Accept` header — it gets the
   HTML page, never a `406`.
+* **Password-protected posts never get a Markdown version, not even for a
+  reader who has entered the password.** The check asked WordPress "does this
+  visitor still have to supply the password", which stops being true once the
+  reader has typed it in — so the `.md`, the discovery link, the shortcode and
+  the dynamic tag all unlocked with the page. Protected content is now excluded
+  outright, which is also what `/llms.txt` already did.
+* **`/llms.txt` picks up a change to the site name or tagline.** They are the
+  heading and the subtitle of the file, but they are edited in Settings →
+  General, which does not touch any post, so the index kept showing the old ones
+  for up to a day.
 * Test suite: the runner buffers its own output, so a failing assertion no
   longer suppresses the `304` status recorded by a later conditional-request
   test and produces a second, phantom failure.

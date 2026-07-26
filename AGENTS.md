@@ -310,6 +310,29 @@ The v1 scope is done and widely exceeded. Implemented:
   "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
   enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
   `/llms.txt` stays silent as well (see below).
+- **Password-protected content has NO Markdown representation, ever** (decided
+  July 2026, closes M1 of the 0.26.3 review): the test is
+  `'' === $post->post_password`, deliberately NOT `post_password_required()`.
+  That function answers "does this visitor still have to supply it?", so a
+  valid `wp-postpass_*` cookie made it false and a reader who had entered the
+  password once also unlocked the `.md`, the `rel="alternate"` link, the
+  shortcode and the dynamic tag. Having the password is irrelevant: the rule is
+  about the content, not the visitor. This also makes `is_servable()` agree with
+  `/llms.txt`, which always filtered on `has_password => false`. The old check
+  was invisible to the tests because the stub for `post_password_required()`
+  returned `! empty( $post->post_password )` — it encoded the assumption the
+  code was making instead of WordPress's actual behaviour; it now models the
+  cookie, which is what makes the regression test bite.
+- **`/llms.txt` invalidation covers the site identity, and deliberately NOT the
+  post format** (decided July 2026, closes M2 of the same review): the cached
+  index is versioned on the site name and tagline as well, because they are its
+  heading and subtitle and are edited in Settings → General, which never fires
+  `save_post`. A post's **format** is deliberately left out even though it does
+  change which posts are servable: it is set from the editor, where saving
+  already clears the cache, and post formats are not part of how this site
+  classifies content (see the decision below). Paying a `set_object_terms` hook
+  on every term write to close a gap only reachable through programmatic term
+  updates is not worth it. The residual risk is bounded by the TTL.
 - **Non-standard post formats are never served** (decided July 2026):
   `PostSupport::EXCLUDED_POST_FORMATS` covers all nine (aside, audio, chat,
   gallery, image, link, quote, status, video). Rationale: those are short,

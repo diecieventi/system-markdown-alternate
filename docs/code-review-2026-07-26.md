@@ -1,14 +1,14 @@
 # Complete code review — v0.26.3 (26 July 2026)
 
-> **Status: triaged, H1 and M3 fixed in `0.27.0`.** Every finding was verified
+> **Status: triaged, H1/M1/M3 fixed and M2 partly fixed in `0.27.0`.** Every finding was verified
 > against the code before anything was changed; the outcome is recorded inline
 > under each one. Summary:
 >
 > | # | Outcome |
 > |---|---|
 > | H1 | **Fixed in 0.27.0** — reproduced first (body changed, ETag did not) |
-> | M1 | **Open — product decision**, not a code defect: needs a ruling on whether a reader who has entered the password may have the Markdown |
-> | M2 | **Open** — confirmed by inspection, same shape as H1 but for `/llms.txt` |
+> | M1 | **Fixed in 0.27.0** — ruled on: protected content has no Markdown representation, cookie or not |
+> | M2 | **Partly fixed in 0.27.0** — site identity now versioned; the `post_format` hook declined on purpose |
 > | M3 | **Fixed in 0.27.0** — reproduced |
 > | L1 | **Accepted, not fixed** — real but marginal, see the note under it |
 > | L2 | **Half accepted** — the wasted render is real; the counter claim was wrong and is corrected below |
@@ -162,15 +162,22 @@ never to be exposed as Markdown.
 If cookie-authorized Markdown is intended instead, document it explicitly and
 align `/llms.txt` terminology/tests with that choice.
 
-**Outcome: open — this is a product decision, not a defect to fix.** The
-mechanics are confirmed: `post_password_required()` means "this visitor still
-has to supply it", so a valid `wp-postpass_*` cookie makes `is_servable()` true,
-while `/llms.txt` uses `has_password => false` and therefore applies a different
-rule. What is *not* settled is which behaviour is wanted: refusing Markdown to a
-reader who has already entered the password is defensible, and so is allowing
-it. Until that is ruled on, changing the predicate would be guessing. Whatever
-is decided, the two definitions must be made to agree and the rule written down
-in `AGENTS.md`.
+**Outcome: ruled on by the maintainer and fixed in `0.27.0`.** The mechanics
+were confirmed as described: `post_password_required()` means "this visitor
+still has to supply it", so a valid `wp-postpass_*` cookie made `is_servable()`
+true while `/llms.txt`, filtering on `has_password => false`, disagreed.
+
+The ruling is the strict reading: **protected content has no Markdown
+representation at all**, whether or not the reader knows the password. The test
+is now `'' === $post->post_password`, which also makes the endpoint and the
+index agree. See the durable decision in `AGENTS.md`.
+
+Worth recording why this survived a test suite with coverage of exactly this
+rule: the stub for `post_password_required()` returned
+`! empty( $post->post_password )`, i.e. it encoded the assumption the production
+code was making rather than WordPress's actual behaviour. A test built on a stub
+that shares the code's misconception cannot fail. The stub now models the
+cookie, and the new assertion fails against `0.26.3`.
 
 ### M2 — `/llms.txt` invalidation misses output-changing WordPress events
 
@@ -196,6 +203,20 @@ version and invalidate on relevant option/meta/term hooks (particularly
 `set_object_terms` for `post_format`, and site identity option changes). Expose a
 documented cache-version filter for third-party dynamic inputs. Tests should
 exercise changes that do not call `save_post`.
+
+**Outcome: partly fixed in `0.27.0`, the rest declined on purpose.** The site
+identity is now part of the index's cache version: the name is its `# ` heading
+and the tagline the blockquote under it, and both are edited in Settings →
+General, which never fires `save_post`. Two regression tests, both failing
+against `0.26.3`.
+
+The `set_object_terms` hook for `post_format` was **declined**. The gap is real
+but narrow: a format is set from the editor, where saving already clears this
+cache, so only programmatic term writes escape it — and post formats are
+explicitly not part of how this site classifies content (they are excluded from
+being served at all). Paying a hook on every term write for that is not worth
+it; the exposure is bounded by the TTL. Recorded as a durable decision in
+`AGENTS.md` so it is not "fixed" later by someone reading this finding alone.
 
 ### M3 — Invalid Accept quality values are interpreted as maximum preference
 

@@ -184,7 +184,22 @@ function get_the_terms( $post, $taxonomy ) {
 
 /** Stub: no magic quotes to strip in the tests. */
 function post_password_required( $post ) {
+	// Real WordPress semantics, which this stub used to get wrong: the answer is
+	// "does THIS VISITOR still have to supply the password", not "is the post
+	// protected". A valid wp-postpass_* cookie makes it false while the post is
+	// still protected. Modelling it correctly is what exposes the 0.26.3 defect;
+	// the previous version returned `! empty( $post->post_password )` and so
+	// quietly encoded the assumption the code was making.
+	if ( ! empty( $GLOBALS['sysmda_test_password_cookie'] ) ) {
+		return false;
+	}
+
 	return ! empty( $post->post_password );
+}
+
+/** Stub: site identity, part of the /llms.txt cache validity hash. */
+function get_bloginfo( $show = '', $filter = 'raw' ) {
+	return isset( $GLOBALS['sysmda_test_bloginfo'][ $show ] ) ? $GLOBALS['sysmda_test_bloginfo'][ $show ] : '';
 }
 
 /** Stub: post format, driven by a test-only property (false = standard format). */
@@ -1111,6 +1126,34 @@ check( 'llms: whitespace collapsed and trimmed', 'X Y', LlmsTxtController::escap
 check( 'llms: multiline description => single line', 'One two three', LlmsTxtController::normalize_inline( "One\ntwo\r\nthree" ) );
 check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtController::normalize_inline( 'see [1] and (2)' ) );
 
+// ─── LlmsTxtController: the cached index follows the site identity ────
+//
+// The site name is the `# ` heading of /llms.txt and the tagline the blockquote
+// under it, but both are edited in Settings → General, which never fires
+// save_post — so renaming the site used to leave the old name in the index for
+// a full TTL. Both assertions fail against 0.26.3.
+
+$sysmda_llms_cv_method = new ReflectionMethod( LlmsTxtController::class, 'cache_version' );
+$sysmda_llms_cv_method->setAccessible( true );
+$sysmda_llms_controller = new LlmsTxtController( $metadata );
+$sysmda_llms_cv         = function () use ( $sysmda_llms_cv_method, $sysmda_llms_controller ) {
+	return $sysmda_llms_cv_method->invoke( $sysmda_llms_controller );
+};
+
+$GLOBALS['sysmda_test_bloginfo'] = array(
+	'name'        => 'Old Site Name',
+	'description' => 'Old tagline',
+);
+$sysmda_llms_cv_before = $sysmda_llms_cv();
+
+$GLOBALS['sysmda_test_bloginfo']['name'] = 'New Site Name';
+check( 'llms: renaming the site invalidates the cached index', true, $sysmda_llms_cv_before !== $sysmda_llms_cv() );
+
+$sysmda_llms_cv_named                           = $sysmda_llms_cv();
+$GLOBALS['sysmda_test_bloginfo']['description'] = 'New tagline';
+check( 'llms: changing the tagline invalidates the cached index', true, $sysmda_llms_cv_named !== $sysmda_llms_cv() );
+check( 'llms: unchanged identity keeps the same version', $sysmda_llms_cv(), $sysmda_llms_cv() );
+
 // lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
 check( 'llms: lastmod valid date', '(updated: 2026-07-01)', LlmsTxtController::lastmod_suffix( '2026-07-01 08:30:00' ) );
 check( 'llms: lastmod date only', '(updated: 2024-12-31)', LlmsTxtController::lastmod_suffix( '2024-12-31' ) );
@@ -1443,6 +1486,24 @@ check( 'servable: standard format post', true, PostSupport::is_servable( $sysmda
 check( 'servable: unsupported type', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_type' => 'product' ) ) ) );
 check( 'servable: draft', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_status' => 'draft' ) ) ) );
 check( 'servable: password protected', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) ) );
+
+// The whole point of reading post_password directly: a reader who has already
+// entered the password holds a valid wp-postpass_* cookie, which makes
+// post_password_required() return false. Protected content still has no
+// Markdown representation — not through .md, not through the alternate link,
+// the shortcode or the dynamic tag. Fails against 0.26.3.
+$GLOBALS['sysmda_test_password_cookie'] = true;
+check(
+	'servable: password protected, cookie supplied',
+	false,
+	PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) )
+);
+check(
+	'servable: unprotected post unaffected by the cookie',
+	true,
+	PostSupport::is_servable( $sysmda_mk_post() )
+);
+$GLOBALS['sysmda_test_password_cookie'] = false;
 
 // Non-standard post formats are snippets, not documents: excluded everywhere
 // is_servable() is consulted (.md, alternate link, /llms.txt, shortcode, tag).

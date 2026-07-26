@@ -80,6 +80,32 @@ class LlmsTxtController {
 	}
 
 	/**
+	 * Validity hash of the cached /llms.txt body.
+	 *
+	 * Beyond the plugin version and the settings salt it covers the **site
+	 * identity printed in the file itself** — the name is the `# ` heading and
+	 * the tagline the blockquote under it. Both are edited in Settings →
+	 * General, which never fires `save_post`, so renaming the site used to leave
+	 * the old name in the index for up to a full TTL.
+	 *
+	 * Deliberately NOT covered: a post's format. Changing it does alter which
+	 * posts are servable, but it is set from the editor, where saving already
+	 * clears this cache through `save_post`; the remaining paths are
+	 * programmatic term writes. Post formats are not part of how this site
+	 * classifies content (see the durable decision in AGENTS.md), so paying a
+	 * `set_object_terms` hook on every term write to close that gap is not
+	 * worth it.
+	 */
+	private function cache_version(): string {
+		return md5(
+			SYSMDA_VERSION
+			. '|' . (string) get_option( 'sysmda_cache_salt', '0' )
+			. '|' . (string) get_bloginfo( 'name' )
+			. '|' . (string) get_bloginfo( 'description' )
+		);
+	}
+
+	/**
 	 * Prints the /llms.txt output, serving it from cache when available.
 	 */
 	private function render(): void {
@@ -91,7 +117,7 @@ class LlmsTxtController {
 
 		/** Filter: /llms.txt cache TTL in seconds. 0 disables caching. */
 		$ttl     = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
-		$version = md5( SYSMDA_VERSION . '|' . (string) get_option( 'sysmda_cache_salt', '0' ) );
+		$version = $this->cache_version();
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( self::CACHE_KEY );
