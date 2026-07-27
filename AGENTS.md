@@ -306,7 +306,7 @@ The v1 scope is done and widely exceeded. Implemented:
     because the `.md` URL is same-origin, and Chrome/Firefox 128+ render
     `text/markdown` inline. The download link carries no `target` — browsers
     ignore `download` when combined with `_blank`.
-  - **Styling is seven `var()` fallbacks and nothing else** — see the decisions
+  - **Styling is twelve `var()` fallbacks and nothing else** — see the decisions
     below for why nothing is declared and why the late-enqueue path made that
     mandatory rather than merely tidy.
   - **Assets load only where a button renders**: registered on
@@ -778,16 +778,32 @@ The v1 scope is done and widely exceeded. Implemented:
   nothing to lose to: the owner's is the only declaration, so it applies from the
   Customizer, a child theme or a builder alike, whatever the load order. Do not
   "tidy" the fallbacks back into a declaration block.
-- **Seven custom properties, and the menu reuses them** (same decision): `fg`,
-  `bg`, `border`, `radius`, `padding`, `font-size`, plus `menu-bg` — which exists
-  only because a dropdown floating over text has to be opaque. The entries take
-  the same `padding` and `fg` as the toggle and inherit the font size from the
-  root, so setting one value moves the button and its menu together. Everything
-  else is left to inherit: no hover tint, no shadow, no focus ring, no
-  transition, and **no `Canvas`/`CanvasText` system colours** — the 0.31.0 attempt
-  to follow the OS colour scheme that way was obscure and was removed on sight.
-  Hover feedback is `text-decoration: underline`, which needs no colour and reads
-  on any backdrop the theme supplies.
+- **Twelve custom properties, and the menu falls back to the button's** (same
+  decision, extended in `0.33.0`): toggle `fg`/`bg`/`hover-fg`/`hover-bg`/
+  `border`/`radius`/`padding`/`font-size`, dropdown `menu-fg`/`menu-bg`/
+  `menu-hover-fg`/`menu-hover-bg`. Every `menu-*` colour falls back through to
+  the toggle's own, so a menu needs its own values only when it should differ,
+  and `menu-bg` is the one with no inherited default because a dropdown floating
+  over body text has to be opaque. **Focus reuses the hover pair** rather than
+  introducing a third state — with the browser's own focus ring left in place on
+  top, since both hover colours default to "no change". `padding` and
+  `font-size` are shared with the entries, so one value moves the button and its
+  menu together. Still deliberately absent: shadow, transition, and
+  **`Canvas`/`CanvasText` system colours** — the 0.31.0 attempt to follow the OS
+  colour scheme that way was obscure and was removed on sight. The hover
+  underline stays alongside the colour change because the hover colours default
+  to no change at all, so it is the only cue an unstyled button has.
+- **The property rules are scoped one level deeper than they need to be, and
+  that is aimed at themes** (decided July 2026, `0.33.0`): `.entry-content a` is
+  `(0,2,0)` and outranked `.sysmda-md-button__item` `(0,1,0)`, so a theme
+  repainted the two entries that are links — on a dark dropdown "View as
+  Markdown" disappeared completely. The rules now read
+  `.sysmda-md-button .sysmda-md-button__menu .sysmda-md-button__item`. This does
+  **not** reintroduce the cascade problem the previous decision fixed: the site
+  owner customizes through the custom properties, which are still never declared
+  here, and a custom property set anywhere on or above the button wins whatever
+  the selector reading it looks like. Specificity only matters for the plugin-vs-
+  theme fight, never for the plugin-vs-owner one.
 - **NO auto-insert for the Markdown button** (decided July 2026, `0.32.0` —
   shipped in `0.31.0` and removed one version later; do not propose it again
   without a concrete request): an option that stamped the button onto every

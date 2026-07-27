@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.32.0
+Stable tag: 0.33.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -341,22 +341,31 @@ Markdown button**.
 
 = Can I restyle the Markdown button? =
 
-Yes, and without fighting selectors. Seven CSS custom properties are the whole
-surface: `--sysmda-btn-fg` (text colour), `--sysmda-btn-bg` (background),
-`--sysmda-btn-border`, `--sysmda-btn-radius`, `--sysmda-btn-padding`,
-`--sysmda-btn-font-size` and `--sysmda-btn-menu-bg` (the dropdown backdrop, which
-has to be opaque). The dropdown entries reuse the same values, so setting the
-padding or the font size once moves the button and its menu together.
+Yes, and without fighting selectors. Twelve CSS custom properties are the whole
+surface. For the button: `--sysmda-btn-fg`, `--sysmda-btn-bg`,
+`--sysmda-btn-hover-fg`, `--sysmda-btn-hover-bg`, `--sysmda-btn-border`,
+`--sysmda-btn-radius`, `--sysmda-btn-padding` and `--sysmda-btn-font-size`. For
+the dropdown: `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-bg`,
+`--sysmda-btn-menu-hover-fg` and `--sysmda-btn-menu-hover-bg`.
+
+Padding and font size are shared with the entries, so one value moves the button
+and its menu together; focus reuses the hover colours, so there is no third state
+to style; and the `menu` properties fall back to the button's own, so you only
+set them when you want the dropdown to differ.
 
 Paste them into **Appearance → Customize → Additional CSS** or your child theme's
 stylesheet, keeping only the lines you change. For a solid dark pill:
 
-`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; }`
+`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; --sysmda-btn-menu-hover-bg: #333; }`
 
 The plugin never declares these properties itself — it only reads them, with the
 defaults built in as fallbacks. That is what makes your rule always win, from the
 Customizer or a child theme alike, whichever stylesheet the browser loads last.
 The settings page shows the same list as a snippet you can copy.
+
+If a menu entry looks invisible, set `--sysmda-btn-menu-fg`: two of the entries
+are links, and some themes colour every link inside the content strongly enough
+to repaint them.
 
 To drop the plugin's stylesheet entirely and write your own, return `false` from
 `sysmda_md_button_enqueue_style`.
@@ -386,6 +395,22 @@ but the totals mix reader clicks with agents fetching the document directly.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.33.0 =
+
+* **The Markdown button's dropdown can now be coloured separately from the
+  button**, and hover and focus are stylable. Five new custom properties:
+  `--sysmda-btn-hover-fg` and `--sysmda-btn-hover-bg` for the button,
+  `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-hover-fg` and
+  `--sysmda-btn-menu-hover-bg` for the entries. Each falls back to the button's
+  own value, so you only set them when you want the menu to differ, and focus
+  reuses the hover colours rather than needing a third state.
+* **Fixed: a menu entry could be invisible.** Two of the four entries are links,
+  and a theme rule such as `.entry-content a` is specific enough to repaint them
+  — on a dark dropdown that made "View as Markdown" vanish. The plugin's own
+  rules are now scoped deeply enough to hold against that, without affecting your
+  own overrides, which go through the custom properties and are unaffected by
+  specificity.
 
 = 0.32.0 =
 
@@ -434,12 +459,6 @@ but the totals mix reader clicks with agents fetching the document directly.
 * New filters: `sysmda_md_button_position`, `sysmda_md_button_items`,
   `sysmda_md_button_label`, `sysmda_md_button_enqueue_style` and
   `sysmda_md_button_html`.
-
-= 0.30.2 =
-* Fixed: the WordPress.org readme parser truncated the changelog, because a
-  `Changelog` section may not exceed 5000 characters and this one had grown to
-  roughly 34000. `readme.txt` now lists the three most recent releases and links
-  to the full history on GitHub. No code, output or behaviour change.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

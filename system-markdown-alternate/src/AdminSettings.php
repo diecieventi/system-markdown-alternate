@@ -830,24 +830,33 @@ class AdminSettings {
 	 */
 	private function render_button_styling_help(): void {
 		$snippet = ".sysmda-md-button {\n"
-			. "\t--sysmda-btn-fg: inherit;                     /* text colour       */\n"
-			. "\t--sysmda-btn-bg: transparent;                 /* background        */\n"
-			. "\t--sysmda-btn-border: 1px solid currentColor;  /* border            */\n"
-			. "\t--sysmda-btn-radius: 0.375em;                 /* corner radius     */\n"
-			. "\t--sysmda-btn-padding: 0.45em 0.85em;          /* padding           */\n"
-			. "\t--sysmda-btn-font-size: 0.9em;                /* font size         */\n"
-			. "\t--sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop */\n"
+			. "\t/* Button */\n"
+			. "\t--sysmda-btn-fg: inherit;                     /* text                */\n"
+			. "\t--sysmda-btn-bg: transparent;                 /* background          */\n"
+			. "\t--sysmda-btn-hover-fg: inherit;               /* text on hover/focus */\n"
+			. "\t--sysmda-btn-hover-bg: transparent;           /* bg on hover/focus   */\n"
+			. "\t--sysmda-btn-border: 1px solid currentColor;  /* border              */\n"
+			. "\t--sysmda-btn-radius: 0.375em;                 /* corner radius       */\n"
+			. "\t--sysmda-btn-padding: 0.45em 0.85em;          /* padding             */\n"
+			. "\t--sysmda-btn-font-size: 0.9em;                /* font size           */\n\n"
+			. "\t/* Dropdown — omit any of these to reuse the button's value */\n"
+			. "\t--sysmda-btn-menu-fg: inherit;                /* entry text          */\n"
+			. "\t--sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop   */\n"
+			. "\t--sysmda-btn-menu-hover-fg: inherit;          /* entry on hover      */\n"
+			. "\t--sysmda-btn-menu-hover-bg: transparent;      /* entry bg on hover   */\n"
 			. '}';
 
 		echo '<div class="sysmda-status">';
 
 		echo '<p style="margin-top:0"><strong>' . esc_html__( 'Changing the look', 'system-markdown-alternate' ) . '</strong></p>';
 
-		echo '<p>' . wp_kses_post( __( 'The button inherits your theme\'s colours and typography, so it fits in anywhere. These seven custom properties are all it honours &mdash; paste them into <strong>Appearance → Customize → Additional CSS</strong> (or your child theme\'s stylesheet) and keep only the lines you actually change.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p>' . wp_kses_post( __( 'The button inherits your theme\'s colours and typography, so it fits in anywhere. These twelve custom properties are all it honours &mdash; paste them into <strong>Appearance → Customize → Additional CSS</strong> (or your child theme\'s stylesheet) and keep only the lines you actually change.', 'system-markdown-alternate' ) ) . '</p>';
 
-		echo '<textarea readonly rows="9" class="large-text code" onfocus="this.select()">' . esc_textarea( $snippet ) . '</textarea>';
+		echo '<textarea readonly rows="17" class="large-text code" onfocus="this.select()">' . esc_textarea( $snippet ) . '</textarea>';
 
-		echo '<p class="description">' . wp_kses_post( __( 'The dropdown entries reuse the same values, so setting the padding or the font size once moves the button and its menu together. For a solid dark pill: <code>--sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111;</code>', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'Padding and font size are shared with the dropdown entries, so one value moves the button and its menu together. Focus reuses the hover colours, so there is no third state to style. For a solid dark pill: <code>--sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; --sysmda-btn-menu-hover-bg: #333;</code>', 'system-markdown-alternate' ) ) . '</p>';
+
+		echo '<p class="description">' . wp_kses_post( __( 'If a menu entry looks invisible, set <code>--sysmda-btn-menu-fg</code>: two of the entries are links, and some themes colour every link inside the content strongly enough to repaint them.', 'system-markdown-alternate' ) ) . '</p>';
 
 		echo '<p class="description">' . wp_kses_post( __( 'The plugin never declares these properties itself &mdash; it only reads them, with the values above as built-in fallbacks. That is deliberate: it means your rule always wins, from the Customizer or a child theme alike, whichever stylesheet the browser loads last. To replace the plugin stylesheet entirely, return <code>false</code> from the <code>sysmda_md_button_enqueue_style</code> filter.', 'system-markdown-alternate' ) ) . '</p>';
 
