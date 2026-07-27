@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Create missing release tags
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The script locates each release commit with `git log -S` over the
           # full history and compares against every existing tag, so a shallow

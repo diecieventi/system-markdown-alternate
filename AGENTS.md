@@ -933,6 +933,13 @@ The v1 scope is done and widely exceeded. Implemented:
   offline fallback). Do not tell the user to tag from their machine. Same for
   the GitHub Release: it is the `Publish release` workflow, one tap from the
   Actions tab (phone included) — not a `gh release create` on the Mac.
+- **The remote branch is deleted when the PR merges**, so the next piece of work
+  under the same branch name fails to push with `! [rejected] … (stale info)` —
+  even with `--force-with-lease`, because the local remote-tracking ref still
+  points at the branch that no longer exists. `git remote prune origin` (note: it
+  takes no `-q`) or `git fetch --prune` clears it, after which the push is an
+  ordinary new-branch push needing no force at all. Hit three times in one
+  session before anyone wrote it down.
 - **Codex and any other agent**: same rule, no exceptions — work on a
   dedicated branch (e.g. `codex/<topic>`), push it, open a PR to `main`, let
   the user merge. Code-review fixes follow the same path: a PR, never a
