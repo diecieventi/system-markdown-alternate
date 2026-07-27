@@ -28,7 +28,7 @@ content consumable by tools that prefer Markdown over rendered HTML.
 - **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals — no IPs, no user-agent strings, no per-visitor data, no cookies, no external calls.
 - **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
 - **Shortcode** `[sysmda_md_url]` to print the `.md` URL anywhere.
-- **Optional Markdown button** for human readers (off by default): a small dropdown that copies the `.md` link, opens it in a new tab, downloads the file, or copies the Markdown itself to the clipboard, ready to paste into an AI assistant. Placed with `[sysmda_md_button]` or inserted automatically before/after the content. Neutral styling driven by CSS custom properties, and it degrades to plain working links without JavaScript.
+- **Optional Markdown button** for human readers: a small dropdown that copies the `.md` link, opens it in a new tab, downloads the file, or copies the Markdown itself to the clipboard, ready to paste into an AI assistant. Placed with `[sysmda_md_button]`, wherever you want it. Neutral styling driven by CSS custom properties, and it degrades to plain working links without JavaScript.
 - **Optional integrations**, shown only when the related plugin is active:
   - **Advanced Custom Fields**: subtitle and TL;DR (from ACF fields) as a preamble between the H1 and the body.
   - **GenerateBlocks 2.x**: auto-registered `{{sysmda_md_url}}` Dynamic Tag, usable in element fields (e.g. a Button URL).
@@ -55,10 +55,33 @@ The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
 
 To point *readers* at the Markdown, add the button: place `[sysmda_md_button]`
-where you want it (it accepts `id="123"`), or pick a position under
-**Settings → Markdown Alternate → Markdown button** to have it added before
-and/or after the content of every enabled post. It only ever renders on content
-that actually has a `.md`, and it is stripped from the Markdown itself.
+wherever you want it — in the post, a template or a widget — optionally with
+`id="123"` to target a specific post. It only ever renders on content that
+actually has a `.md`, and it is stripped from the Markdown itself.
+
+Its look is controlled with CSS custom properties, so no selector fights:
+
+```css
+/* Appearance → Customize → Additional CSS, or your child theme */
+.sysmda-md-button {
+  --sysmda-btn-fg: #fff;                       /* text colour       */
+  --sysmda-btn-bg: #111;                       /* background        */
+  --sysmda-btn-border: 1px solid currentColor; /* border            */
+  --sysmda-btn-radius: 999px;                  /* corner radius     */
+  --sysmda-btn-padding: 0.45em 0.85em;         /* padding           */
+  --sysmda-btn-font-size: 0.9em;               /* font size         */
+  --sysmda-btn-menu-bg: #111;                  /* dropdown backdrop */
+}
+```
+
+Those seven are the whole surface, and the dropdown entries reuse them — set the
+padding or the font size once and the button and its menu move together.
+
+The plugin **never declares these properties itself**; it only reads them, with
+the defaults baked in as `var()` fallbacks. So your rule always wins, from the
+Customizer or a child theme alike, regardless of which stylesheet the browser
+loads last. The same list is shown as a copy-ready snippet under **Settings →
+Markdown Alternate → Markdown button**.
 
 Not everything gets a Markdown version: drafts, private and password-protected
 content, media attachments, and posts with a **non-standard post format** (aside,

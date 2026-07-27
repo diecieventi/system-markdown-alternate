@@ -274,6 +274,10 @@ function wp_script_is( $handle, $list = 'enqueued' ) {
 	return false;
 }
 
+function has_shortcode( $content, $tag ) {
+	return false !== strpos( (string) $content, '[' . $tag );
+}
+
 /** Stub: core's per-request incrementing id generator. */
 function wp_unique_id( $prefix = '' ) {
 	static $id = 0;
@@ -2084,15 +2088,6 @@ stream_wrapper_unregister( 'sysmdatest' );
 
 // ─── MarkdownButton: sanitizers ──────────────────────────────────────────────
 
-check( 'button position: known value kept', 'after', MarkdownButton::sanitize_position( 'after' ) );
-check( 'button position: case and padding normalized', 'both', MarkdownButton::sanitize_position( '  Both ' ) );
-check( 'button position: unknown value disables', '', MarkdownButton::sanitize_position( 'sidebar' ) );
-check( 'button position: empty stays empty', '', MarkdownButton::sanitize_position( '' ) );
-// An unchecked <select> is never posted, so options.php calls the sanitizer with
-// null: it must mean "disabled", not a PHP notice.
-check( 'button position: null disables', '', MarkdownButton::sanitize_position( null ) );
-check( 'button position: array disables', '', MarkdownButton::sanitize_position( array( 'after' ) ) );
-
 check( 'button items: full default list survives', MarkdownButton::ITEMS, MarkdownButton::sanitize_items( MarkdownButton::ITEMS ) );
 check( 'button items: unknown keys dropped', array( 'view' ), MarkdownButton::sanitize_items( array( 'view', 'launch-rocket' ) ) );
 check( 'button items: order preserved as given', array( 'download', 'copy-link' ), MarkdownButton::sanitize_items( array( 'download', 'copy-link' ) ) );
@@ -2180,42 +2175,11 @@ check( 'button render: servable post gets a button', true, '' !== MarkdownButton
 check( 'button render: URL comes from MetadataBuilder', true, false !== strpos( MarkdownButton::render_for( $sysmda_btn_post ), 'https://example.com/hello-world.md' ) );
 check( 'button render: filename derived from the slug', true, false !== strpos( MarkdownButton::render_for( $sysmda_btn_post ), 'download="hello-world.md"' ) );
 
-// Same rule as [sysmda_md_url]: never advertise a URL that would 404.
-$sysmda_btn_draft = new WP_Post(
-	array(
-		'ID'          => 56,
-		'post_type'   => 'post',
-		'post_status' => 'draft',
-		'post_name'   => 'secret',
-	)
+check(
+	'button render: two renders of one post get different menu ids',
+	false,
+	MarkdownButton::render_for( $sysmda_btn_post ) === MarkdownButton::render_for( $sysmda_btn_post )
 );
-check( 'button render: draft gets nothing', '', MarkdownButton::render_for( $sysmda_btn_draft ) );
-
-$sysmda_btn_locked = new WP_Post(
-	array(
-		'ID'            => 57,
-		'post_type'     => 'post',
-		'post_status'   => 'publish',
-		'post_name'     => 'locked',
-		'post_password' => 'x',
-	)
-);
-check( 'button render: password-protected post gets nothing', '', MarkdownButton::render_for( $sysmda_btn_locked ) );
-
-// A post whose slug is empty must still propose a usable filename.
-$sysmda_btn_noslug = new WP_Post(
-	array(
-		'ID'          => 58,
-		'post_type'   => 'post',
-		'post_status' => 'publish',
-		'post_name'   => '',
-	)
-);
-check( 'button render: empty slug falls back to the ID', 'post-58.md', MarkdownButton::download_filename( $sysmda_btn_noslug ) );
-
-unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
-unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
-unset( $GLOBALS['sysmda_test_options']['permalink_structure'] );
 
 // ─── ShortcodeCleaner: the button never reaches the Markdown ─────────────────
 

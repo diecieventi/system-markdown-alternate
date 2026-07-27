@@ -277,10 +277,11 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Markdown button** (`MarkdownButton`): a front-end dropdown that finally makes
   the `.md` discoverable by a *human* — until 0.31.0 discovery was machine-only
   (`rel="alternate"`, `/llms.txt`, negotiation). Shortcode `[sysmda_md_button]`
-  (+ `id="123"`) plus an opt-in auto-insert position (option
-  `sysmda_md_button_position`: `''`/`before`/`after`/`both`, **default `''`**) and
-  an entry selection (`sysmda_md_button_items`, default all four), both in the new
-  **Markdown button** panel tab. Four entries: copy the `.md` link, view it in a
+  (+ `id="123"`) and an entry selection (`sysmda_md_button_items`, default all
+  four) in the **Markdown button** panel tab. **Placement is the author's alone:
+  there is no auto-insert.** It shipped in 0.31.0 (`sysmda_md_button_position`)
+  and was removed in 0.32.0 — see the decision below; the option survives only as
+  a legacy key in `uninstall.php`. Four entries: copy the `.md` link, view it in a
   new tab, download it, copy the Markdown body. Gated on `PostSupport::is_servable()`
   everywhere, like `[sysmda_md_url]`. Details that are load-bearing:
   - **A disclosure, never `role="menu"`** (see the decision below), with
@@ -305,14 +306,23 @@ The v1 scope is done and widely exceeded. Implemented:
     because the `.md` URL is same-origin, and Chrome/Firefox 128+ render
     `text/markdown` inline. The download link carries no `target` — browsers
     ignore `download` when combined with `_blank`.
+  - **Styling is seven `var()` fallbacks and nothing else** — see the decisions
+    below for why nothing is declared and why the late-enqueue path made that
+    mandatory rather than merely tidy.
   - **Assets load only where a button renders**: registered on
     `wp_enqueue_scripts` and enqueued there when the queried post is servable and
-    (auto-insert is on **or** `has_shortcode()` finds it in the content);
-    `render_for()` enqueues again as the fallback for a button coming from a
-    template, widget or GB element, where late styles still print in the footer.
-  - The menu `id` comes from `wp_unique_id()`, **not** the post ID: `both`
-    renders the same post twice and two menus sharing an id make `aria-controls`
-    ambiguous.
+    `has_shortcode()` finds the tag in the content; `render_for()` enqueues again
+    as the fallback for a button coming from a template, widget or GB element,
+    where late styles still print in the footer — `print_late_styles()` exists
+    for exactly that, so the fallback is styled, not just scripted.
+  - The menu `id` comes from `wp_unique_id()`, **not** the post ID: two
+    `[sysmda_md_button]` on one page — or one inside a query loop — would
+    otherwise share an id and make `aria-controls` ambiguous.
+  - The option→filter bridge for `sysmda_md_button_items` runs at **priority 5**,
+    not the 20 used by the scalar toggles. A list filter documented as
+    "may reorder and narrow" has to receive the saved selection as its *default*,
+    or site code at the ordinary priority is overwritten the moment the settings
+    are saved (0.31.0 shipped that too).
   - `build_html()` is public, static and takes primitives only, so the markup
     contract is pinned by the WP-less tests. It escapes the URL **once, up
     front, and checks emptiness afterwards** — `esc_url()` empties a disallowed
@@ -753,15 +763,44 @@ The v1 scope is done and widely exceeded. Implemented:
   which is wasteful in principle and deliberately left alone (one bump per
   request already, and a second special case in a rule that reads "any `sysmda_*`
   option" costs more clarity than it saves work).
-- **Auto-insert stands down when the shortcode is already in the content**
-  (decided): a site that placed the button by hand *and* set a position would
-  otherwise get two. The guards on `the_content` are worth keeping in step with
-  `is_negotiable_request()`'s reasoning — `is_singular()` stays true on feeds,
-  oEmbed views and trackbacks — plus one that route does not need:
-  `doing_filter( 'get_the_excerpt' )`, because `wp_trim_excerpt()` builds an
-  automatic excerpt by running the content through `the_content`, from inside the
-  main loop of a singular view. Without that guard the button lands in the
-  excerpt and the once-per-post flag then swallows the real one.
+- **The button's stylesheet declares no custom property, it only reads them**
+  (decided July 2026, `0.32.0`, after the 0.31.0 styling was reported as
+  impossible to override): every value is a `var( --sysmda-btn-*, fallback )`
+  call and there is no `.sysmda-md-button { --sysmda-btn-bg: … }` block anywhere.
+  The reason is the cascade, not taste. The plugin declared its defaults on
+  `.sysmda-md-button`, the site owner's override used the same selector, and
+  identical specificity means source order decides — while this stylesheet is
+  printed **in the footer** whenever the button comes from a template or a
+  page-builder element (`request_renders_button()` cannot see it, so
+  `render_for()` enqueues late and `print_late_styles()` emits it after
+  `wp_head`). The plugin's rule therefore landed *after* the Customizer's
+  Additional CSS and silently won. With no declaration of its own there is
+  nothing to lose to: the owner's is the only declaration, so it applies from the
+  Customizer, a child theme or a builder alike, whatever the load order. Do not
+  "tidy" the fallbacks back into a declaration block.
+- **Seven custom properties, and the menu reuses them** (same decision): `fg`,
+  `bg`, `border`, `radius`, `padding`, `font-size`, plus `menu-bg` — which exists
+  only because a dropdown floating over text has to be opaque. The entries take
+  the same `padding` and `fg` as the toggle and inherit the font size from the
+  root, so setting one value moves the button and its menu together. Everything
+  else is left to inherit: no hover tint, no shadow, no focus ring, no
+  transition, and **no `Canvas`/`CanvasText` system colours** — the 0.31.0 attempt
+  to follow the OS colour scheme that way was obscure and was removed on sight.
+  Hover feedback is `text-decoration: underline`, which needs no colour and reads
+  on any backdrop the theme supplies.
+- **NO auto-insert for the Markdown button** (decided July 2026, `0.32.0` —
+  shipped in `0.31.0` and removed one version later; do not propose it again
+  without a concrete request): an option that stamped the button onto every
+  enabled post was the wrong shape for a *presentational* control. It has to sit
+  where the design wants it, which the plugin cannot know, and the `the_content`
+  route needed a guard for each way WordPress re-runs that filter — feeds, oEmbed
+  views, trackbacks, secondary loops, a once-per-post flag for themes that render
+  the content twice, and `wp_trim_excerpt()`, which builds an automatic excerpt
+  through `the_content` from inside the main loop of a singular view. That is a
+  lot of surface for something the shortcode already does correctly, once,
+  exactly where it is written. The removal deleted the option, the field, the
+  filter bridge, `maybe_auto_insert()` and every guard; `sysmda_md_button_position`
+  stays in `uninstall.php` as a legacy key.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again): a
@@ -972,7 +1011,7 @@ running code at the WP level.
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
         ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
         ├── Shortcodes.php          ← [sysmda_md_url] (resolve_post() is shared, public static)
-        ├── MarkdownButton.php      ← [sysmda_md_button] front-end dropdown, auto-insert, assets, build_html()
+        ├── MarkdownButton.php      ← [sysmda_md_button] front-end dropdown, assets, build_html()
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
 ```
@@ -1040,8 +1079,7 @@ apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );              // p
 apply_filters( 'sysmda_llms_txt_footer', '' );                              // free-form trailing block (enriched only)
 apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );                  // case-insensitive UA substrings classified as bot (hit counter)
 apply_filters( 'sysmda_md_hits_retention_days', 90 );                       // retention of the daily .md hit buckets, in days
-apply_filters( 'sysmda_md_button_position', '', $post );                    // auto-insert position of the Markdown button: '' (off), 'before', 'after', 'both'. Panel option feeds the default at priority 20; anything unrecognized is normalized to '' (fails closed)
-apply_filters( 'sysmda_md_button_items', MarkdownButton::ITEMS, $post );   // ordered menu entries: copy-link, view, download, copy-content. May reorder and narrow; unknown keys are stripped AFTER the filter, [] renders no button at all
+apply_filters( 'sysmda_md_button_items', MarkdownButton::ITEMS, $post );   // ordered menu entries: copy-link, view, download, copy-content. The panel selection feeds the default at **priority 5** (like the taxonomy slugs), so site code at 10 may reorder and narrow it; unknown keys are stripped AFTER the filter, [] renders no button at all
 apply_filters( 'sysmda_md_button_label', 'Markdown', $post );              // label of the toggle ('' renders no button)
 apply_filters( 'sysmda_md_button_enqueue_style', true );                   // false = never enqueue assets/md-button.css; the button keeps working unstyled and the theme owns the presentation
 apply_filters( 'sysmda_md_button_html', $html, $post );                    // final button markup ('' when nothing is rendered)
@@ -1250,12 +1288,12 @@ Test posts:
 11. Post carrying `[sysmda_md_button]` → the button renders in HTML, and the same
     post's `.md` contains **no** trace of it — including with the panel's
     "Excluded shortcodes" textarea filled in with a custom list.
-12. Auto-insert set to "both" on a post that also has the shortcode → exactly
-    **one** button, and the two menus do not share a DOM `id`.
+12. Two `[sysmda_md_button]` in the same post → both render and their menus do
+    **not** share a DOM `id`.
 13. JavaScript disabled → the two links render and work, the toggle and both
     copy entries are absent. Same on plain HTTP for "Copy Markdown content".
 14. Non-servable post (draft, password-protected, unsupported type, `aside`
-    format) → the shortcode renders '' and auto-insert does nothing.
+    format) → the shortcode renders ''.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

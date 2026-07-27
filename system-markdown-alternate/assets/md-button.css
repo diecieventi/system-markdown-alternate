@@ -1,48 +1,44 @@
 /**
  * System Markdown Alternate — front-end Markdown button.
  *
- * Every selector is scoped under `.sysmda-md-button`: this stylesheet loads on
- * the public site, where the theme is unknown, so it must never reach an element
- * the plugin did not print.
+ * Deliberately small: only what the component cannot work without — dropdown
+ * positioning, the list reset, and hiding the controls JavaScript has not
+ * enabled yet. Colours and typography are left to the theme.
  *
- * Neutral by design. Colours come from the surrounding text (`currentColor`) and
- * from the `Canvas`/`CanvasText` system colours, so the button follows light and
- * dark themes with no media query. Everything worth changing is a custom
- * property — override them in the theme rather than fighting the selectors:
+ * Seven custom properties are honoured, and NONE of them is declared here: each
+ * appears only as a `var()` fallback. That is what makes an override work from
+ * anywhere — Customizer, child theme, page builder — no matter which stylesheet
+ * the browser happens to read last. With no declaration of its own, the plugin
+ * never competes on the cascade, so there is no specificity or source-order
+ * battle to lose. (It matters: this stylesheet is printed in the footer when the
+ * button comes from a template or a page-builder element, which would otherwise
+ * put it *after* the Customizer's CSS and quietly win.)
  *
- *   .sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; }
+ *   --sysmda-btn-fg         text colour           default: inherit
+ *   --sysmda-btn-bg         background            default: transparent
+ *   --sysmda-btn-border     border shorthand      default: 1px solid currentColor
+ *   --sysmda-btn-radius     corner radius         default: 0.375em
+ *   --sysmda-btn-padding    padding               default: 0.45em 0.85em
+ *   --sysmda-btn-font-size  font size             default: 0.9em
+ *   --sysmda-btn-menu-bg    dropdown background   default: #fff
  *
- * Layout uses logical properties, so RTL needs no second stylesheet.
+ * The last one exists only because a dropdown floating over text has to be
+ * opaque. Everything else inherits.
  */
 
 .sysmda-md-button {
-	--sysmda-btn-bg: transparent;
-	--sysmda-btn-fg: currentColor;
-	--sysmda-btn-border: 1px solid currentColor;
-	--sysmda-btn-radius: 0.375em;
-	--sysmda-btn-padding: 0.45em 0.85em;
-	--sysmda-btn-font-size: 0.9em;
-	--sysmda-btn-menu-bg: #fff;
-	--sysmda-btn-menu-fg: inherit;
-	--sysmda-btn-menu-border: 1px solid rgba(127, 127, 127, 0.35);
-	--sysmda-btn-menu-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
-	--sysmda-btn-menu-min-width: 14em;
-	--sysmda-btn-hover-bg: rgba(127, 127, 127, 0.16);
-	--sysmda-btn-focus: 2px solid currentColor;
-
 	position: relative;
 	display: inline-block;
-	font-size: var(--sysmda-btn-font-size);
-	line-height: 1.4;
-	text-align: start;
+	font-size: var( --sysmda-btn-font-size, 0.9em );
 }
 
-/* System colours where supported: the menu then matches the OS/browser theme. */
-@supports (background: Canvas) {
-	.sysmda-md-button {
-		--sysmda-btn-menu-bg: Canvas;
-		--sysmda-btn-menu-fg: CanvasText;
-	}
+/*
+ * Author rules beat the user-agent sheet at any specificity, so a theme styling
+ * links or buttons inside the content would reveal the controls the markup ships
+ * `hidden`. Restate it as an author rule, scoped to this component.
+ */
+.sysmda-md-button [hidden] {
+	display: none;
 }
 
 /* ─── Toggle ──────────────────────────────────────────────────────────────── */
@@ -51,23 +47,13 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5em;
-	margin: 0;
-	padding: var(--sysmda-btn-padding);
 	font: inherit;
-	color: var(--sysmda-btn-fg);
-	background: var(--sysmda-btn-bg);
-	border: var(--sysmda-btn-border);
-	border-radius: var(--sysmda-btn-radius);
+	color: var( --sysmda-btn-fg, inherit );
+	background: var( --sysmda-btn-bg, transparent );
+	border: var( --sysmda-btn-border, 1px solid currentColor );
+	border-radius: var( --sysmda-btn-radius, 0.375em );
+	padding: var( --sysmda-btn-padding, 0.45em 0.85em );
 	cursor: pointer;
-}
-
-.sysmda-md-button__toggle:hover {
-	background: var(--sysmda-btn-hover-bg);
-}
-
-.sysmda-md-button__toggle:focus-visible {
-	outline: var(--sysmda-btn-focus);
-	outline-offset: 2px;
 }
 
 .sysmda-md-button__chevron {
@@ -75,120 +61,85 @@
 	height: 0.5em;
 	border-inline-end: 1.5px solid currentColor;
 	border-block-end: 1.5px solid currentColor;
-	transform: translateY(-0.15em) rotate(45deg);
-	transition: transform 0.15s ease;
+	transform: translateY( -0.15em ) rotate( 45deg );
 }
 
 .sysmda-md-button.is-open .sysmda-md-button__chevron {
-	transform: translateY(0.1em) rotate(-135deg);
+	transform: translateY( 0.1em ) rotate( -135deg );
 }
 
 /* ─── Menu ────────────────────────────────────────────────────────────────── */
 
-/*
- * Author rules always beat the user-agent sheet, whatever the specificity, so a
- * theme styling `.entry-content a { display: inline-block }` would unhide the
- * clipboard buttons the markup ships `hidden`. Restate the rule as an author
- * one, scoped to this component.
- */
-.sysmda-md-button [hidden] {
-	display: none;
-}
-
-.sysmda-md-button__menu {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
+.sysmda-md-button__menu,
 .sysmda-md-button__row {
 	margin: 0;
 	padding: 0;
 	list-style: none;
 }
 
-.sysmda-md-button__row::before,
-.sysmda-md-button__row::marker {
-	content: none;
-}
-
+/*
+ * The entries reuse the toggle's own properties rather than inventing their own:
+ * set --sysmda-btn-padding once and the button and every row move together.
+ * Font size needs no variable here — `font: inherit` picks it up from the root,
+ * which is where --sysmda-btn-font-size is applied.
+ */
 .sysmda-md-button__item {
 	display: block;
 	width: 100%;
-	margin: 0;
-	padding: 0.5em 0.9em;
+	padding: var( --sysmda-btn-padding, 0.45em 0.85em );
 	font: inherit;
-	color: inherit;
+	color: var( --sysmda-btn-fg, inherit );
 	text-align: start;
 	text-decoration: none;
 	background: none;
 	border: 0;
-	border-radius: 0;
 	cursor: pointer;
 }
 
+/*
+ * Underline rather than a background tint: it reads correctly on any colour the
+ * theme happens to sit behind it, without this stylesheet naming one.
+ */
 .sysmda-md-button__item:hover {
-	background: var(--sysmda-btn-hover-bg);
-	text-decoration: none;
+	text-decoration: underline;
 }
-
-.sysmda-md-button__item:focus-visible {
-	outline: var(--sysmda-btn-focus);
-	outline-offset: -2px;
-}
-
-/* ─── Dropdown behaviour (only once the script has taken over) ────────────── */
 
 /*
- * Without JavaScript the toggle stays `hidden` and this block never applies, so
- * the menu renders as a plain list of the entries that work without scripting.
+ * The dropdown exists only once the script has taken over. Without JavaScript
+ * the menu stays a plain list of the entries that work unaided.
  */
 .sysmda-md-button--js .sysmda-md-button__menu {
 	position: absolute;
-	inset-block-start: calc(100% + 0.35em);
+	inset-block-start: calc( 100% + 0.35em );
 	inset-inline-start: 0;
 	z-index: 20;
 	display: none;
-	min-width: var(--sysmda-btn-menu-min-width);
-	padding: 0.25em 0;
-	color: var(--sysmda-btn-menu-fg);
-	background: var(--sysmda-btn-menu-bg);
-	border: var(--sysmda-btn-menu-border);
-	border-radius: var(--sysmda-btn-radius);
-	box-shadow: var(--sysmda-btn-menu-shadow);
+	min-width: max-content;
+	background: var( --sysmda-btn-menu-bg, #fff );
+	border: var( --sysmda-btn-border, 1px solid currentColor );
+	border-radius: var( --sysmda-btn-radius, 0.375em );
 }
 
 .sysmda-md-button--js.is-open .sysmda-md-button__menu {
 	display: block;
 }
 
-/* Keeps the menu inside the viewport when the button sits near the right edge. */
+/* Keeps the menu on screen when the button sits near the inline edge. */
 .sysmda-md-button--js.is-flipped .sysmda-md-button__menu {
 	inset-inline-start: auto;
 	inset-inline-end: 0;
 }
 
-/* ─── Status region ──────────────────────────────────────────────────────── */
-
 /*
- * Visually hidden, announced by screen readers. Not `display: none`, which would
- * stop assistive technology from reading the update at all.
+ * Visually hidden but still announced: `display: none` would stop assistive
+ * technology reading the copy result at all.
  */
 .sysmda-md-button__status {
 	position: absolute;
 	width: 1px;
 	height: 1px;
 	margin: -1px;
-	padding: 0;
 	overflow: hidden;
-	clip: rect(0, 0, 0, 0);
-	clip-path: inset(50%);
+	clip-path: inset( 50% );
 	white-space: nowrap;
-	border: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.sysmda-md-button__chevron {
-		transition: none;
-	}
 }

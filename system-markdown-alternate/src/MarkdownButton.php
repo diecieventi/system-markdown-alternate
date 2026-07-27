@@ -17,7 +17,8 @@ defined( 'ABSPATH' ) || exit;
  *   [sysmda_md_button]           → button for the current post
  *   [sysmda_md_button id="123"]  → button for a specific post
  *
- * plus an opt-in auto-insert position (before/after the content) set in the panel.
+ * Placement is entirely the author's: there is no automatic insertion. It renders
+ * where the shortcode is, and nowhere else.
  *
  * Returns an empty string when the post is not servable, so the button never
  * advertises a URL that would 404 — same rule as [sysmda_md_url].
@@ -43,23 +44,9 @@ class MarkdownButton {
 	/** Menu entries, in default render order. */
 	const ITEMS = array( 'copy-link', 'view', 'download', 'copy-content' );
 
-	/** Accepted auto-insert positions ('' = disabled). */
-	const POSITIONS = array( 'before', 'after', 'both' );
-
-	/**
-	 * Posts already auto-inserted into.
-	 *
-	 * `the_content` runs more than once on pages built by some page builders and
-	 * theme templates; without this the button would be printed twice.
-	 *
-	 * @var array<int,bool>
-	 */
-	private $inserted = array();
-
 	public function register(): void {
 		add_shortcode( self::TAG, array( $this, 'render_shortcode' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_assets' ) );
-		add_filter( 'the_content', array( $this, 'maybe_auto_insert' ), 20 );
 	}
 
 	/**
@@ -102,9 +89,9 @@ class MarkdownButton {
 	/**
 	 * Whether this request is known, before rendering, to output a button.
 	 *
-	 * Only the cases visible from the queried post: auto-insert being on, or the
-	 * shortcode sitting in the post content. Anything else is caught by the
-	 * late enqueue in render_for().
+	 * Only the case visible from the queried post: the shortcode sitting in the
+	 * post content. Anything else — a template, a widget, a GenerateBlocks
+	 * element — is caught by the late enqueue in render_for().
 	 */
 	private function request_renders_button(): bool {
 		if ( ! is_singular() ) {
@@ -115,10 +102,6 @@ class MarkdownButton {
 
 		if ( ! $post instanceof \WP_Post || ! PostSupport::is_servable( $post ) ) {
 			return false;
-		}
-
-		if ( '' !== self::position_for( $post ) ) {
-			return true;
 		}
 
 		return has_shortcode( (string) $post->post_content, self::TAG );
@@ -152,69 +135,6 @@ class MarkdownButton {
 		$post = Shortcodes::resolve_post( (int) $atts['id'] );
 
 		return $post instanceof \WP_Post ? self::render_for( $post ) : '';
-	}
-
-	/**
-	 * Hook: the_content (priority 20). Adds the button when a position is set.
-	 *
-	 * The guards keep it to the real article: the main query, inside the loop, on
-	 * a singular view, never in a feed or an oEmbed. The Markdown pipeline is not
-	 * a concern here — it renders cleaned blocks and never calls `the_content`.
-	 */
-	public function maybe_auto_insert( string $content ): string {
-		if ( is_admin() || is_feed() || is_embed() || is_trackback() || ! is_singular() ) {
-			return $content;
-		}
-
-		// wp_trim_excerpt() builds an automatic excerpt by running the content
-		// through `the_content`, and a theme printing the excerpt above the
-		// article does that from inside the main loop of a singular view — so
-		// every guard below is satisfied. Without this the button would be
-		// injected into the excerpt, and the once-per-post flag would then
-		// swallow the real one.
-		if ( doing_filter( 'get_the_excerpt' ) ) {
-			return $content;
-		}
-
-		// Two different shapes of secondary loop: a plain WP_Query leaves
-		// in_the_loop() false, a theme that reassigns the global $wp_query makes
-		// is_main_query() false.
-		if ( ! is_main_query() || ! in_the_loop() ) {
-			return $content;
-		}
-
-		$post = get_post();
-
-		if ( ! $post instanceof \WP_Post
-			|| (int) get_queried_object_id() !== (int) $post->ID
-			|| isset( $this->inserted[ $post->ID ] ) ) {
-			return $content;
-		}
-
-		$position = self::position_for( $post );
-
-		if ( '' === $position ) {
-			return $content;
-		}
-
-		// The author already placed one by hand: stand down rather than print a
-		// second button.
-		if ( has_shortcode( (string) $post->post_content, self::TAG ) ) {
-			return $content;
-		}
-
-		$html = self::render_for( $post );
-
-		if ( '' === $html ) {
-			return $content;
-		}
-
-		$this->inserted[ $post->ID ] = true;
-
-		$before = ( 'before' === $position || 'both' === $position ) ? $html : '';
-		$after  = ( 'after' === $position || 'both' === $position ) ? $html : '';
-
-		return $before . $content . $after;
 	}
 
 	/**
@@ -265,9 +185,9 @@ class MarkdownButton {
 	 * @param string[] $items    Requested entries (sanitized here).
 	 * @param string   $menu_id  Unique DOM id tying the toggle to its menu. Taken
 	 *                           as an argument rather than derived from the post:
-	 *                           the "before and after" placement renders the same
-	 *                           post twice, and two menus sharing an id would make
-	 *                           aria-controls ambiguous.
+	 *                           the shortcode can appear twice on one page, or once
+	 *                           inside a query loop, and two menus sharing an id
+	 *                           would make aria-controls ambiguous.
 	 */
 	public static function build_html( string $url, string $filename, string $label, array $items, string $menu_id ): string {
 		$items = self::sanitize_items( $items );
@@ -348,14 +268,6 @@ class MarkdownButton {
 	}
 
 	/**
-	 * Auto-insert position for a post ('' = disabled).
-	 */
-	private static function position_for( \WP_Post $post ): string {
-		/** Filters where the button is inserted automatically: '', 'before', 'after' or 'both'. */
-		return self::sanitize_position( apply_filters( 'sysmda_md_button_position', '', $post ) );
-	}
-
-	/**
 	 * Name the download entry proposes, derived from the slug.
 	 */
 	public static function download_filename( \WP_Post $post ): string {
@@ -384,16 +296,5 @@ class MarkdownButton {
 		}
 
 		return $out;
-	}
-
-	/**
-	 * Normalizes an auto-insert position; anything unknown means "disabled".
-	 *
-	 * @param mixed $value
-	 */
-	public static function sanitize_position( $value ): string {
-		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
-
-		return in_array( $value, self::POSITIONS, true ) ? $value : '';
 	}
 }

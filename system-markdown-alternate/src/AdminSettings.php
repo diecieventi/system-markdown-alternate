@@ -406,14 +406,6 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
-			'sysmda_md_button_position',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( MarkdownButton::class, 'sanitize_position' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
 			'sysmda_md_button_items',
 			array(
 				'type'              => 'array',
@@ -464,7 +456,6 @@ class AdminSettings {
 
 		// ── Markdown button (front end) ──────────────────────────────────────────
 		add_settings_section( 'sysmda_button', __( 'Markdown button', 'system-markdown-alternate' ), array( $this, 'render_button_intro' ), self::PAGE );
-		add_settings_field( 'sysmda_md_button_position', __( 'Automatic placement', 'system-markdown-alternate' ), array( $this, 'field_md_button_position' ), self::PAGE, 'sysmda_button' );
 		add_settings_field( 'sysmda_md_button_items', __( 'Menu entries', 'system-markdown-alternate' ), array( $this, 'field_md_button_items' ), self::PAGE, 'sysmda_button' );
 
 		// ── llms.txt ─────────────────────────────────────────────────────────────
@@ -705,25 +696,21 @@ class AdminSettings {
 			20
 		);
 
-		add_filter(
-			'sysmda_md_button_position',
-			function ( $fallback ) {
-				$v = get_option( 'sysmda_md_button_position' );
-				return false !== $v ? (string) $v : $fallback;
-			},
-			20
-		);
-
-		// The saved selection replaces the default list rather than intersecting
-		// it: an entry the site owner unticked must not come back because it is
-		// still in MarkdownButton::ITEMS.
+		// Priority 5, before the default 10, exactly like the taxonomy selection:
+		// the saved list is the *default* value of the filter, so site code
+		// hooking at the ordinary priority can still narrow and reorder it. At 20
+		// it overwrote them instead, and the documented "may reorder and narrow"
+		// contract silently stopped holding the moment the settings were saved.
+		// The saved list replaces rather than intersects MarkdownButton::ITEMS:
+		// an entry the owner unticked must not come back because it is still a
+		// known key.
 		add_filter(
 			'sysmda_md_button_items',
 			function ( $defaults ) {
 				$v = get_option( 'sysmda_md_button_items' );
 				return false !== $v ? (array) $v : $defaults;
 			},
-			20
+			5
 		);
 
 		add_filter(
@@ -828,7 +815,43 @@ class AdminSettings {
 	}
 
 	public function render_button_intro(): void {
-		echo '<p class="sysmda-help">' . wp_kses_post( __( 'An optional button that lets readers copy, view or download the Markdown version of a post. Place it by hand with the <code>[sysmda_md_button]</code> shortcode, or have it added to every enabled post automatically.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="sysmda-help">' . wp_kses_post( __( 'An optional button that lets readers copy, view or download the Markdown version of a post. Add it wherever you want it with the <code>[sysmda_md_button]</code> shortcode &mdash; in the post, in a template, in a widget. It accepts <code>id="123"</code> to point at a specific post, and renders nothing on content that has no Markdown version.', 'system-markdown-alternate' ) ) . '</p>';
+
+		$this->render_button_styling_help();
+	}
+
+	/**
+	 * The "how do I restyle it" answer, in the panel rather than in the docs.
+	 *
+	 * The button ships deliberately neutral so it inherits from any theme, which
+	 * leaves the obvious question of where the colours are set. Nothing here is a
+	 * setting: it is a ready-made snippet with every custom property the
+	 * stylesheet honours, and the one place to paste it.
+	 */
+	private function render_button_styling_help(): void {
+		$snippet = ".sysmda-md-button {\n"
+			. "\t--sysmda-btn-fg: inherit;                     /* text colour       */\n"
+			. "\t--sysmda-btn-bg: transparent;                 /* background        */\n"
+			. "\t--sysmda-btn-border: 1px solid currentColor;  /* border            */\n"
+			. "\t--sysmda-btn-radius: 0.375em;                 /* corner radius     */\n"
+			. "\t--sysmda-btn-padding: 0.45em 0.85em;          /* padding           */\n"
+			. "\t--sysmda-btn-font-size: 0.9em;                /* font size         */\n"
+			. "\t--sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop */\n"
+			. '}';
+
+		echo '<div class="sysmda-status">';
+
+		echo '<p style="margin-top:0"><strong>' . esc_html__( 'Changing the look', 'system-markdown-alternate' ) . '</strong></p>';
+
+		echo '<p>' . wp_kses_post( __( 'The button inherits your theme\'s colours and typography, so it fits in anywhere. These seven custom properties are all it honours &mdash; paste them into <strong>Appearance → Customize → Additional CSS</strong> (or your child theme\'s stylesheet) and keep only the lines you actually change.', 'system-markdown-alternate' ) ) . '</p>';
+
+		echo '<textarea readonly rows="9" class="large-text code" onfocus="this.select()">' . esc_textarea( $snippet ) . '</textarea>';
+
+		echo '<p class="description">' . wp_kses_post( __( 'The dropdown entries reuse the same values, so setting the padding or the font size once moves the button and its menu together. For a solid dark pill: <code>--sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111;</code>', 'system-markdown-alternate' ) ) . '</p>';
+
+		echo '<p class="description">' . wp_kses_post( __( 'The plugin never declares these properties itself &mdash; it only reads them, with the values above as built-in fallbacks. That is deliberate: it means your rule always wins, from the Customizer or a child theme alike, whichever stylesheet the browser loads last. To replace the plugin stylesheet entirely, return <code>false</code> from the <code>sysmda_md_button_enqueue_style</code> filter.', 'system-markdown-alternate' ) ) . '</p>';
+
+		echo '</div>';
 	}
 
 	public function render_llmstxt_intro(): void {
@@ -1071,25 +1094,6 @@ class AdminSettings {
 		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // Disabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	public function field_md_button_position(): void {
-		$current = MarkdownButton::sanitize_position( get_option( 'sysmda_md_button_position', '' ) );
-
-		$choices = array(
-			''       => __( 'Disabled — only where I place the shortcode', 'system-markdown-alternate' ),
-			'after'  => __( 'After the content', 'system-markdown-alternate' ),
-			'before' => __( 'Before the content', 'system-markdown-alternate' ),
-			'both'   => __( 'Before and after the content', 'system-markdown-alternate' ),
-		);
-
-		echo '<select name="sysmda_md_button_position">';
-		foreach ( $choices as $value => $label ) {
-			echo '<option value="' . esc_attr( $value ) . '"' . selected( $value, $current, false ) . '>' . esc_html( $label ) . '</option>';
-		}
-		echo '</select>';
-
-		echo '<p class="description">' . wp_kses_post( __( 'Automatic placement applies to every enabled, published post. Content with no Markdown version (drafts, password-protected posts, non-standard post formats) never shows the button. The shortcode <code>[sysmda_md_button]</code> works whatever this is set to, and accepts <code>id="123"</code>.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function field_md_button_items(): void {

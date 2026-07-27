@@ -9,6 +9,44 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.32.0
+
+* **Removed the Markdown button's automatic placement**, one version after it
+  shipped. A button is a presentational decision: it has to sit where the design
+  wants it, which the plugin cannot know, and stamping it onto every enabled post
+  was the wrong default shape. The `the_content` route also needed a guard for
+  each way WordPress re-runs that filter — feeds, oEmbed views, trackbacks,
+  secondary loops, a once-per-post flag for themes that render the content twice,
+  and `wp_trim_excerpt()`, which builds an automatic excerpt through
+  `the_content` from inside the main loop of a singular view. That is a lot of
+  surface for something `[sysmda_md_button]` already does correctly, once,
+  exactly where it is written. The "Automatic placement" setting, the
+  `sysmda_md_button_position` filter and `maybe_auto_insert()` are all gone;
+  the option remains in `uninstall.php` as a legacy key so it is cleaned up.
+* **Fixed: the button could not be restyled at all.** Setting
+  `--sysmda-btn-bg` in the Customizer did nothing. The plugin declared its
+  defaults on `.sysmda-md-button`, the override used the same selector, and with
+  identical specificity source order decides — while the stylesheet is printed in
+  the *footer* whenever the button comes from a template or a page-builder
+  element, landing after the Customizer's CSS and quietly winning. The stylesheet
+  now **declares nothing**: every value is a `var()` fallback, so your rule is the
+  only declaration and applies from the Customizer or a child theme alike,
+  whatever the load order.
+* **The stylesheet is down to what the component cannot work without**, and the
+  whole styling surface is seven custom properties: text colour, background,
+  border, corner radius, padding, font size, and the dropdown backdrop (which has
+  to be opaque). The menu entries reuse the same values, so setting the padding or
+  the font size once moves the button and its menu together. Gone with the rest:
+  the hover tint, the shadow, the transition, and the `Canvas`/`CanvasText`
+  system colours that were meant to follow the OS dark mode. The settings page
+  lists all seven as a copy-and-paste snippet and names where to paste it.
+* **Fixed: `sysmda_md_button_items` ignored site code once the settings were
+  saved.** The panel selection was bridged in at priority 20, so it overwrote
+  anything a theme or site plugin returned at the ordinary priority 10, and the
+  documented "may reorder and narrow" contract silently stopped holding — the
+  example in `README.md` included. The selection is now fed in at priority 5 as
+  the filter's *default*, exactly like `sysmda_front_matter_taxonomy_slugs`.
+
 ## 0.31.0
 
 * **New: an optional Markdown button for readers.** Until now the `.md` version
