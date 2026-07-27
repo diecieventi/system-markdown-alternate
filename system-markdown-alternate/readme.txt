@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.31.0
+Stable tag: 0.32.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,11 +60,12 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
 * **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
-* **Optional Markdown button** for readers (off by default): a small dropdown that
-  copies the `.md` link, opens it in a new tab, downloads the `.md` file, or copies
-  the Markdown itself to the clipboard, ready to paste into an AI assistant. Place
-  it with `[sysmda_md_button]` or have it added before/after every enabled post.
-  Neutral styling that inherits from your theme, and it works without JavaScript.
+* **Optional Markdown button** for readers: a small dropdown that copies the `.md`
+  link, opens it in a new tab, downloads the `.md` file, or copies the Markdown
+  itself to the clipboard, ready to paste into an AI assistant. Place it with
+  `[sysmda_md_button]` wherever you want it. Neutral styling that inherits from
+  your theme and is restyled with CSS custom properties, and it works without
+  JavaScript.
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
@@ -117,8 +118,6 @@ The output is customizable through filters:
 * `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
 * `sysmda_md_hits_bot_patterns` — user-agent substrings the hit counter classifies as bot.
 * `sysmda_md_hits_retention_days` — retention of the daily hit-counter buckets (default 90).
-* `sysmda_md_button_position` — where the Markdown button is inserted automatically:
-  `''` (off), `'before'`, `'after'` or `'both'`.
 * `sysmda_md_button_items` — which menu entries appear, in order: `copy-link`,
   `view`, `download`, `copy-content`.
 * `sysmda_md_button_label` — label of the button that opens the menu (default `Markdown`).
@@ -328,32 +327,39 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 = How do I show a Markdown button on my posts? =
 
-Two ways, and they can be combined. Put `[sysmda_md_button]` wherever you want it
-— in the post, in a template, in a widget, in a GenerateBlocks element — adding
-`id="123"` to point it at a specific post. Or open **Settings → Markdown
-Alternate → Markdown button** and pick a position: the button is then added
-before and/or after the content of every enabled post, with no editing.
+Put `[sysmda_md_button]` wherever you want it — in the post, in a template, in a
+widget, in a GenerateBlocks element — adding `id="123"` to point it at a specific
+post. There is no automatic insertion: a button is a design decision, so it goes
+exactly where you put it and nowhere else.
 
 The button never appears on content that has no Markdown version (drafts,
 password-protected posts, unsupported post types, non-standard post formats), so
 it can never link to a 404. It also never ends up inside the `.md` file itself.
 
-If you place the shortcode by hand in a post, automatic insertion stands down for
-that post, so you never get two buttons.
+Which entries the menu offers is set under **Settings → Markdown Alternate →
+Markdown button**.
 
 = Can I restyle the Markdown button? =
 
-Yes, and without fighting selectors: everything worth changing is a CSS custom
-property on `.sysmda-md-button`. For a solid dark button, for example:
+Yes, and without fighting selectors. Seven CSS custom properties are the whole
+surface: `--sysmda-btn-fg` (text colour), `--sysmda-btn-bg` (background),
+`--sysmda-btn-border`, `--sysmda-btn-radius`, `--sysmda-btn-padding`,
+`--sysmda-btn-font-size` and `--sysmda-btn-menu-bg` (the dropdown backdrop, which
+has to be opaque). The dropdown entries reuse the same values, so setting the
+padding or the font size once moves the button and its menu together.
 
-`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; }`
+Paste them into **Appearance → Customize → Additional CSS** or your child theme's
+stylesheet, keeping only the lines you change. For a solid dark pill:
 
-Others include `--sysmda-btn-padding`, `--sysmda-btn-font-size`,
-`--sysmda-btn-hover-bg`, `--sysmda-btn-menu-bg`, `--sysmda-btn-menu-fg` and
-`--sysmda-btn-menu-shadow`. The dropdown follows your theme's `color-scheme`, so
-dark themes usually need no change at all; set the two `menu` properties if yours
-does not declare one. To drop the plugin's stylesheet entirely and write your
-own, return `false` from `sysmda_md_button_enqueue_style`.
+`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; }`
+
+The plugin never declares these properties itself — it only reads them, with the
+defaults built in as fallbacks. That is what makes your rule always win, from the
+Customizer or a child theme alike, whichever stylesheet the browser loads last.
+The settings page shows the same list as a snippet you can copy.
+
+To drop the plugin's stylesheet entirely and write your own, return `false` from
+`sysmda_md_button_enqueue_style`.
 
 = The button does not copy anything on my site =
 
@@ -380,6 +386,29 @@ but the totals mix reader clicks with agents fetching the document directly.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.32.0 =
+
+* **Removed the Markdown button's automatic placement.** The button is a design
+  decision, so it now goes exactly where you put `[sysmda_md_button]` and nowhere
+  else. The "Automatic placement" setting is gone, along with the machinery that
+  had to keep it out of feeds, oEmbed views, excerpts and secondary loops. If you
+  were relying on it, add the shortcode to your single-post template.
+* **Fixed: the button could not be restyled.** Setting `--sysmda-btn-bg` in the
+  Customizer did nothing, because the plugin declared the same properties on the
+  same selector and its stylesheet can load last. It now declares nothing at all —
+  every value is a fallback — so your rule always wins, from the Customizer or a
+  child theme alike.
+* **The stylesheet is down to the minimum**, and the whole styling surface is
+  seven custom properties: text colour, background, border, corner radius,
+  padding, font size and the dropdown backdrop. The menu entries reuse the same
+  values, so one change moves the button and its menu together. The settings page
+  lists them as a copy-and-paste snippet and names where to paste it.
+* Fixed: site code hooking `sysmda_md_button_items` at the ordinary priority was
+  overwritten by the saved selection as soon as the settings were saved, so the
+  documented "may reorder and narrow" behaviour silently stopped working. The
+  panel selection is now fed in as the filter's *default*, like the taxonomy
+  selection.
 
 = 0.31.0 =
 
@@ -411,12 +440,6 @@ but the totals mix reader clicks with agents fetching the document directly.
   `Changelog` section may not exceed 5000 characters and this one had grown to
   roughly 34000. `readme.txt` now lists the three most recent releases and links
   to the full history on GitHub. No code, output or behaviour change.
-
-= 0.30.1 =
-
-* The plugin's **Author URI** now points to `https://diecieventi.com/`, the site
-  of the author named in the header, instead of a different site run by the same
-  author. Metadata only — no code, output or behaviour changes.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
