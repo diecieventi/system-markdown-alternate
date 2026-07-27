@@ -3,27 +3,52 @@
  *
  * Deliberately small: only what the component cannot work without — dropdown
  * positioning, the list reset, and hiding the controls JavaScript has not
- * enabled yet. Colours and typography are left to the theme.
+ * enabled yet.
  *
- * Seven custom properties are honoured, and NONE of them is declared here: each
+ * Twelve custom properties are honoured, and NONE of them is declared here: each
  * appears only as a `var()` fallback. That is what makes an override work from
  * anywhere — Customizer, child theme, page builder — no matter which stylesheet
- * the browser happens to read last. With no declaration of its own, the plugin
- * never competes on the cascade, so there is no specificity or source-order
- * battle to lose. (It matters: this stylesheet is printed in the footer when the
- * button comes from a template or a page-builder element, which would otherwise
- * put it *after* the Customizer's CSS and quietly win.)
+ * the browser reads last. With no declaration of its own, the plugin never
+ * competes on the cascade, so there is no source-order battle to lose. (It
+ * matters: this stylesheet prints in the footer when the button comes from a
+ * template or a page-builder element, which would otherwise put it *after* the
+ * Customizer's CSS and quietly win.)
  *
- *   --sysmda-btn-fg         text colour           default: inherit
- *   --sysmda-btn-bg         background            default: transparent
- *   --sysmda-btn-border     border shorthand      default: 1px solid currentColor
- *   --sysmda-btn-radius     corner radius         default: 0.375em
- *   --sysmda-btn-padding    padding               default: 0.45em 0.85em
- *   --sysmda-btn-font-size  font size             default: 0.9em
- *   --sysmda-btn-menu-bg    dropdown background   default: #fff
+ *   Toggle
+ *   --sysmda-btn-fg              text colour          default: inherit
+ *   --sysmda-btn-bg              background           default: transparent
+ *   --sysmda-btn-hover-fg        text on hover/focus  default: --sysmda-btn-fg
+ *   --sysmda-btn-hover-bg        background on hover  default: --sysmda-btn-bg
+ *   --sysmda-btn-border          border shorthand     default: 1px solid currentColor
+ *   --sysmda-btn-radius          corner radius        default: 0.375em
+ *   --sysmda-btn-padding         padding              default: 0.45em 0.85em
+ *   --sysmda-btn-font-size       font size            default: 0.9em
  *
- * The last one exists only because a dropdown floating over text has to be
- * opaque. Everything else inherits.
+ *   Dropdown — each default is exactly what its line says, no more
+ *   --sysmda-btn-menu-fg         entry text           default: --sysmda-btn-fg
+ *   --sysmda-btn-menu-bg         dropdown backdrop    default: #fff
+ *   --sysmda-btn-menu-hover-fg   entry text on hover  default: --sysmda-btn-menu-fg
+ *   --sysmda-btn-menu-hover-bg   entry background     default: transparent
+ *
+ * Colours are deliberately NOT chained across the two contexts. The entry text
+ * reuses the toggle's, because both are text on their own backdrop; the other
+ * three do not. A toggle hover pair is picked against the *page* background,
+ * while an entry sits on --sysmda-btn-menu-bg, so inheriting one into the other
+ * is precisely how text ends up invisible — `--sysmda-btn-hover-bg: #eee` on a
+ * dark menu would repaint the entry and hide its label. That is the class of bug
+ * 0.33.0 exists to fix, so `--sysmda-btn-hover-*` styles the toggle only and an
+ * entry hover that should match it is one extra line.
+ *
+ * `--sysmda-btn-menu-bg` likewise has no inherited default: a dropdown floating
+ * over body text has to be opaque, and `transparent` would never do.
+ *
+ * On specificity: the rules below are scoped one level deeper than they strictly
+ * need to be. That is aimed at themes, not at the site owner — `.entry-content a`
+ * is (0,2,0) and would otherwise repaint the two menu entries that are links,
+ * which is exactly how "View as Markdown" ended up invisible on a dark menu.
+ * Customisation is unaffected: it happens through the custom properties above,
+ * and a custom property set anywhere on or above the button always wins,
+ * whatever the selector that reads it looks like.
  */
 
 .sysmda-md-button {
@@ -43,7 +68,7 @@
 
 /* ─── Toggle ──────────────────────────────────────────────────────────────── */
 
-.sysmda-md-button__toggle {
+.sysmda-md-button .sysmda-md-button__toggle {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5em;
@@ -54,6 +79,19 @@
 	border-radius: var( --sysmda-btn-radius, 0.375em );
 	padding: var( --sysmda-btn-padding, 0.45em 0.85em );
 	cursor: pointer;
+}
+
+/*
+ * Focus reuses the hover treatment rather than inventing a second look: one pair
+ * of properties to set, and the keyboard gets the same affordance as the mouse.
+ * The browser's focus ring is deliberately left alone on top of it — the hover
+ * colours default to no change at all, so an unset button would otherwise show
+ * nothing when focused.
+ */
+.sysmda-md-button .sysmda-md-button__toggle:hover,
+.sysmda-md-button .sysmda-md-button__toggle:focus-visible {
+	color: var( --sysmda-btn-hover-fg, var( --sysmda-btn-fg, inherit ) );
+	background: var( --sysmda-btn-hover-bg, var( --sysmda-btn-bg, transparent ) );
 }
 
 .sysmda-md-button__chevron {
@@ -78,17 +116,16 @@
 }
 
 /*
- * The entries reuse the toggle's own properties rather than inventing their own:
- * set --sysmda-btn-padding once and the button and every row move together.
- * Font size needs no variable here — `font: inherit` picks it up from the root,
- * which is where --sysmda-btn-font-size is applied.
+ * The entries reuse the toggle's padding, and inherit its font size from the
+ * root, so one value moves the button and its menu together. Their colour falls
+ * back through --sysmda-btn-menu-fg to --sysmda-btn-fg for the same reason.
  */
-.sysmda-md-button__item {
+.sysmda-md-button .sysmda-md-button__menu .sysmda-md-button__item {
 	display: block;
 	width: 100%;
 	padding: var( --sysmda-btn-padding, 0.45em 0.85em );
 	font: inherit;
-	color: var( --sysmda-btn-fg, inherit );
+	color: var( --sysmda-btn-menu-fg, var( --sysmda-btn-fg, inherit ) );
 	text-align: start;
 	text-decoration: none;
 	background: none;
@@ -97,10 +134,14 @@
 }
 
 /*
- * Underline rather than a background tint: it reads correctly on any colour the
- * theme happens to sit behind it, without this stylesheet naming one.
+ * The underline stays alongside the colour change: both hover colours default to
+ * "no change", so it is the only cue an unstyled button has — and it needs no
+ * colour of its own, so it reads on any backdrop the theme supplies.
  */
-.sysmda-md-button__item:hover {
+.sysmda-md-button .sysmda-md-button__menu .sysmda-md-button__item:hover,
+.sysmda-md-button .sysmda-md-button__menu .sysmda-md-button__item:focus-visible {
+	color: var( --sysmda-btn-menu-hover-fg, var( --sysmda-btn-menu-fg, var( --sysmda-btn-fg, inherit ) ) );
+	background: var( --sysmda-btn-menu-hover-bg, transparent );
 	text-decoration: underline;
 }
 

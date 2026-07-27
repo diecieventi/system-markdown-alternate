@@ -9,6 +9,25 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.33.0
+
+* **The dropdown can now be coloured separately from the button**, and hover and
+  focus are stylable at last. Five new custom properties:
+  `--sysmda-btn-hover-fg` and `--sysmda-btn-hover-bg` for the toggle,
+  `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-hover-fg` and
+  `--sysmda-btn-menu-hover-bg` for the entries. Each falls back through to the
+  button's own value, so a menu only needs its own colours when you want it to
+  differ, and focus deliberately reuses the hover pair rather than introducing a
+  third state to style. Twelve properties in total, all listed in the panel.
+* **Fixed: a dropdown entry could render invisible.** Two of the four entries are
+  links, and a theme rule as ordinary as `.entry-content a` (specificity 0,2,0)
+  outranked the plugin's `.sysmda-md-button__item` (0,1,0) and repainted them —
+  on a dark menu that made "View as Markdown" disappear entirely. The plugin's
+  property rules are now scoped a level deeper so they hold against that. This
+  does not make overriding harder: customisation goes through the custom
+  properties, which the plugin never declares, and a custom property set anywhere
+  on or above the button wins regardless of the selector that reads it.
+
 ## 0.32.0
 
 * **Removed the Markdown button's automatic placement**, one version after it

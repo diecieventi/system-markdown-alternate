@@ -64,18 +64,29 @@ Its look is controlled with CSS custom properties, so no selector fights:
 ```css
 /* Appearance → Customize → Additional CSS, or your child theme */
 .sysmda-md-button {
-  --sysmda-btn-fg: #fff;                       /* text colour       */
-  --sysmda-btn-bg: #111;                       /* background        */
-  --sysmda-btn-border: 1px solid currentColor; /* border            */
-  --sysmda-btn-radius: 999px;                  /* corner radius     */
-  --sysmda-btn-padding: 0.45em 0.85em;         /* padding           */
-  --sysmda-btn-font-size: 0.9em;               /* font size         */
-  --sysmda-btn-menu-bg: #111;                  /* dropdown backdrop */
+  --sysmda-btn-fg: inherit;                     /* text                */
+  --sysmda-btn-bg: transparent;                 /* background          */
+  --sysmda-btn-hover-fg: inherit;               /* text on hover/focus */
+  --sysmda-btn-hover-bg: transparent;           /* bg on hover/focus   */
+  --sysmda-btn-border: 1px solid currentColor;  /* border              */
+  --sysmda-btn-radius: 0.375em;                 /* corner radius       */
+  --sysmda-btn-padding: 0.45em 0.85em;          /* padding             */
+  --sysmda-btn-font-size: 0.9em;                /* font size           */
+
+  /* Dropdown — omit any of these to reuse the button's value */
+  --sysmda-btn-menu-fg: inherit;                /* entry text          */
+  --sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop   */
+  --sysmda-btn-menu-hover-fg: inherit;          /* entry on hover      */
+  --sysmda-btn-menu-hover-bg: transparent;      /* entry bg on hover   */
 }
 ```
 
-Those seven are the whole surface, and the dropdown entries reuse them — set the
-padding or the font size once and the button and its menu move together.
+Padding and font size are shared with the dropdown entries, so one value moves
+the button and its menu together, and focus reuses the hover colours so there is
+no third state to style. The entry text colour falls back to the button's, so a
+plain dark button already gives a readable menu; the dropdown's backdrop and its
+hover background stand on their own, because a colour chosen against the page
+background is not safe to reuse on top of the menu.
 
 The plugin **never declares these properties itself**; it only reads them, with
 the defaults baked in as `var()` fallbacks. So your rule always wins, from the
