@@ -28,6 +28,7 @@ content consumable by tools that prefer Markdown over rendered HTML.
 - **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals — no IPs, no user-agent strings, no per-visitor data, no cookies, no external calls.
 - **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
 - **Shortcode** `[sysmda_md_url]` to print the `.md` URL anywhere.
+- **Optional Markdown button** for human readers (off by default): a small dropdown that copies the `.md` link, opens it in a new tab, downloads the file, or copies the Markdown itself to the clipboard, ready to paste into an AI assistant. Placed with `[sysmda_md_button]` or inserted automatically before/after the content. Neutral styling driven by CSS custom properties, and it degrades to plain working links without JavaScript.
 - **Optional integrations**, shown only when the related plugin is active:
   - **Advanced Custom Fields**: subtitle and TL;DR (from ACF fields) as a preamble between the H1 and the body.
   - **GenerateBlocks 2.x**: auto-registered `{{sysmda_md_url}}` Dynamic Tag, usable in element fields (e.g. a Button URL).
@@ -52,6 +53,12 @@ ways:
 
 The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
+
+To point *readers* at the Markdown, add the button: place `[sysmda_md_button]`
+where you want it (it accepts `id="123"`), or pick a position under
+**Settings → Markdown Alternate → Markdown button** to have it added before
+and/or after the content of every enabled post. It only ever renders on content
+that actually has a `.md`, and it is stripped from the Markdown itself.
 
 Not everything gets a Markdown version: drafts, private and password-protected
 content, media attachments, and posts with a **non-standard post format** (aside,
@@ -90,6 +97,17 @@ add_filter( 'sysmda_front_matter_enabled', '__return_false' );
 // Rebuild a post's Markdown cache in the background after each save, so the
 // first reader after an edit does not pay for the conversion.
 add_filter( 'sysmda_markdown_prewarm', '__return_true' );
+
+// Style the Markdown button yourself: skip the plugin stylesheet entirely.
+add_filter( 'sysmda_md_button_enqueue_style', '__return_false' );
+
+// Or keep it and restyle through the custom properties, no stylesheet needed:
+//   .sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; }
+
+// Offer only the two entries that need no clipboard access.
+add_filter( 'sysmda_md_button_items', function () {
+    return array( 'view', 'download' );
+} );
 ```
 
 The full public contract (every filter with its default value) is documented in

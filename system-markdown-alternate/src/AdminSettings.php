@@ -404,6 +404,22 @@ class AdminSettings {
 				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
 			)
 		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_md_button_position',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( MarkdownButton::class, 'sanitize_position' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'sysmda_md_button_items',
+			array(
+				'type'              => 'array',
+				'sanitize_callback' => array( MarkdownButton::class, 'sanitize_items' ),
+			)
+		);
 
 		// ACF options are registered ONLY when ACF is active. This prevents saving
 		// the form from clearing them when ACF is inactive and its fields are absent
@@ -445,6 +461,11 @@ class AdminSettings {
 		} else {
 			add_settings_field( 'sysmda_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sysmda_markdown' );
 		}
+
+		// ── Markdown button (front end) ──────────────────────────────────────────
+		add_settings_section( 'sysmda_button', __( 'Markdown button', 'system-markdown-alternate' ), array( $this, 'render_button_intro' ), self::PAGE );
+		add_settings_field( 'sysmda_md_button_position', __( 'Automatic placement', 'system-markdown-alternate' ), array( $this, 'field_md_button_position' ), self::PAGE, 'sysmda_button' );
+		add_settings_field( 'sysmda_md_button_items', __( 'Menu entries', 'system-markdown-alternate' ), array( $this, 'field_md_button_items' ), self::PAGE, 'sysmda_button' );
 
 		// ── llms.txt ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
@@ -685,6 +706,27 @@ class AdminSettings {
 		);
 
 		add_filter(
+			'sysmda_md_button_position',
+			function ( $fallback ) {
+				$v = get_option( 'sysmda_md_button_position' );
+				return false !== $v ? (string) $v : $fallback;
+			},
+			20
+		);
+
+		// The saved selection replaces the default list rather than intersecting
+		// it: an entry the site owner unticked must not come back because it is
+		// still in MarkdownButton::ITEMS.
+		add_filter(
+			'sysmda_md_button_items',
+			function ( $defaults ) {
+				$v = get_option( 'sysmda_md_button_items' );
+				return false !== $v ? (array) $v : $defaults;
+			},
+			20
+		);
+
+		add_filter(
 			'sysmda_markdown_excluded_shortcodes',
 			function ( $defaults ) {
 				return $this->option_to_list( 'sysmda_excluded_shortcodes', $defaults );
@@ -783,6 +825,10 @@ class AdminSettings {
 
 	public function render_advanced_intro(): void {
 		echo '<p class="sysmda-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
+	}
+
+	public function render_button_intro(): void {
+		echo '<p class="sysmda-help">' . wp_kses_post( __( 'An optional button that lets readers copy, view or download the Markdown version of a post. Place it by hand with the <code>[sysmda_md_button]</code> shortcode, or have it added to every enabled post automatically.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	public function render_llmstxt_intro(): void {
@@ -1025,6 +1071,48 @@ class AdminSettings {
 		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // Disabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_md_button_position(): void {
+		$current = MarkdownButton::sanitize_position( get_option( 'sysmda_md_button_position', '' ) );
+
+		$choices = array(
+			''       => __( 'Disabled — only where I place the shortcode', 'system-markdown-alternate' ),
+			'after'  => __( 'After the content', 'system-markdown-alternate' ),
+			'before' => __( 'Before the content', 'system-markdown-alternate' ),
+			'both'   => __( 'Before and after the content', 'system-markdown-alternate' ),
+		);
+
+		echo '<select name="sysmda_md_button_position">';
+		foreach ( $choices as $value => $label ) {
+			echo '<option value="' . esc_attr( $value ) . '"' . selected( $value, $current, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select>';
+
+		echo '<p class="description">' . wp_kses_post( __( 'Automatic placement applies to every enabled, published post. Content with no Markdown version (drafts, password-protected posts, non-standard post formats) never shows the button. The shortcode <code>[sysmda_md_button]</code> works whatever this is set to, and accepts <code>id="123"</code>.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	public function field_md_button_items(): void {
+		$saved   = get_option( 'sysmda_md_button_items' );
+		$current = false !== $saved ? MarkdownButton::sanitize_items( $saved ) : MarkdownButton::ITEMS;
+		$labels  = MarkdownButton::item_labels();
+
+		$notes = array(
+			'copy-link'    => __( 'copies the .md address', 'system-markdown-alternate' ),
+			'view'         => __( 'opens the Markdown in a new tab', 'system-markdown-alternate' ),
+			'download'     => __( 'saves it as a .md file', 'system-markdown-alternate' ),
+			'copy-content' => __( 'copies the Markdown itself, ready to paste into an AI assistant', 'system-markdown-alternate' ),
+		);
+
+		foreach ( MarkdownButton::ITEMS as $item ) {
+			echo '<label style="display:block;margin-bottom:4px">';
+			echo '<input type="checkbox" name="sysmda_md_button_items[]" value="' . esc_attr( $item ) . '"' . checked( in_array( $item, $current, true ), true, false ) . ' /> ';
+			echo esc_html( $labels[ $item ] );
+			echo ' <span class="description">— ' . esc_html( $notes[ $item ] ) . '</span>';
+			echo '</label>';
+		}
+
+		echo '<p class="description">' . esc_html__( 'Unticking every entry hides the button altogether. The two copy actions need JavaScript and are not rendered when the browser cannot reach the clipboard; the other two are plain links and always work.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_llms_txt_lastmod(): void {

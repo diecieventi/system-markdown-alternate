@@ -228,6 +228,14 @@ Removed from the body unless the corresponding filter changes them:
 - **CSS classes** (`sysmda_markdown_excluded_classes`): `no-md`, `md-exclude`,
   `exclude-from-markdown`.
 
+Removed **unconditionally**, whatever the filters and the panel say:
+
+- **`[sysmda_md_button]`**, the plugin's own front-end button. It renders a UI
+  control — clipboard buttons and links — which has no meaning in a
+  machine-readable document. This is part of the contract: the `.md` of a post
+  containing the shortcode never carries a trace of it, and that holds on sites
+  that have replaced the excluded-shortcodes list from the settings page.
+
 ### Unknown HTML tags are not a stable surface
 
 Because the converter runs with `strip_tags => true`, any HTML tag it does not

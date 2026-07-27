@@ -228,6 +228,66 @@ function wp_unslash( $value ) {
 	return $value;
 }
 
+/*
+ * Escaping stubs. Modelled on the real functions closely enough for the markup
+ * assertions to mean something: esc_attr/esc_html encode the characters that
+ * would break out of an attribute or a text node, and esc_url additionally drops
+ * anything that is not an http(s) URL — so a test feeding `javascript:` a URL
+ * still sees it rejected.
+ */
+function esc_html( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function esc_attr( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function esc_url( $url ) {
+	$url = (string) $url;
+
+	if ( 1 !== preg_match( '#^(https?:)?//#i', $url ) ) {
+		return '';
+	}
+
+	return htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' );
+}
+
+/** Stub: no translation catalogs in the harness, the source string is returned. */
+function __( $text, $domain = 'default' ) {
+	return $text;
+}
+
+function esc_html__( $text, $domain = 'default' ) {
+	return esc_html( $text );
+}
+
+/*
+ * Stubs: nothing is ever registered in the harness, so MarkdownButton's late
+ * enqueue is a no-op and render_for() can be asserted without an asset registry.
+ */
+function wp_style_is( $handle, $list = 'enqueued' ) {
+	return false;
+}
+
+function wp_script_is( $handle, $list = 'enqueued' ) {
+	return false;
+}
+
+/** Stub: core's per-request incrementing id generator. */
+function wp_unique_id( $prefix = '' ) {
+	static $id = 0;
+	++$id;
+	return $prefix . $id;
+}
+
+/** Stub: WordPress's filename sanitizer, reduced to what a post slug can contain. */
+function sanitize_file_name( $name ) {
+	$name = preg_replace( '/[^a-zA-Z0-9._-]/', '', (string) $name );
+
+	return trim( (string) $name, '.-_' );
+}
+
 /**
  * Stub: records the status codes the conditional-request logic would send, so a
  * 304 can be asserted without a real HTTP response ($GLOBALS reset per test).
@@ -276,6 +336,7 @@ class WP_Post {
 	public $post_content = '';
 	public $post_excerpt   = '';
 	public $post_password  = '';
+	public $post_name      = '';
 	public $permalink      = '';
 	/** GMT modification time: part of the cache validity hash / ETag. */
 	public $post_modified_gmt = '';
@@ -308,6 +369,7 @@ if ( $GLOBALS['sysmda_has_vendor'] ) {
 }
 
 require __DIR__ . '/../src/AcceptNegotiator.php';
+require __DIR__ . '/../src/MarkdownButton.php'; // Before ShortcodeCleaner: its ALWAYS_EXCLUDED const references MarkdownButton::TAG.
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/ContentRenderer.php';
@@ -328,6 +390,7 @@ use Diecieventi\SystemMarkdownAlternate\PostSupport;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
+use Diecieventi\SystemMarkdownAlternate\MarkdownButton;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
@@ -2018,6 +2081,168 @@ check( 'update: healthy write reports success', true, (bool) $sysmda_update->inv
 check( 'update: healthy write applies the transform', LiteSpeedCompat::prepend_rules( $sysmda_wp_rules ), Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
 
 stream_wrapper_unregister( 'sysmdatest' );
+
+// ─── MarkdownButton: sanitizers ──────────────────────────────────────────────
+
+check( 'button position: known value kept', 'after', MarkdownButton::sanitize_position( 'after' ) );
+check( 'button position: case and padding normalized', 'both', MarkdownButton::sanitize_position( '  Both ' ) );
+check( 'button position: unknown value disables', '', MarkdownButton::sanitize_position( 'sidebar' ) );
+check( 'button position: empty stays empty', '', MarkdownButton::sanitize_position( '' ) );
+// An unchecked <select> is never posted, so options.php calls the sanitizer with
+// null: it must mean "disabled", not a PHP notice.
+check( 'button position: null disables', '', MarkdownButton::sanitize_position( null ) );
+check( 'button position: array disables', '', MarkdownButton::sanitize_position( array( 'after' ) ) );
+
+check( 'button items: full default list survives', MarkdownButton::ITEMS, MarkdownButton::sanitize_items( MarkdownButton::ITEMS ) );
+check( 'button items: unknown keys dropped', array( 'view' ), MarkdownButton::sanitize_items( array( 'view', 'launch-rocket' ) ) );
+check( 'button items: order preserved as given', array( 'download', 'copy-link' ), MarkdownButton::sanitize_items( array( 'download', 'copy-link' ) ) );
+check( 'button items: repeats collapsed', array( 'view' ), MarkdownButton::sanitize_items( array( 'view', 'view' ) ) );
+check( 'button items: non-strings dropped', array(), MarkdownButton::sanitize_items( array( 3, null, array() ) ) );
+// Unticking every checkbox posts nothing at all: an empty menu, not the defaults.
+check( 'button items: null is an empty selection', array(), MarkdownButton::sanitize_items( null ) );
+
+// ─── MarkdownButton: markup ──────────────────────────────────────────────────
+
+$sysmda_btn = MarkdownButton::build_html(
+	'https://example.com/my-post.md',
+	'my-post.md',
+	'Markdown',
+	MarkdownButton::ITEMS,
+	'sysmda-md-menu-123'
+);
+
+check( 'button markup: root carries the .md URL', true, false !== strpos( $sysmda_btn, 'data-sysmda-md-url="https://example.com/my-post.md"' ) );
+check( 'button markup: toggle is hidden for the no-JS reader', true, false !== strpos( $sysmda_btn, 'class="sysmda-md-button__toggle" aria-expanded="false" aria-controls="sysmda-md-menu-123" hidden' ) );
+check( 'button markup: menu id matches aria-controls', true, false !== strpos( $sysmda_btn, 'id="sysmda-md-menu-123"' ) );
+
+// The two clipboard entries are useless without JS, so they ship hidden; the two
+// links are plain anchors and must NOT be, or the no-JS reader gets nothing.
+check( 'button markup: copy-link ships hidden', true, false !== strpos( $sysmda_btn, 'data-sysmda-action="copy-link" hidden' ) );
+check( 'button markup: copy-content ships hidden', true, false !== strpos( $sysmda_btn, 'data-sysmda-action="copy-content" hidden' ) );
+check( 'button markup: view is a plain link, not hidden', true, false !== strpos( $sysmda_btn, '<a class="sysmda-md-button__item" href="https://example.com/my-post.md" target="_blank" rel="noopener">View as Markdown</a>' ) );
+check( 'button markup: download proposes the slug filename', true, false !== strpos( $sysmda_btn, 'download="my-post.md">Download Markdown</a>' ) );
+check( 'button markup: status region present for screen readers', true, false !== strpos( $sysmda_btn, 'role="status" aria-live="polite"' ) );
+// Exactly three: the toggle plus the two clipboard entries. A fourth would mean
+// a link had been hidden too, leaving the no-JS reader with an empty menu.
+check( 'button markup: exactly three controls ship hidden', 3, substr_count( $sysmda_btn, ' hidden>' ) );
+
+// Order follows the requested list, not the constant.
+$sysmda_btn_narrow = MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', 'MD', array( 'download', 'view' ), 'm7' );
+check( 'button markup: narrowed list drops copy entries', false, strpos( $sysmda_btn_narrow, 'data-sysmda-action' ) );
+check( 'button markup: narrowed list keeps the requested order', true, strpos( $sysmda_btn_narrow, 'download="x.md"' ) < strpos( $sysmda_btn_narrow, 'target="_blank"' ) );
+
+// Nothing renderable must produce nothing at all, never an empty shell.
+check( 'button markup: no items means no button', '', MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', 'MD', array(), 'm7' ) );
+check( 'button markup: no URL means no button', '', MarkdownButton::build_html( '', 'x.md', 'MD', MarkdownButton::ITEMS, 'm7' ) );
+check( 'button markup: no label means no button', '', MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', '', MarkdownButton::ITEMS, 'm7' ) );
+
+// Escaping: a label or filename reaching the markup unescaped would be an XSS.
+$sysmda_btn_evil = MarkdownButton::build_html( 'https://example.com/x.md', '"><script>a</script>', '<script>b</script>', array( 'download' ), 'm1' );
+check( 'button markup: label is escaped', false, strpos( $sysmda_btn_evil, '<script>b' ) );
+check( 'button markup: filename is escaped', false, strpos( $sysmda_btn_evil, '"><script>a' ) );
+// esc_url() empties a disallowed scheme, so the emptiness check has to happen
+// AFTER escaping: checking the raw string produced a button whose every entry
+// pointed at href="". No button beats a broken one.
+check( 'button markup: javascript: URL rejected', '', MarkdownButton::build_html( 'javascript:alert(1)', 'x.md', 'MD', array( 'view' ), 'm1' ) );
+
+// The URL is escaped once and reused. Escaping it again per entry would turn the
+// & of the plain-permalink fallback into &amp;amp; and break the link.
+$sysmda_btn_query = MarkdownButton::build_html( 'https://example.com/?p=12&format=markdown', 'p12.md', 'MD', array( 'view', 'download' ), 'm2' );
+check( 'button markup: query URL escaped exactly once', 0, substr_count( $sysmda_btn_query, '&amp;amp;' ) );
+// Three occurrences: the root data attribute the script reads, plus the two links.
+check( 'button markup: query URL still escaped', 3, substr_count( $sysmda_btn_query, 'p=12&amp;format=markdown' ) );
+
+// "Before and after" renders the same post twice on one page, so the menu id
+// cannot be derived from the post: two identical ids make aria-controls
+// ambiguous and the document invalid.
+$sysmda_btn_a = MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', 'MD', array( 'view' ), wp_unique_id( 'sysmda-md-menu-' ) );
+$sysmda_btn_b = MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', 'MD', array( 'view' ), wp_unique_id( 'sysmda-md-menu-' ) );
+check( 'button markup: two renders get different menu ids', false, $sysmda_btn_a === $sysmda_btn_b );
+check( 'button markup: empty menu id means no button', '', MarkdownButton::build_html( 'https://example.com/x.md', 'x.md', 'MD', array( 'view' ), '' ) );
+
+// ─── MarkdownButton: render_for honours is_servable ──────────────────────────
+
+$GLOBALS['sysmda_test_options']['sysmda_supported_post_types']          = array( 'post' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
+$GLOBALS['sysmda_test_options']['permalink_structure']                  = '/%postname%/';
+
+$sysmda_btn_post = new WP_Post(
+	array(
+		'ID'          => 55,
+		'post_type'   => 'post',
+		'post_status' => 'publish',
+		'post_name'   => 'hello-world',
+		'permalink'   => 'https://example.com/hello-world/',
+	)
+);
+
+check( 'button render: servable post gets a button', true, '' !== MarkdownButton::render_for( $sysmda_btn_post ) );
+check( 'button render: URL comes from MetadataBuilder', true, false !== strpos( MarkdownButton::render_for( $sysmda_btn_post ), 'https://example.com/hello-world.md' ) );
+check( 'button render: filename derived from the slug', true, false !== strpos( MarkdownButton::render_for( $sysmda_btn_post ), 'download="hello-world.md"' ) );
+
+// Same rule as [sysmda_md_url]: never advertise a URL that would 404.
+$sysmda_btn_draft = new WP_Post(
+	array(
+		'ID'          => 56,
+		'post_type'   => 'post',
+		'post_status' => 'draft',
+		'post_name'   => 'secret',
+	)
+);
+check( 'button render: draft gets nothing', '', MarkdownButton::render_for( $sysmda_btn_draft ) );
+
+$sysmda_btn_locked = new WP_Post(
+	array(
+		'ID'            => 57,
+		'post_type'     => 'post',
+		'post_status'   => 'publish',
+		'post_name'     => 'locked',
+		'post_password' => 'x',
+	)
+);
+check( 'button render: password-protected post gets nothing', '', MarkdownButton::render_for( $sysmda_btn_locked ) );
+
+// A post whose slug is empty must still propose a usable filename.
+$sysmda_btn_noslug = new WP_Post(
+	array(
+		'ID'          => 58,
+		'post_type'   => 'post',
+		'post_status' => 'publish',
+		'post_name'   => '',
+	)
+);
+check( 'button render: empty slug falls back to the ID', 'post-58.md', MarkdownButton::download_filename( $sysmda_btn_noslug ) );
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
+unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
+unset( $GLOBALS['sysmda_test_options']['permalink_structure'] );
+
+// ─── ShortcodeCleaner: the button never reaches the Markdown ─────────────────
+
+$sysmda_btn_cleaner = new ShortcodeCleaner();
+$sysmda_btn_source  = "Intro\n\n[sysmda_md_button]\n\nBody";
+
+check(
+	'button exclusion: stripped with the default list',
+	"Intro\n\n\n\nBody",
+	$sysmda_btn_cleaner->strip( $sysmda_btn_source )
+);
+
+// The regression that matters: AdminSettings bridges a saved option that
+// REPLACES the defaults, so a site owner who edited the "Excluded shortcodes"
+// textarea would otherwise publish the button's HTML inside their .md.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] = array( 'lwptoc' );
+check(
+	'button exclusion: stripped even when the filter drops it',
+	"Intro\n\n\n\nBody",
+	$sysmda_btn_cleaner->strip( $sysmda_btn_source )
+);
+check(
+	'button exclusion: the filtered list still applies',
+	'a  b',
+	$sysmda_btn_cleaner->strip( 'a [lwptoc] b' )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] );
 
 // ─── Result ───────────────────────────────────────────────────────────────────
 

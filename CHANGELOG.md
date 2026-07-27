@@ -9,6 +9,43 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.31.0
+
+* **New: an optional Markdown button for readers.** Until now the `.md` version
+  was discoverable only by machines — the `rel="alternate"` link, `/llms.txt`,
+  content negotiation. A human reading the article had no way to reach it. The
+  new `[sysmda_md_button]` shortcode adds a small **Markdown** dropdown offering
+  four actions: copy the `.md` link, view it in a new tab, download it as a
+  `.md` file, and copy the Markdown *itself* to the clipboard, ready to paste
+  into an AI assistant. A new **Markdown button** panel tab can also place it
+  before and/or after the content of every enabled post automatically
+  (**disabled by default** — nothing appears until you choose to place it).
+* The button is a **disclosure**, not a `role="menu"` widget: two of its entries
+  are ordinary links, and the menu role would have captured the arrow keys and
+  taken away "open in a new tab" and "copy link address". It is keyboard
+  operable (arrows, Home/End, Escape), announces the result of a copy through a
+  polite live region, and closes on an outside click.
+* **It works without JavaScript**, and never shows a control that would do
+  nothing: the toggle and the two clipboard entries are rendered hidden and
+  revealed by the script only once the browser has been found to support the
+  action, so a reader without JavaScript sees a plain list of the two entries
+  that are genuinely links. On plain HTTP, where the Clipboard API does not
+  exist, copying falls back to the legacy path.
+* **The button never appears in the Markdown.** `[sysmda_md_button]` is stripped
+  from the source unconditionally, *after* the exclusion filter runs — putting
+  it in the default "Excluded shortcodes" list would not have been enough, since
+  a saved list replaces those defaults, and any site that had customized that
+  field would have published the button's HTML inside its own `.md`.
+* Styling is neutral and inherits from the theme, driven by CSS custom
+  properties (`--sysmda-btn-bg`, `--sysmda-btn-fg`, `--sysmda-btn-radius`, …) so
+  it can be restyled without fighting selectors. The dropdown surface follows the
+  document's `color-scheme`, and the layout uses logical properties, so dark
+  themes and RTL need no extra stylesheet. `sysmda_md_button_styles` skips the
+  stylesheet entirely. Assets load only on pages that actually render a button.
+* New filters: `sysmda_md_button_position`, `sysmda_md_button_items`,
+  `sysmda_md_button_label`, `sysmda_md_button_enqueue_style` and
+  `sysmda_md_button_html`.
+
 ## 0.30.2
 * Fixed: the WordPress.org readme parser truncated the changelog, because a
   `Changelog` section may not exceed 5000 characters and this one had grown to
