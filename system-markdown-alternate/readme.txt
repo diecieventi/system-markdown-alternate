@@ -350,8 +350,10 @@ the dropdown: `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-bg`,
 
 Padding and font size are shared with the entries, so one value moves the button
 and its menu together; focus reuses the hover colours, so there is no third state
-to style; and the `menu` properties fall back to the button's own, so you only
-set them when you want the dropdown to differ.
+to style; and the entry text colour falls back to the button's, so a plain dark
+button already gives a readable menu. The dropdown's backdrop and its hover
+background stand on their own, deliberately: a colour picked against the page
+background is not safe to reuse on top of the menu.
 
 Paste them into **Appearance → Customize → Additional CSS** or your child theme's
 stylesheet, keeping only the lines you change. For a solid dark pill:

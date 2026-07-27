@@ -83,8 +83,10 @@ Its look is controlled with CSS custom properties, so no selector fights:
 
 Padding and font size are shared with the dropdown entries, so one value moves
 the button and its menu together, and focus reuses the hover colours so there is
-no third state to style. The four `menu` properties fall back to the button's
-own, so a menu only needs its own values when you want it to differ.
+no third state to style. The entry text colour falls back to the button's, so a
+plain dark button already gives a readable menu; the dropdown's backdrop and its
+hover background stand on their own, because a colour chosen against the page
+background is not safe to reuse on top of the menu.
 
 The plugin **never declares these properties itself**; it only reads them, with
 the defaults baked in as `var()` fallbacks. So your rule always wins, from the

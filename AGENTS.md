@@ -781,10 +781,15 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Twelve custom properties, and the menu falls back to the button's** (same
   decision, extended in `0.33.0`): toggle `fg`/`bg`/`hover-fg`/`hover-bg`/
   `border`/`radius`/`padding`/`font-size`, dropdown `menu-fg`/`menu-bg`/
-  `menu-hover-fg`/`menu-hover-bg`. Every `menu-*` colour falls back through to
-  the toggle's own, so a menu needs its own values only when it should differ,
-  and `menu-bg` is the one with no inherited default because a dropdown floating
-  over body text has to be opaque. **Focus reuses the hover pair** rather than
+  `menu-hover-fg`/`menu-hover-bg`. **Only `menu-fg` chains to the toggle's**
+  (`menu-fg` → `fg`, and `menu-hover-fg` → `menu-fg` → `fg`); `menu-bg` defaults
+  to `#fff` and `menu-hover-bg` to `transparent`, neither reusing a toggle value.
+  That asymmetry is deliberate and was queried in review: a toggle hover pair is
+  chosen against the *page* background while an entry sits on `menu-bg`, so
+  chaining `menu-hover-bg` → `hover-bg` would let `--sysmda-btn-hover-bg: #eee`
+  repaint an entry on a dark menu and hide its label — the exact class of bug
+  `0.33.0` was cut to fix. Do not "complete" the chain; state the real defaults
+  instead. **Focus reuses the hover pair** rather than
   introducing a third state — with the browser's own focus ring left in place on
   top, since both hover colours default to "no change". `padding` and
   `font-size` are shared with the entries, so one value moves the button and its

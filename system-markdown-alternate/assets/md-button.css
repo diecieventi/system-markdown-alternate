@@ -24,15 +24,23 @@
  *   --sysmda-btn-padding         padding              default: 0.45em 0.85em
  *   --sysmda-btn-font-size       font size            default: 0.9em
  *
- *   Dropdown (falls back to the toggle's values, so setting the toggle alone
- *   still produces a coherent menu)
+ *   Dropdown — each default is exactly what its line says, no more
  *   --sysmda-btn-menu-fg         entry text           default: --sysmda-btn-fg
  *   --sysmda-btn-menu-bg         dropdown backdrop    default: #fff
  *   --sysmda-btn-menu-hover-fg   entry text on hover  default: --sysmda-btn-menu-fg
  *   --sysmda-btn-menu-hover-bg   entry background     default: transparent
  *
- * `--sysmda-btn-menu-bg` is the one value with no sensible inherited default: a
- * dropdown floating over body text has to be opaque.
+ * Colours are deliberately NOT chained across the two contexts. The entry text
+ * reuses the toggle's, because both are text on their own backdrop; the other
+ * three do not. A toggle hover pair is picked against the *page* background,
+ * while an entry sits on --sysmda-btn-menu-bg, so inheriting one into the other
+ * is precisely how text ends up invisible — `--sysmda-btn-hover-bg: #eee` on a
+ * dark menu would repaint the entry and hide its label. That is the class of bug
+ * 0.33.0 exists to fix, so `--sysmda-btn-hover-*` styles the toggle only and an
+ * entry hover that should match it is one extra line.
+ *
+ * `--sysmda-btn-menu-bg` likewise has no inherited default: a dropdown floating
+ * over body text has to be opaque, and `transparent` would never do.
  *
  * On specificity: the rules below are scoped one level deeper than they strictly
  * need to be. That is aimed at themes, not at the site owner — `.entry-content a`

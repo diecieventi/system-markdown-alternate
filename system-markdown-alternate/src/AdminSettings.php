@@ -839,7 +839,7 @@ class AdminSettings {
 			. "\t--sysmda-btn-radius: 0.375em;                 /* corner radius       */\n"
 			. "\t--sysmda-btn-padding: 0.45em 0.85em;          /* padding             */\n"
 			. "\t--sysmda-btn-font-size: 0.9em;                /* font size           */\n\n"
-			. "\t/* Dropdown — omit any of these to reuse the button's value */\n"
+			. "\t/* Dropdown */\n"
 			. "\t--sysmda-btn-menu-fg: inherit;                /* entry text          */\n"
 			. "\t--sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop   */\n"
 			. "\t--sysmda-btn-menu-hover-fg: inherit;          /* entry on hover      */\n"
