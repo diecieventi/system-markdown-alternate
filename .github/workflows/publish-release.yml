@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build the zip and publish the Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Tags are needed both to resolve the default and for
           # `gh release create --notes-from-tag`, which reads the annotated
