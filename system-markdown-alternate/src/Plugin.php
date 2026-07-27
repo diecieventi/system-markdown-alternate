@@ -58,6 +58,9 @@ class Plugin {
 		// GenerateBlocks {{sysmda_md_url}} dynamic tag (automatically active with GB 2.x).
 		( new DynamicTags() )->register();
 
+		// [sysmda_md_button] front-end button (auto-insert is off by default).
+		( new MarkdownButton() )->register();
+
 		// AdminSettings registers filters in every context (including the front end).
 		// The admin panel is attached through admin_menu/admin_init, which fire only
 		// in the admin area, so no is_admin() guard is needed.

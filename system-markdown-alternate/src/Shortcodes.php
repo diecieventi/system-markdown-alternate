@@ -30,7 +30,7 @@ class Shortcodes {
 	public function render_url( $atts ): string {
 		$atts = shortcode_atts( array( 'id' => 0 ), $atts, 'sysmda_md_url' );
 
-		$post = $this->resolve_post( (int) $atts['id'] );
+		$post = self::resolve_post( (int) $atts['id'] );
 
 		if ( ! $post instanceof \WP_Post || ! PostSupport::is_servable( $post ) ) {
 			return '';
@@ -47,8 +47,12 @@ class Shortcodes {
 	 * object is still the *main* post, so preferring it made every item render the
 	 * same URL. get_post() follows the global `$post`, which is what the
 	 * surrounding loop sets, and falls back to the main post outside any loop.
+	 *
+	 * Static and public because MarkdownButton resolves its post the same way:
+	 * the loop-before-queried-object reasoning above is subtle enough that a
+	 * second copy would drift.
 	 */
-	private function resolve_post( int $id ): ?\WP_Post {
+	public static function resolve_post( int $id ): ?\WP_Post {
 		if ( $id > 0 ) {
 			$post = get_post( $id );
 			return $post instanceof \WP_Post ? $post : null;

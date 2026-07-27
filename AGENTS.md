@@ -274,6 +274,50 @@ The v1 scope is done and widely exceeded. Implemented:
 - **ACF**: subtitle (text) + TL;DR (WYSIWYG, goes through the DOM pipeline) as a
   preamble between the H1 and the body; field names configurable from the panel.
 - **Shortcode** `[sysmda_md_url]` (+ `id="123"`).
+- **Markdown button** (`MarkdownButton`): a front-end dropdown that finally makes
+  the `.md` discoverable by a *human* — until 0.31.0 discovery was machine-only
+  (`rel="alternate"`, `/llms.txt`, negotiation). Shortcode `[sysmda_md_button]`
+  (+ `id="123"`) plus an opt-in auto-insert position (option
+  `sysmda_md_button_position`: `''`/`before`/`after`/`both`, **default `''`**) and
+  an entry selection (`sysmda_md_button_items`, default all four), both in the new
+  **Markdown button** panel tab. Four entries: copy the `.md` link, view it in a
+  new tab, download it, copy the Markdown body. Gated on `PostSupport::is_servable()`
+  everywhere, like `[sysmda_md_url]`. Details that are load-bearing:
+  - **A disclosure, never `role="menu"`** (see the decision below), with
+    `aria-expanded`, arrow/Home/End keys, Escape, outside-click close, and a
+    `role="status"` live region for the copy result. The live region sits outside
+    the collapsed `<ul>`: a live region inside a `display:none` subtree announces
+    nothing.
+  - **Progressive enhancement**: the toggle and both clipboard entries render
+    with `hidden`; the script removes it only after detecting the API each one
+    needs, and adds `sysmda-md-button--js` to the root, which is the *only* thing
+    that collapses the list into a dropdown. No JS (or no clipboard, or plain
+    HTTP) leaves two working links and never a dead control. The stylesheet also
+    restates `[hidden] { display: none }` as an author rule — author rules beat
+    the UA sheet at any specificity, so a theme styling `a`/`button` inside the
+    content would otherwise unhide them.
+  - **Safari and the clipboard**: WebKit invalidates the user gesture across an
+    `await`, so "Copy Markdown content" cannot fetch and then write. It writes
+    through `ClipboardItem` with a **Promise** value, called synchronously in the
+    handler, and falls back to fetch→`writeText` and then to a textarea +
+    `execCommand` (the plain-HTTP path, where `navigator.clipboard` is undefined).
+  - **Download and View need no server change**: `download="slug.md"` is honoured
+    because the `.md` URL is same-origin, and Chrome/Firefox 128+ render
+    `text/markdown` inline. The download link carries no `target` — browsers
+    ignore `download` when combined with `_blank`.
+  - **Assets load only where a button renders**: registered on
+    `wp_enqueue_scripts` and enqueued there when the queried post is servable and
+    (auto-insert is on **or** `has_shortcode()` finds it in the content);
+    `render_for()` enqueues again as the fallback for a button coming from a
+    template, widget or GB element, where late styles still print in the footer.
+  - The menu `id` comes from `wp_unique_id()`, **not** the post ID: `both`
+    renders the same post twice and two menus sharing an id make `aria-controls`
+    ambiguous.
+  - `build_html()` is public, static and takes primitives only, so the markup
+    contract is pinned by the WP-less tests. It escapes the URL **once, up
+    front, and checks emptiness afterwards** — `esc_url()` empties a disallowed
+    scheme, and checking the raw string produced a button whose every entry
+    pointed at `href=""`.
 - **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
 - `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
@@ -669,6 +713,55 @@ The v1 scope is done and widely exceeded. Implemented:
   rejected: same missing request context, plus it slows every save. Queued
   events are dropped on deactivation with `wp_unschedule_hook()` — they carry a
   post-ID argument, which `wp_clear_scheduled_hook()` would not match.
+- **The Markdown button is a disclosure, never a `role="menu"` widget** (decided
+  July 2026, `0.31.0`): two of the four entries are ordinary links, and the whole
+  point of them is native link behaviour — open in a new tab, copy link address,
+  middle-click. `role="menuitem"` replaces the link role, so assistive tech stops
+  announcing "link" and those affordances go with it; the menu pattern also
+  captures the arrow keys. The W3C APG is explicit that the menu pattern is wrong
+  for a list of links. So: a `<button aria-expanded>` plus a `<ul>` of real links
+  and real buttons. `aria-haspopup` is deliberately **absent** — its values mean
+  "opens a menu", which this is not. Do not "upgrade" it to a menu widget.
+- **The button's clipboard entries must never render as dead controls** (decided,
+  binding): they ship with `hidden` and the script removes it only after finding
+  the API each one needs — a copy mechanism for both, plus `fetch`/`Promise` for
+  "Copy Markdown content". A site on plain HTTP has no `navigator.clipboard` at
+  all, and that is a large share of WordPress. The two plain links need neither
+  JavaScript nor a secure context and always render, so the no-JS reader gets a
+  working menu rather than an empty one. Corollary: the collapse-into-a-dropdown
+  CSS is gated on a class the script adds, never applied unconditionally.
+- **`[sysmda_md_button]` is stripped from the Markdown after the filter, not by
+  being a default** (decided July 2026, `0.31.0` — same shape as
+  `MetadataBuilder::EXCLUDED_TAXONOMIES`): a UI control has no meaning in a
+  machine-readable document, and `ContentRenderer` runs `render_block()` and
+  `do_shortcode()`, so the shortcode left in place would convert into the `.md`.
+  Adding the tag to `ShortcodeCleaner`'s default list is **not enough**:
+  `AdminSettings::option_to_list()` makes the saved "Excluded shortcodes" option
+  *replace* those defaults, so every site that had customized that textarea would
+  publish the button's HTML inside its own `.md`. Hence
+  `ShortcodeCleaner::ALWAYS_EXCLUDED`, merged in after `apply_filters`. One edit
+  covers every path because `strip()` is the single choke point — the body, the
+  ACF fragment, synced patterns and the front-matter `description` all route
+  through it. Auto-insert needs no exclusion at all: it hooks `the_content`,
+  which the pipeline deliberately never calls.
+- **The button changes no byte of the Markdown, so nothing goes into
+  `cache_version()`** (recorded so nobody goes looking): the invariant in
+  "Technical notes" 6 — anything that can change the emitted Markdown without
+  touching `post_modified_gmt` must be folded into the hash — is satisfied
+  vacuously here. The button is HTML-only, and its options are excluded from
+  nothing: saving them bumps the global salt like any other `sysmda_*` option,
+  which is wasteful in principle and deliberately left alone (one bump per
+  request already, and a second special case in a rule that reads "any `sysmda_*`
+  option" costs more clarity than it saves work).
+- **Auto-insert stands down when the shortcode is already in the content**
+  (decided): a site that placed the button by hand *and* set a position would
+  otherwise get two. The guards on `the_content` are worth keeping in step with
+  `is_negotiable_request()`'s reasoning — `is_singular()` stays true on feeds,
+  oEmbed views and trackbacks — plus one that route does not need:
+  `doing_filter( 'get_the_excerpt' )`, because `wp_trim_excerpt()` builds an
+  automatic excerpt by running the content through `the_content`, from inside the
+  main loop of a singular view. Without that guard the button lands in the
+  excerpt and the once-per-post flag then swallows the real one.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again): a
@@ -859,6 +952,8 @@ running code at the WP level.
     ├── vendor/                         ← NOT versioned, zip only
     ├── assets/admin-settings.css       ← panel style (loaded only there)
     ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
+    ├── assets/md-button.css             ← front-end button (scoped, custom-property driven)
+    ├── assets/md-button.js              ← front-end button (vanilla ES5, clipboard + disclosure)
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
@@ -876,7 +971,8 @@ running code at the WP level.
         ├── AdminSettings.php       ← settings page (Settings API)
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
         ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
-        ├── Shortcodes.php          ← [sysmda_md_url]
+        ├── Shortcodes.php          ← [sysmda_md_url] (resolve_post() is shared, public static)
+        ├── MarkdownButton.php      ← [sysmda_md_button] front-end dropdown, auto-insert, assets, build_html()
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
 ```
@@ -944,6 +1040,11 @@ apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );              // p
 apply_filters( 'sysmda_llms_txt_footer', '' );                              // free-form trailing block (enriched only)
 apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );                  // case-insensitive UA substrings classified as bot (hit counter)
 apply_filters( 'sysmda_md_hits_retention_days', 90 );                       // retention of the daily .md hit buckets, in days
+apply_filters( 'sysmda_md_button_position', '', $post );                    // auto-insert position of the Markdown button: '' (off), 'before', 'after', 'both'. Panel option feeds the default at priority 20; anything unrecognized is normalized to '' (fails closed)
+apply_filters( 'sysmda_md_button_items', MarkdownButton::ITEMS, $post );   // ordered menu entries: copy-link, view, download, copy-content. May reorder and narrow; unknown keys are stripped AFTER the filter, [] renders no button at all
+apply_filters( 'sysmda_md_button_label', 'Markdown', $post );              // label of the toggle ('' renders no button)
+apply_filters( 'sysmda_md_button_enqueue_style', true );                   // false = never enqueue assets/md-button.css; the button keeps working unstyled and the theme owns the presentation
+apply_filters( 'sysmda_md_button_html', $html, $post );                    // final button markup ('' when nothing is rendered)
 ```
 
 Default exclusions:
@@ -1145,6 +1246,16 @@ Test posts:
    `/my-post/comment-page-2/`.
 10. Same post through `/my-post.md` and `?format=markdown` → **byte-identical**
     bodies (the loop is set up on both routes).
+
+11. Post carrying `[sysmda_md_button]` → the button renders in HTML, and the same
+    post's `.md` contains **no** trace of it — including with the panel's
+    "Excluded shortcodes" textarea filled in with a custom list.
+12. Auto-insert set to "both" on a post that also has the shortcode → exactly
+    **one** button, and the two menus do not share a DOM `id`.
+13. JavaScript disabled → the two links render and work, the toggle and both
+    copy entries are absent. Same on plain HTTP for "Copy Markdown content".
+14. Non-servable post (draft, password-protected, unsupported type, `aside`
+    format) → the shortcode renders '' and auto-insert does nothing.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

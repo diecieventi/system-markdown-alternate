@@ -34,6 +34,8 @@ $sysmda_options = array(
 	'sysmda_litespeed_htaccess',
 	'sysmda_md_hits',
 	'sysmda_md_hits_enabled',
+	'sysmda_md_button_position',
+	'sysmda_md_button_items',
 	'sysmda_cache_salt',
 	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
 	'sysmda_front_matter_taxonomies', // Legacy option (checkbox replaced by the taxonomy selection in 0.25.0).

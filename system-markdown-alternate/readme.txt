@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.30.2
+Stable tag: 0.31.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,6 +60,11 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
 * **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
+* **Optional Markdown button** for readers (off by default): a small dropdown that
+  copies the `.md` link, opens it in a new tab, downloads the `.md` file, or copies
+  the Markdown itself to the clipboard, ready to paste into an AI assistant. Place
+  it with `[sysmda_md_button]` or have it added before/after every enabled post.
+  Neutral styling that inherits from your theme, and it works without JavaScript.
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
@@ -112,6 +117,14 @@ The output is customizable through filters:
 * `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
 * `sysmda_md_hits_bot_patterns` — user-agent substrings the hit counter classifies as bot.
 * `sysmda_md_hits_retention_days` — retention of the daily hit-counter buckets (default 90).
+* `sysmda_md_button_position` — where the Markdown button is inserted automatically:
+  `''` (off), `'before'`, `'after'` or `'both'`.
+* `sysmda_md_button_items` — which menu entries appear, in order: `copy-link`,
+  `view`, `download`, `copy-content`.
+* `sysmda_md_button_label` — label of the button that opens the menu (default `Markdown`).
+* `sysmda_md_button_enqueue_style` — load the button stylesheet (`false` leaves the
+  markup unstyled so the theme owns the presentation).
+* `sysmda_md_button_html` — the final button markup.
 
 == Installation ==
 
@@ -313,6 +326,52 @@ missed optimisation, not a correctness problem — the response is still current
 As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser
 user agents outright, and a block page is easy to mistake for a plugin bug.
 
+= How do I show a Markdown button on my posts? =
+
+Two ways, and they can be combined. Put `[sysmda_md_button]` wherever you want it
+— in the post, in a template, in a widget, in a GenerateBlocks element — adding
+`id="123"` to point it at a specific post. Or open **Settings → Markdown
+Alternate → Markdown button** and pick a position: the button is then added
+before and/or after the content of every enabled post, with no editing.
+
+The button never appears on content that has no Markdown version (drafts,
+password-protected posts, unsupported post types, non-standard post formats), so
+it can never link to a 404. It also never ends up inside the `.md` file itself.
+
+If you place the shortcode by hand in a post, automatic insertion stands down for
+that post, so you never get two buttons.
+
+= Can I restyle the Markdown button? =
+
+Yes, and without fighting selectors: everything worth changing is a CSS custom
+property on `.sysmda-md-button`. For a solid dark button, for example:
+
+`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; }`
+
+Others include `--sysmda-btn-padding`, `--sysmda-btn-font-size`,
+`--sysmda-btn-hover-bg`, `--sysmda-btn-menu-bg`, `--sysmda-btn-menu-fg` and
+`--sysmda-btn-menu-shadow`. The dropdown follows your theme's `color-scheme`, so
+dark themes usually need no change at all; set the two `menu` properties if yours
+does not declare one. To drop the plugin's stylesheet entirely and write your
+own, return `false` from `sysmda_md_button_enqueue_style`.
+
+= The button does not copy anything on my site =
+
+Almost always because the site is served over plain HTTP. The browser Clipboard
+API only exists in a secure context, so the plugin falls back to the older copy
+method, which some browsers refuse in a background task. **Copy Markdown
+content** is the one most affected, since it has to fetch the document first.
+
+The plugin never shows a control it cannot operate: if no copy mechanism is
+available at all, the two copy entries are simply not rendered, and **View as
+Markdown** and **Download Markdown** — plain links, which need neither
+JavaScript nor a secure context — remain. Moving the site to HTTPS fixes it.
+
+One thing worth knowing if you use the hit counter: **View**, **Download** and
+**Copy Markdown content** all request the `.md` URL from a real browser, so they
+are counted in the *human* column. That is accurate — a person asked for them —
+but the totals mix reader clicks with agents fetching the document directly.
+
 == Screenshots ==
 
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
@@ -321,6 +380,31 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.31.0 =
+
+* **New: an optional Markdown button for readers.** Until now the `.md` version
+  was discoverable only by machines. The new `[sysmda_md_button]` shortcode adds
+  a small **Markdown** dropdown offering four actions: copy the `.md` link, view
+  it in a new tab, download it as a `.md` file, and copy the Markdown *itself* to
+  the clipboard, ready to paste into an AI assistant. A new **Markdown button**
+  settings tab can also place it before and/or after the content of every enabled
+  post automatically — disabled by default, so nothing appears until you ask.
+* The menu is keyboard operable, announces the result of a copy to screen
+  readers, and **works without JavaScript**: the two clipboard entries are
+  revealed only once the browser is known to support them, so a reader without
+  JavaScript sees the two entries that are genuinely links rather than controls
+  that do nothing.
+* The button never appears inside the Markdown itself: the shortcode is stripped
+  from the source unconditionally, even on sites that have customized the
+  "Excluded shortcodes" list.
+* Styling is neutral and inherits from your theme through CSS custom properties,
+  follows dark themes and RTL with no extra stylesheet, and can be switched off
+  entirely with `sysmda_md_button_enqueue_style`. The stylesheet and script load
+  only on pages that actually show a button.
+* New filters: `sysmda_md_button_position`, `sysmda_md_button_items`,
+  `sysmda_md_button_label`, `sysmda_md_button_enqueue_style` and
+  `sysmda_md_button_html`.
 
 = 0.30.2 =
 * Fixed: the WordPress.org readme parser truncated the changelog, because a
@@ -333,34 +417,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * The plugin's **Author URI** now points to `https://diecieventi.com/`, the site
   of the author named in the header, instead of a different site run by the same
   author. Metadata only — no code, output or behaviour changes.
-
-= 0.30.0 =
-
-* **The LiteSpeed `.htaccess` rules no longer let an odd `Accept` header bypass
-  your page cache.** The optional block contained a second rule that sent any
-  request whose `Accept` allowed neither HTML nor a wildcard straight to PHP, so
-  the plugin could answer `406`. Because the rule matched every URL on the site,
-  a client sending an arbitrary media type — `Accept: application/json`, or a
-  different random one on each request — skipped the page cache site-wide and
-  paid a full WordPress boot every time. What it bought was a `406` for clients
-  that do not exist in practice: browsers, crawlers and agents always send
-  `text/html` or a wildcard. The rule is gone; Markdown negotiation still
-  bypasses the cache exactly as before, and the `406` itself is unchanged on
-  every request that reaches PHP. If you have the option enabled, the block is
-  rewritten automatically the next time you open the settings page.
-* **New filter `sysmda_front_matter_enabled`** to serve the Markdown without its
-  YAML front matter, for setups whose consumers expect the document to start at
-  the `# Title` heading. On by default: the block carries the canonical URL,
-  dates and author, which nothing in the body can replace.
-* **New filter `sysmda_markdown_prewarm`** to rebuild a post's Markdown in the
-  background after each save, so the first reader after an edit is served from
-  the cache instead of waiting for the conversion. Off by default, deliberately:
-  the rebuild runs under WP-Cron, where a dynamic block or shortcode that
-  inspects the current request can render differently than it would on a real
-  page view.
-* Documentation: new FAQ entries on running behind a CDN (Cloudflare, Fastly,
-  Varnish) and on testing that no cache is mixing the HTML and Markdown
-  representations of a URL.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

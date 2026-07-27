@@ -13,6 +13,18 @@ defined( 'ABSPATH' ) || exit;
 class ShortcodeCleaner {
 
 	/**
+	 * Shortcodes stripped whatever the filter says.
+	 *
+	 * `sysmda_md_button` renders a UI control — a dropdown of clipboard buttons
+	 * and links — which has no meaning in a Markdown document. Leaving it to the
+	 * default list below would not be enough: AdminSettings bridges a saved option
+	 * that *replaces* those defaults, so anyone who had edited the "Excluded
+	 * shortcodes" textarea would find the button converted into their `.md`.
+	 * Same shape as MetadataBuilder::EXCLUDED_TAXONOMIES, applied after the filter.
+	 */
+	const ALWAYS_EXCLUDED = array( MarkdownButton::TAG );
+
+	/**
 	 * @param string $content Source content.
 	 * @return string Content without excluded shortcodes.
 	 */
@@ -55,6 +67,8 @@ class ShortcodeCleaner {
 		);
 
 		/** Filters shortcodes excluded from Markdown. */
-		return (array) apply_filters( 'sysmda_markdown_excluded_shortcodes', $defaults );
+		$tags = (array) apply_filters( 'sysmda_markdown_excluded_shortcodes', $defaults );
+
+		return array_values( array_unique( array_merge( $tags, self::ALWAYS_EXCLUDED ) ) );
 	}
 }
