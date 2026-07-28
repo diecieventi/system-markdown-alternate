@@ -15,8 +15,7 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   Integrations tab listed only `[sysmda_md_url]`, so the shortcode added in
   0.35.0 was documented everywhere except the one place you look while actually
   using the plugin. The card now covers both, with the `text=""` and `id=""`
-  variants and a copy-and-paste CSS snippet for styling the download link as a
-  button.
+  variants.
 * Fixed: the same card claimed a shortcode returns empty for a post that is
   "type not enabled, draft, or password-protected", omitting **non-standard post
   formats**, which have been a reason for exclusion since 0.26.x. The list is now
