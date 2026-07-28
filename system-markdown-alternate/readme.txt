@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.35.0
+Stable tag: 0.35.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -346,6 +346,18 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.35.1 =
+
+* **Fixed: the settings panel never mentioned `[sysmda_md_download]`.** The
+  Integrations tab listed only `[sysmda_md_url]`, so the shortcode added in
+  0.35.0 was documented everywhere except the one place you look while actually
+  using the plugin. The card now covers both, with the `text=""` and `id=""`
+  variants and a copy-and-paste CSS snippet for styling the download link as a
+  button.
+* Fixed: the same card claimed a shortcode returns empty for a post that is
+  "type not enabled, draft, or password-protected", omitting **non-standard post
+  formats**, which have been a reason for exclusion since 0.26.x.
+
 = 0.35.0 =
 
 * **New `[sysmda_md_download]` shortcode**: a link that saves the Markdown as a
@@ -377,22 +389,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
   renders anything. It is still stripped from the Markdown, so a forgotten one
   never shows up as stray text in your `.md`. Its two saved settings are removed
   on uninstall.
-
-= 0.33.0 =
-
-* **The Markdown button's dropdown can now be coloured separately from the
-  button**, and hover and focus are stylable. Five new custom properties:
-  `--sysmda-btn-hover-fg` and `--sysmda-btn-hover-bg` for the button,
-  `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-hover-fg` and
-  `--sysmda-btn-menu-hover-bg` for the entries. Each falls back to the button's
-  own value, so you only set them when you want the menu to differ, and focus
-  reuses the hover colours rather than needing a third state.
-* **Fixed: a menu entry could be invisible.** Two of the four entries are links,
-  and a theme rule such as `.entry-content a` is specific enough to repaint them
-  — on a dark dropdown that made "View as Markdown" vanish. The plugin's own
-  rules are now scoped deeply enough to hold against that, without affecting your
-  own overrides, which go through the custom properties and are unaffected by
-  specificity.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

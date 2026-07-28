@@ -817,10 +817,14 @@ class AdminSettings {
 		echo '<p class="sysmda-help">' . wp_kses_post( __( 'Informational section: how to use the <code>.md</code> URL in content and templates.', 'system-markdown-alternate' ) ) . '</p>';
 
 		echo '<div class="sysmda-integration-card">';
-		echo '<h3>' . esc_html__( 'Shortcode', 'system-markdown-alternate' ) . '</h3>';
+		echo '<h3>' . esc_html__( 'Shortcodes', 'system-markdown-alternate' ) . '</h3>';
 		echo '<p>' . wp_kses_post( __( '<code>[sysmda_md_url]</code> — <code>.md</code> URL of the current post.', 'system-markdown-alternate' ) ) . '<br>';
 		echo wp_kses_post( __( '<code>[sysmda_md_url id="123"]</code> — <code>.md</code> URL of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
-		echo '<p class="description">' . esc_html__( 'Returns empty if the post does not expose a .md (type not enabled, draft, or password-protected).', 'system-markdown-alternate' ) . '</p>';
+		echo '<p>' . wp_kses_post( __( '<code>[sysmda_md_download]</code> — a link that saves the <code>.md</code> as a file instead of opening it.', 'system-markdown-alternate' ) ) . '<br>';
+		echo wp_kses_post( __( '<code>[sysmda_md_download text="Save it"]</code> — same link with your own label.', 'system-markdown-alternate' ) ) . '<br>';
+		echo wp_kses_post( __( '<code>[sysmda_md_download id="123"]</code> — the download link of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'The download link is a plain link carrying a single <code>sysmda-md-download</code> class; the plugin adds no CSS or JavaScript to your site. To make it look like a button, style that class in your theme, for example <code>.sysmda-md-download { display: inline-block; padding: .5em 1em; }</code>.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Both return empty if the post does not expose a .md (type not enabled, draft, password-protected, or a non-standard post format), so they never link to a 404.', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
 
 		echo '<div class="sysmda-integration-card">';

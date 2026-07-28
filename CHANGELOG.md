@@ -9,6 +9,23 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.35.1
+
+* **Fixed: the settings panel never mentioned `[sysmda_md_download]`.** The
+  Integrations tab listed only `[sysmda_md_url]`, so the shortcode added in
+  0.35.0 was documented everywhere except the one place you look while actually
+  using the plugin. The card now covers both, with the `text=""` and `id=""`
+  variants and a copy-and-paste CSS snippet for styling the download link as a
+  button.
+* Fixed: the same card claimed a shortcode returns empty for a post that is
+  "type not enabled, draft, or password-protected", omitting **non-standard post
+  formats**, which have been a reason for exclusion since 0.26.x. The list is now
+  complete, and says explicitly that this is what keeps the shortcodes from
+  linking to a 404.
+* Internal: the `PostSupport` docblock, which lists everywhere the eligibility
+  rules apply, was still half in Italian and predated both `/llms.txt` and the
+  download shortcode.
+
 ## 0.35.0
 
 * **New `[sysmda_md_download]` shortcode**: a link that saves the Markdown as a

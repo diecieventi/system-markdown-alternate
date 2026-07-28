@@ -10,8 +10,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Shared eligibility rules for posts that expose a Markdown version.
  *
- * Single source of truth for the .md endpoint, content negotiation, alternate link,
- * shortcode [sysmda_md_url] e dynamic tag {{sysmda_md_url}}.
+ * Single source of truth for the .md endpoint, content negotiation, the alternate
+ * link, /llms.txt, the [sysmda_md_url] and [sysmda_md_download] shortcodes, and
+ * the {{sysmda_md_url}} dynamic tag.
  */
 class PostSupport {
 
