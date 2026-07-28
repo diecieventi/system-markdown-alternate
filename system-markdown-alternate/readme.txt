@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.33.0
+Stable tag: 0.34.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,12 +60,6 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
 * **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
-* **Optional Markdown button** for readers: a small dropdown that copies the `.md`
-  link, opens it in a new tab, downloads the `.md` file, or copies the Markdown
-  itself to the clipboard, ready to paste into an AI assistant. Place it with
-  `[sysmda_md_button]` wherever you want it. Neutral styling that inherits from
-  your theme and is restyled with CSS custom properties, and it works without
-  JavaScript.
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
@@ -118,12 +112,6 @@ The output is customizable through filters:
 * `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
 * `sysmda_md_hits_bot_patterns` — user-agent substrings the hit counter classifies as bot.
 * `sysmda_md_hits_retention_days` — retention of the daily hit-counter buckets (default 90).
-* `sysmda_md_button_items` — which menu entries appear, in order: `copy-link`,
-  `view`, `download`, `copy-content`.
-* `sysmda_md_button_label` — label of the button that opens the menu (default `Markdown`).
-* `sysmda_md_button_enqueue_style` — load the button stylesheet (`false` leaves the
-  markup unstyled so the theme owns the presentation).
-* `sysmda_md_button_html` — the final button markup.
 
 == Installation ==
 
@@ -325,70 +313,6 @@ missed optimisation, not a correctness problem — the response is still current
 As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser
 user agents outright, and a block page is easy to mistake for a plugin bug.
 
-= How do I show a Markdown button on my posts? =
-
-Put `[sysmda_md_button]` wherever you want it — in the post, in a template, in a
-widget, in a GenerateBlocks element — adding `id="123"` to point it at a specific
-post. There is no automatic insertion: a button is a design decision, so it goes
-exactly where you put it and nowhere else.
-
-The button never appears on content that has no Markdown version (drafts,
-password-protected posts, unsupported post types, non-standard post formats), so
-it can never link to a 404. It also never ends up inside the `.md` file itself.
-
-Which entries the menu offers is set under **Settings → Markdown Alternate →
-Markdown button**.
-
-= Can I restyle the Markdown button? =
-
-Yes, and without fighting selectors. Twelve CSS custom properties are the whole
-surface. For the button: `--sysmda-btn-fg`, `--sysmda-btn-bg`,
-`--sysmda-btn-hover-fg`, `--sysmda-btn-hover-bg`, `--sysmda-btn-border`,
-`--sysmda-btn-radius`, `--sysmda-btn-padding` and `--sysmda-btn-font-size`. For
-the dropdown: `--sysmda-btn-menu-fg`, `--sysmda-btn-menu-bg`,
-`--sysmda-btn-menu-hover-fg` and `--sysmda-btn-menu-hover-bg`.
-
-Padding and font size are shared with the entries, so one value moves the button
-and its menu together; focus reuses the hover colours, so there is no third state
-to style; and the entry text colour falls back to the button's, so a plain dark
-button already gives a readable menu. The dropdown's backdrop and its hover
-background stand on their own, deliberately: a colour picked against the page
-background is not safe to reuse on top of the menu.
-
-Paste them into **Appearance → Customize → Additional CSS** or your child theme's
-stylesheet, keeping only the lines you change. For a solid dark pill:
-
-`.sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; --sysmda-btn-menu-hover-bg: #333; }`
-
-The plugin never declares these properties itself — it only reads them, with the
-defaults built in as fallbacks. That is what makes your rule always win, from the
-Customizer or a child theme alike, whichever stylesheet the browser loads last.
-The settings page shows the same list as a snippet you can copy.
-
-If a menu entry looks invisible, set `--sysmda-btn-menu-fg`: two of the entries
-are links, and some themes colour every link inside the content strongly enough
-to repaint them.
-
-To drop the plugin's stylesheet entirely and write your own, return `false` from
-`sysmda_md_button_enqueue_style`.
-
-= The button does not copy anything on my site =
-
-Almost always because the site is served over plain HTTP. The browser Clipboard
-API only exists in a secure context, so the plugin falls back to the older copy
-method, which some browsers refuse in a background task. **Copy Markdown
-content** is the one most affected, since it has to fetch the document first.
-
-The plugin never shows a control it cannot operate: if no copy mechanism is
-available at all, the two copy entries are simply not rendered, and **View as
-Markdown** and **Download Markdown** — plain links, which need neither
-JavaScript nor a secure context — remain. Moving the site to HTTPS fixes it.
-
-One thing worth knowing if you use the hit counter: **View**, **Download** and
-**Copy Markdown content** all request the `.md` URL from a real browser, so they
-are counted in the *human* column. That is accurate — a person asked for them —
-but the totals mix reader clicks with agents fetching the document directly.
-
 == Screenshots ==
 
 1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
@@ -397,6 +321,22 @@ but the totals mix reader clicks with agents fetching the document directly.
 4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
 
 == Changelog ==
+
+= 0.34.0 =
+
+* **Removed the Markdown button.** It shipped in 0.31.0 and was reshaped twice
+  after that; testing it on a real site settled it. The dropdown broke the layout
+  on mobile, and it put a stylesheet and a script on the front end for a control
+  most readers never use. A plugin whose job is a clean machine-readable copy of
+  your content should not be shipping a presentational widget it cannot test
+  against your theme.
+* Nothing else changes. The Markdown version stays discoverable exactly as
+  before — the `rel="alternate"` link, `/llms.txt`, content negotiation and the
+  `[sysmda_md_url]` shortcode — and the `.md` output is byte-for-byte identical.
+* If you had `[sysmda_md_button]` in a post, remove it: the shortcode no longer
+  renders anything. It is still stripped from the Markdown, so a forgotten one
+  never shows up as stray text in your `.md`. Its two saved settings are removed
+  on uninstall.
 
 = 0.33.0 =
 
@@ -436,31 +376,6 @@ but the totals mix reader clicks with agents fetching the document directly.
   documented "may reorder and narrow" behaviour silently stopped working. The
   panel selection is now fed in as the filter's *default*, like the taxonomy
   selection.
-
-= 0.31.0 =
-
-* **New: an optional Markdown button for readers.** Until now the `.md` version
-  was discoverable only by machines. The new `[sysmda_md_button]` shortcode adds
-  a small **Markdown** dropdown offering four actions: copy the `.md` link, view
-  it in a new tab, download it as a `.md` file, and copy the Markdown *itself* to
-  the clipboard, ready to paste into an AI assistant. A new **Markdown button**
-  settings tab can also place it before and/or after the content of every enabled
-  post automatically — disabled by default, so nothing appears until you ask.
-* The menu is keyboard operable, announces the result of a copy to screen
-  readers, and **works without JavaScript**: the two clipboard entries are
-  revealed only once the browser is known to support them, so a reader without
-  JavaScript sees the two entries that are genuinely links rather than controls
-  that do nothing.
-* The button never appears inside the Markdown itself: the shortcode is stripped
-  from the source unconditionally, even on sites that have customized the
-  "Excluded shortcodes" list.
-* Styling is neutral and inherits from your theme through CSS custom properties,
-  follows dark themes and RTL with no extra stylesheet, and can be switched off
-  entirely with `sysmda_md_button_enqueue_style`. The stylesheet and script load
-  only on pages that actually show a button.
-* New filters: `sysmda_md_button_position`, `sysmda_md_button_items`,
-  `sysmda_md_button_label`, `sysmda_md_button_enqueue_style` and
-  `sysmda_md_button_html`.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

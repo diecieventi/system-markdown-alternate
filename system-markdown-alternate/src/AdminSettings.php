@@ -404,14 +404,6 @@ class AdminSettings {
 				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
 			)
 		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sysmda_md_button_items',
-			array(
-				'type'              => 'array',
-				'sanitize_callback' => array( MarkdownButton::class, 'sanitize_items' ),
-			)
-		);
 
 		// ACF options are registered ONLY when ACF is active. This prevents saving
 		// the form from clearing them when ACF is inactive and its fields are absent
@@ -453,10 +445,6 @@ class AdminSettings {
 		} else {
 			add_settings_field( 'sysmda_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sysmda_markdown' );
 		}
-
-		// ── Markdown button (front end) ──────────────────────────────────────────
-		add_settings_section( 'sysmda_button', __( 'Markdown button', 'system-markdown-alternate' ), array( $this, 'render_button_intro' ), self::PAGE );
-		add_settings_field( 'sysmda_md_button_items', __( 'Menu entries', 'system-markdown-alternate' ), array( $this, 'field_md_button_items' ), self::PAGE, 'sysmda_button' );
 
 		// ── llms.txt ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
@@ -696,23 +684,6 @@ class AdminSettings {
 			20
 		);
 
-		// Priority 5, before the default 10, exactly like the taxonomy selection:
-		// the saved list is the *default* value of the filter, so site code
-		// hooking at the ordinary priority can still narrow and reorder it. At 20
-		// it overwrote them instead, and the documented "may reorder and narrow"
-		// contract silently stopped holding the moment the settings were saved.
-		// The saved list replaces rather than intersects MarkdownButton::ITEMS:
-		// an entry the owner unticked must not come back because it is still a
-		// known key.
-		add_filter(
-			'sysmda_md_button_items',
-			function ( $defaults ) {
-				$v = get_option( 'sysmda_md_button_items' );
-				return false !== $v ? (array) $v : $defaults;
-			},
-			5
-		);
-
 		add_filter(
 			'sysmda_markdown_excluded_shortcodes',
 			function ( $defaults ) {
@@ -812,55 +783,6 @@ class AdminSettings {
 
 	public function render_advanced_intro(): void {
 		echo '<p class="sysmda-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
-	}
-
-	public function render_button_intro(): void {
-		echo '<p class="sysmda-help">' . wp_kses_post( __( 'An optional button that lets readers copy, view or download the Markdown version of a post. Add it wherever you want it with the <code>[sysmda_md_button]</code> shortcode &mdash; in the post, in a template, in a widget. It accepts <code>id="123"</code> to point at a specific post, and renders nothing on content that has no Markdown version.', 'system-markdown-alternate' ) ) . '</p>';
-
-		$this->render_button_styling_help();
-	}
-
-	/**
-	 * The "how do I restyle it" answer, in the panel rather than in the docs.
-	 *
-	 * The button ships deliberately neutral so it inherits from any theme, which
-	 * leaves the obvious question of where the colours are set. Nothing here is a
-	 * setting: it is a ready-made snippet with every custom property the
-	 * stylesheet honours, and the one place to paste it.
-	 */
-	private function render_button_styling_help(): void {
-		$snippet = ".sysmda-md-button {\n"
-			. "\t/* Button */\n"
-			. "\t--sysmda-btn-fg: inherit;                     /* text                */\n"
-			. "\t--sysmda-btn-bg: transparent;                 /* background          */\n"
-			. "\t--sysmda-btn-hover-fg: inherit;               /* text on hover/focus */\n"
-			. "\t--sysmda-btn-hover-bg: transparent;           /* bg on hover/focus   */\n"
-			. "\t--sysmda-btn-border: 1px solid currentColor;  /* border              */\n"
-			. "\t--sysmda-btn-radius: 0.375em;                 /* corner radius       */\n"
-			. "\t--sysmda-btn-padding: 0.45em 0.85em;          /* padding             */\n"
-			. "\t--sysmda-btn-font-size: 0.9em;                /* font size           */\n\n"
-			. "\t/* Dropdown */\n"
-			. "\t--sysmda-btn-menu-fg: inherit;                /* entry text          */\n"
-			. "\t--sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop   */\n"
-			. "\t--sysmda-btn-menu-hover-fg: inherit;          /* entry on hover      */\n"
-			. "\t--sysmda-btn-menu-hover-bg: transparent;      /* entry bg on hover   */\n"
-			. '}';
-
-		echo '<div class="sysmda-status">';
-
-		echo '<p style="margin-top:0"><strong>' . esc_html__( 'Changing the look', 'system-markdown-alternate' ) . '</strong></p>';
-
-		echo '<p>' . wp_kses_post( __( 'The button inherits your theme\'s colours and typography, so it fits in anywhere. These twelve custom properties are all it honours &mdash; paste them into <strong>Appearance → Customize → Additional CSS</strong> (or your child theme\'s stylesheet) and keep only the lines you actually change.', 'system-markdown-alternate' ) ) . '</p>';
-
-		echo '<textarea readonly rows="17" class="large-text code" onfocus="this.select()">' . esc_textarea( $snippet ) . '</textarea>';
-
-		echo '<p class="description">' . wp_kses_post( __( 'Padding and font size are shared with the dropdown entries, so one value moves the button and its menu together. Focus reuses the hover colours, so there is no third state to style. For a solid dark pill: <code>--sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; --sysmda-btn-border: 0; --sysmda-btn-radius: 999px; --sysmda-btn-menu-bg: #111; --sysmda-btn-menu-hover-bg: #333;</code>', 'system-markdown-alternate' ) ) . '</p>';
-
-		echo '<p class="description">' . wp_kses_post( __( 'If a menu entry looks invisible, set <code>--sysmda-btn-menu-fg</code>: two of the entries are links, and some themes colour every link inside the content strongly enough to repaint them.', 'system-markdown-alternate' ) ) . '</p>';
-
-		echo '<p class="description">' . wp_kses_post( __( 'The plugin never declares these properties itself &mdash; it only reads them, with the values above as built-in fallbacks. That is deliberate: it means your rule always wins, from the Customizer or a child theme alike, whichever stylesheet the browser loads last. To replace the plugin stylesheet entirely, return <code>false</code> from the <code>sysmda_md_button_enqueue_style</code> filter.', 'system-markdown-alternate' ) ) . '</p>';
-
-		echo '</div>';
 	}
 
 	public function render_llmstxt_intro(): void {
@@ -1103,29 +1025,6 @@ class AdminSettings {
 		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // Disabled by default.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
 		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	public function field_md_button_items(): void {
-		$saved   = get_option( 'sysmda_md_button_items' );
-		$current = false !== $saved ? MarkdownButton::sanitize_items( $saved ) : MarkdownButton::ITEMS;
-		$labels  = MarkdownButton::item_labels();
-
-		$notes = array(
-			'copy-link'    => __( 'copies the .md address', 'system-markdown-alternate' ),
-			'view'         => __( 'opens the Markdown in a new tab', 'system-markdown-alternate' ),
-			'download'     => __( 'saves it as a .md file', 'system-markdown-alternate' ),
-			'copy-content' => __( 'copies the Markdown itself, ready to paste into an AI assistant', 'system-markdown-alternate' ),
-		);
-
-		foreach ( MarkdownButton::ITEMS as $item ) {
-			echo '<label style="display:block;margin-bottom:4px">';
-			echo '<input type="checkbox" name="sysmda_md_button_items[]" value="' . esc_attr( $item ) . '"' . checked( in_array( $item, $current, true ), true, false ) . ' /> ';
-			echo esc_html( $labels[ $item ] );
-			echo ' <span class="description">— ' . esc_html( $notes[ $item ] ) . '</span>';
-			echo '</label>';
-		}
-
-		echo '<p class="description">' . esc_html__( 'Unticking every entry hides the button altogether. The two copy actions need JavaScript and are not rendered when the browser cannot reach the clipboard; the other two are plain links and always work.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_llms_txt_lastmod(): void {
