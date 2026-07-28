@@ -317,6 +317,30 @@ Two request paths reach the same Markdown:
 strong validator, unlike the `.md` one, because the index already exists in full
 before the response is written.
 
+**Download disposition** (since `0.35.0`). Adding `download=1` to either request
+path makes the `200` carry
+`Content-Disposition: attachment; filename="<slug>.md"`, so the response is
+saved as a file rather than displayed:
+
+```
+GET /my-post.md?download=1
+GET /my-post/?format=markdown&download=1
+```
+
+The body is **byte-identical** to the same URL without the argument — only the
+disposition changes — and so is the `ETag`. This is deliberately a query
+argument rather than a negotiated media type: it selects no representation, so
+it stays out of `Vary` and gives caches a distinct key for free, leaving the
+plain `.md` that agents and crawlers read inline completely untouched. An empty
+value or `0` reads as "no". The header appears on the `200` only; a `304`
+carries validators, not representation metadata.
+
+The file name is derived from the post slug, percent-decoded and reduced to
+`[A-Za-z0-9._-]` (accents transliterated), falling back to `post-<ID>.md` when
+nothing survives — a fully non-Latin slug, or a post saved without one. It is
+therefore always safe inside the quoted header value; RFC 6266's `filename*`
+extension is not used.
+
 ## Related
 
 - `AGENTS.md` → *Current state*, *Product decisions*, *Filters (public

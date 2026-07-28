@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.34.0
+Stable tag: 0.35.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -59,7 +59,8 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   no per-visitor data, no cookies, no external calls.
 * **Admin panel** to choose which post types are exposed and to tune cache,
   exclusions and headers — no post type is exposed until you pick one.
-* **Shortcode** `[sysmda_md_url]` to output the Markdown URL anywhere.
+* **Shortcodes** `[sysmda_md_url]` (the Markdown URL) and
+  `[sysmda_md_download]` (a link that saves the file instead of opening it).
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a
     preamble between the H1 and the body.
@@ -190,6 +191,36 @@ Use the `[sysmda_md_url]` shortcode. If you run GenerateBlocks 2.x, the
 fields such as a Button URL. When the post has no `.md`, the tag resolves to an
 empty value so GenerateBlocks can hide the element instead of leaving a broken
 link.
+
+= How do I let readers download the .md instead of opening it? =
+
+Use the `[sysmda_md_download]` shortcode. It prints a link that saves the file:
+
+`[sysmda_md_download]`
+`[sysmda_md_download text="Save the Markdown"]`
+`[sysmda_md_download id="123"]`
+
+It works on two levels, and either one is enough on its own: the link carries
+the HTML `download` attribute, which covers a click in a browser, and it points
+at a URL ending in `?download=1`, which makes the server answer with
+`Content-Disposition: attachment` — so the file is saved even by clients that
+never look at the markup. You can use that URL directly if you prefer, on either
+request path:
+
+`https://example.com/my-post.md?download=1`
+`https://example.com/my-post/?format=markdown&download=1`
+
+The response body is exactly the same as without the argument; only the way the
+client handles it changes. The file name comes from the post slug.
+
+The shortcode outputs a plain link with a single `sysmda-md-download` class, and
+the plugin loads **no CSS and no JavaScript** on your site for it. If you want it
+to look like a button, style that class in your theme:
+
+`.sysmda-md-download { display: inline-block; padding: .5em 1em; }`
+
+Like `[sysmda_md_url]`, it outputs nothing when the post has no Markdown version,
+so it can never produce a link to a 404.
 
 = Is the .md content cached? =
 
@@ -322,6 +353,27 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.35.0 =
+
+* **New `[sysmda_md_download]` shortcode**: a link that saves the Markdown as a
+  file instead of opening it in the browser. Optional `text=""` for the label
+  (default "Download MD") and `id=""` for another post, exactly like
+  `[sysmda_md_url]`. Like that one, it outputs nothing when the post has no
+  Markdown version, so it can never link to a 404.
+* **New `?download=1` argument** on both request paths (`/my-post.md?download=1`
+  and `?format=markdown&download=1`): the response adds
+  `Content-Disposition: attachment` with a file name derived from the post slug.
+  The body is byte-for-byte identical to the same URL without the argument — only
+  the way the client handles it changes — so caches and `ETag`s are unaffected,
+  and the plain `.md` that agents read inline is untouched.
+  The two work independently: the shortcode's link carries the HTML `download`
+  attribute *and* points at that URL, so a browser click and a plain HTTP client
+  both save a file, and either mechanism is enough on its own.
+* **No CSS and no JavaScript are added to your site.** The shortcode outputs a
+  plain link with a single `sysmda-md-download` class, there for your theme to
+  style if you want it to look like a button. This is deliberate, and it is the
+  same rule that removed the front-end button in 0.34.0.
+
 = 0.34.0 =
 
 * **Removed the Markdown button.** It shipped in 0.31.0 and was reshaped twice
@@ -353,29 +405,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
   rules are now scoped deeply enough to hold against that, without affecting your
   own overrides, which go through the custom properties and are unaffected by
   specificity.
-
-= 0.32.0 =
-
-* **Removed the Markdown button's automatic placement.** The button is a design
-  decision, so it now goes exactly where you put `[sysmda_md_button]` and nowhere
-  else. The "Automatic placement" setting is gone, along with the machinery that
-  had to keep it out of feeds, oEmbed views, excerpts and secondary loops. If you
-  were relying on it, add the shortcode to your single-post template.
-* **Fixed: the button could not be restyled.** Setting `--sysmda-btn-bg` in the
-  Customizer did nothing, because the plugin declared the same properties on the
-  same selector and its stylesheet can load last. It now declares nothing at all —
-  every value is a fallback — so your rule always wins, from the Customizer or a
-  child theme alike.
-* **The stylesheet is down to the minimum**, and the whole styling surface is
-  seven custom properties: text colour, background, border, corner radius,
-  padding, font size and the dropdown backdrop. The menu entries reuse the same
-  values, so one change moves the button and its menu together. The settings page
-  lists them as a copy-and-paste snippet and names where to paste it.
-* Fixed: site code hooking `sysmda_md_button_items` at the ordinary priority was
-  overwritten by the saved selection as soon as the settings were saved, so the
-  documented "may reorder and narrow" behaviour silently stopped working. The
-  panel selection is now fed in as the filter's *default*, like the taxonomy
-  selection.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

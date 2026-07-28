@@ -9,6 +9,42 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.35.0
+
+* **New `[sysmda_md_download]` shortcode**: a link that saves the Markdown as a
+  file instead of opening it in the browser. Optional `text=""` for the label
+  (default "Download MD", translatable) and `id=""` for another post, exactly
+  like `[sysmda_md_url]`. Like that one, it returns an empty string when the post
+  has no Markdown version, so it can never print a link to a 404.
+* **New `?download=1` argument** on both request paths (`/my-post.md?download=1`
+  and `?format=markdown&download=1`): the `200` adds
+  `Content-Disposition: attachment` with a file name derived from the post slug.
+  The body is byte-for-byte identical to the same URL without the argument — only
+  the disposition changes — so the `ETag` is unaffected and the plain `.md` that
+  agents and crawlers read inline is untouched. A query argument rather than a
+  negotiated media type on purpose: it selects no representation, so it stays out
+  of `Vary` and gives caches a distinct key for free. An empty value or `0` reads
+  as "no", and the header is sent on the `200` only — a `304` carries validators,
+  not representation metadata.
+* **The two mechanisms are independent, and either is enough alone.** The
+  shortcode's link carries the HTML `download` attribute *and* points at the
+  `?download=1` URL, so a browser click and a plain HTTP client both end up with
+  a file.
+* The download file name is percent-decoded (WordPress stores non-Latin slugs
+  encoded), transliterated and reduced to `[A-Za-z0-9._-]`, falling back to
+  `post-<ID>.md` when nothing survives. It is therefore always safe inside the
+  quoted `Content-Disposition` value: a slug carrying a quote, a backslash or a
+  CRLF cannot close the header early or inject a second one — asserted as a
+  property in the tests rather than as a fixed string.
+* **A separate shortcode rather than attributes on `[sysmda_md_url]`.** That one
+  always returns a bare URL, which is what makes `<a href="[sysmda_md_url]">`
+  safe; making its return type depend on an attribute would break that usage the
+  day someone passed a label.
+* **No CSS and no JavaScript are added to the front end.** The output is a bare
+  anchor with a single `sysmda-md-download` class, there only so a theme can
+  style it. The tests assert the shape — one class, no inline styles, no `data-`
+  hooks — because the button removed in 0.34.0 started out exactly this small.
+
 ## 0.34.0
 
 * **Removed the Markdown button**, three versions after it shipped. It was the

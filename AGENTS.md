@@ -273,7 +273,17 @@ The v1 scope is done and widely exceeded. Implemented:
   translate.wordpress.org and WP loads them automatically (≥ 4.6).
 - **ACF**: subtitle (text) + TL;DR (WYSIWYG, goes through the DOM pipeline) as a
   preamble between the H1 and the body; field names configurable from the panel.
-- **Shortcode** `[sysmda_md_url]` (+ `id="123"`).
+- **Shortcodes**: `[sysmda_md_url]` (+ `id="123"`), always a bare URL; and
+  `[sysmda_md_download]` (+ `id`, `text`), always markup — an anchor that saves
+  the file instead of opening it. See the decision below for why they are two.
+- **`?download=1`** on either request path (`.md` suffix or `?format=markdown`)
+  adds `Content-Disposition: attachment; filename="<slug>.md"` to the `200`.
+  The body is byte-identical to the same URL without it, so the `ETag` is
+  unchanged and the inline `.md` is untouched; the header is not sent on a
+  `304`. File name via `MetadataBuilder::download_filename()`: percent-decoded,
+  transliterated, reduced to `[A-Za-z0-9._-]`, `post-<ID>.md` as fallback — it
+  lands inside a quoted header value, so the charset is the safety property
+  (tested as such, not as a fixed string).
 - **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
 - `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
@@ -684,6 +694,34 @@ The v1 scope is done and widely exceeded. Implemented:
   are gone; the options stay in `uninstall.php` as legacy keys, and
   `ShortcodeCleaner::ALWAYS_EXCLUDED` keeps stripping `[sysmda_md_button]` so a
   tag left in old content does not surface as literal text in the `.md`.
+- **Downloading the `.md` is two independent mechanisms, and the link stays a
+  bare anchor** (decided July 2026, `0.35.0` — read together with the button
+  decision above, which it deliberately does not reopen): `[sysmda_md_download]`
+  renders `<a class="sysmda-md-download" href="…?download=1" download="slug.md">`
+  and nothing else. Three parts, each load-bearing:
+  - **A second shortcode, not attributes on `[sysmda_md_url]`.** That one always
+    returns a bare URL, which is exactly what makes `<a href="[sysmda_md_url]">`
+    safe in a template. A `text=` attribute would make its return type depend on
+    an argument — bare URL sometimes, markup other times — and would break that
+    usage the first time someone passed a label. Two shortcodes, two return
+    types, no conditionals. `resolve_post()` is shared (it was already `public
+    static` from the button era; this is its second real caller).
+  - **Server-side `Content-Disposition` as well as the HTML attribute**, because
+    they cover different clients: the attribute only works for a click on
+    rendered markup, and the header only when the request actually reaches PHP.
+    Either alone is a partial answer; together neither is load-bearing. The
+    header hangs off `?download=1` rather than a media type because it selects
+    no representation — the body is byte-identical, so it must not enter `Vary`,
+    and the URL split gives caches a distinct key for nothing. It is sent on the
+    `200` only.
+  - **One class, no CSS, no JS, and it stays that way.** `.sysmda-md-download`
+    exists so a theme can style it; the plugin ships no stylesheet for it and
+    never will. This is the same rule that removed the button, applied before
+    the problem recurs — the button was also just a link once. The tests assert
+    the shape (one class, no inline styles, no `data-` hooks) precisely so the
+    drift is caught mechanically rather than in review. Do **not** add styling
+    options, a second class, an icon or a panel tab: that is the 0.31 → 0.33
+    trajectory starting over.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again): a
@@ -898,7 +936,7 @@ running code at the WP level.
         ├── AdminSettings.php       ← settings page (Settings API)
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
         ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
-        ├── Shortcodes.php          ← [sysmda_md_url] (resolve_post() is shared, public static)
+        ├── Shortcodes.php          ← [sysmda_md_url] + [sysmda_md_download] (resolve_post() is shared, public static)
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
 ```
@@ -1171,6 +1209,14 @@ Test posts:
 11. Post still containing a stray `[sysmda_md_button]` from before 0.34.0 → the
     tag appears nowhere in the `.md`, not even as literal text, including with
     the panel's "Excluded shortcodes" textarea filled in with a custom list.
+
+12. `[sysmda_md_download]` on a servable post → a link that **saves** the file;
+    `curl -sI '<permalink>.md?download=1'` shows
+    `Content-Disposition: attachment` with the slug as the file name, while the
+    same URL without the argument does not. Bodies identical
+    (`diff <(curl -s …md) <(curl -s …md?download=1)` → empty), and `?download=0`
+    behaves like no argument. On a non-servable post the shortcode outputs
+    nothing at all.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

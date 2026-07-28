@@ -125,6 +125,53 @@ function add_query_arg( $key, $value, $url ) {
 	return $url . $sep . $key . '=' . $value;
 }
 
+function shortcode_atts( $pairs, $atts, $shortcode = '' ) {
+	$atts = (array) $atts;
+	$out  = array();
+
+	foreach ( $pairs as $name => $default ) {
+		$out[ $name ] = array_key_exists( $name, $atts ) ? $atts[ $name ] : $default;
+	}
+
+	return $out;
+}
+
+/**
+ * Stub: transliteration of accented Latin characters, used to build the download
+ * file name. Only the accents the tests exercise; anything else is left as-is,
+ * exactly like core, so the ASCII filter in download_filename() is what has to
+ * drop the rest.
+ */
+function remove_accents( $text ) {
+	return strtr(
+		$text,
+		array(
+			'à' => 'a',
+			'á' => 'a',
+			'è' => 'e',
+			'é' => 'e',
+			'ì' => 'i',
+			'í' => 'i',
+			'ò' => 'o',
+			'ó' => 'o',
+			'ù' => 'u',
+			'ú' => 'u',
+			'ç' => 'c',
+			'ñ' => 'n',
+		)
+	);
+}
+
+/**
+ * Stub: core's file-name sanitizer, reduced to the characters that matter here —
+ * the ones that would break a Content-Disposition header if they survived.
+ */
+function sanitize_file_name( $name ) {
+	$name = str_replace( array( '?', '[', ']', '/', '\\', '=', '<', '>', ':', ';', ',', "'", '"', '&', '$', '#', '*', '(', ')', '|', '~', '`', '!', '{', '}', '%', '+', chr( 0 ) ), '', $name );
+	$name = preg_replace( '/[\r\n\t -]+/', '-', $name );
+	return trim( $name, '.-_' );
+}
+
 function get_shortcode_regex( $tags = null ) {
 	// Simplified core regex, sufficient for the tested tags.
 	$tagregexp = implode( '|', array_map( 'preg_quote', (array) $tags ) );
@@ -354,6 +401,7 @@ require __DIR__ . '/../src/MarkdownController.php';
 require __DIR__ . '/../src/LiteSpeedCompat.php';
 require __DIR__ . '/../src/HitCounter.php';
 require __DIR__ . '/../src/AdminSettings.php';
+require __DIR__ . '/../src/Shortcodes.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
@@ -367,6 +415,7 @@ use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
+use Diecieventi\SystemMarkdownAlternate\Shortcodes;
 
 // ─── Micro-framework ─────────────────────────────────────────────────────────
 
@@ -591,6 +640,60 @@ check( 'url: query string → format=markdown', 'https://example.com/?page_id=2&
 // Homepage (path "/") → fallback, no /index.md.
 $p = new WP_Post( array( 'permalink' => 'https://example.com/' ) );
 check( 'url: homepage → format=markdown', 'https://example.com/?format=markdown', MetadataBuilder::markdown_url( $p ) );
+
+// ─── MetadataBuilder::markdown_download_url / download_filename ──────────────
+
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
+
+$p = new WP_Post( array( 'permalink' => 'https://example.com/my-post/' ) );
+check( 'download url: appended to the .md', 'https://example.com/my-post.md?download=1', MetadataBuilder::markdown_download_url( $p ) );
+
+// Plain permalinks have no .md suffix to hang the argument on: it joins the
+// negotiated URL instead, which is what markdown_url() already falls back to.
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '';
+$p = new WP_Post( array( 'permalink' => 'https://example.com/?p=123' ) );
+check( 'download url: plain permalink keeps format=markdown', 'https://example.com/?p=123&format=markdown&download=1', MetadataBuilder::markdown_download_url( $p ) );
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
+
+check( 'filename: from the slug', 'my-post.md', MetadataBuilder::download_filename( new WP_Post( array( 'post_name' => 'my-post' ) ) ) );
+
+// Accents are transliterated rather than dropped, so the name stays readable.
+check( 'filename: accents transliterated', 'perche-no.md', MetadataBuilder::download_filename( new WP_Post( array( 'post_name' => 'perché-no' ) ) ) );
+
+// WordPress stores non-Latin slugs percent-encoded. Without the rawurldecode()
+// the hex would survive as text and produce `d0bfd180d0b8.md`.
+check(
+	'filename: percent-encoded non-Latin slug → ID fallback',
+	'post-42.md',
+	MetadataBuilder::download_filename(
+		new WP_Post(
+			array(
+				'ID'        => 42,
+				'post_name' => '%d0%bf%d1%80%d0%b8',
+			)
+		)
+	)
+);
+
+check( 'filename: empty slug → ID fallback', 'post-7.md', MetadataBuilder::download_filename( new WP_Post( array( 'ID' => 7 ) ) ) );
+
+// The value lands inside a quoted Content-Disposition header, so what matters is
+// the invariant, not the exact spelling: whatever a hostile slug contains, the
+// result stays within the safe set and cannot close the quoted string early or
+// inject a second header line. Asserted as a property so the test exercises
+// download_filename()'s own filter rather than the sanitize_file_name() stub.
+foreach (
+	array(
+		'quote'     => 'evil"; rm -rf /".md',
+		'backslash' => 'back\\slash',
+		'crlf'      => "line\r\nInjected: header",
+		'non-latin' => 'привет-мир',
+		'spaces'    => '  padded name  ',
+	) as $sysmda_case => $sysmda_slug
+) {
+	$sysmda_name = MetadataBuilder::download_filename( new WP_Post( array( 'ID' => 3, 'post_name' => $sysmda_slug ) ) );
+	check( 'filename: safe charset (' . $sysmda_case . ')', 1, preg_match( '/^[A-Za-z0-9._-]+\.md$/', $sysmda_name ) );
+}
 
 // ─── MetadataBuilder::description ─────────────────────────────────────
 
@@ -1801,6 +1904,88 @@ $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array
 check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
 check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
+
+// ─── Shortcodes::render_download ──────────────────────────────────────────────
+
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
+
+$sysmda_dl_post = $sysmda_mk_post(
+	array(
+		'post_name' => 'my-post',
+		'permalink' => 'https://example.com/my-post/',
+	)
+);
+
+$GLOBALS['sysmda_test_posts'][ $sysmda_dl_post->ID ] = $sysmda_dl_post;
+
+$sysmda_shortcodes = new Shortcodes();
+
+check(
+	'download shortcode: default markup',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Download MD</a>',
+	$sysmda_shortcodes->render_download( array( 'id' => $sysmda_dl_post->ID ) )
+);
+
+check(
+	'download shortcode: custom text',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Save it</a>',
+	$sysmda_shortcodes->render_download(
+		array(
+			'id'   => $sysmda_dl_post->ID,
+			'text' => 'Save it',
+		)
+	)
+);
+
+// A blank text= falls back to the default rather than producing an empty link.
+check(
+	'download shortcode: blank text falls back to the default',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Download MD</a>',
+	$sysmda_shortcodes->render_download(
+		array(
+			'id'   => $sysmda_dl_post->ID,
+			'text' => '   ',
+		)
+	)
+);
+
+// The label is user input: it must not be able to inject markup.
+check(
+	'download shortcode: text is escaped',
+	true,
+	false !== strpos(
+		$sysmda_shortcodes->render_download(
+			array(
+				'id'   => $sysmda_dl_post->ID,
+				'text' => '<script>alert(1)</script>',
+			)
+		),
+		'&lt;script&gt;'
+	)
+);
+
+// Same contract as [sysmda_md_url]: never link to something that would 404.
+$GLOBALS['sysmda_test_posts'][901] = $sysmda_mk_post(
+	array(
+		'ID'          => 901,
+		'post_status' => 'draft',
+		'post_name'   => 'hidden',
+		'permalink'   => 'https://example.com/hidden/',
+	)
+);
+check( 'download shortcode: not servable → empty', '', $sysmda_shortcodes->render_download( array( 'id' => 901 ) ) );
+check( 'download shortcode: unknown ID → empty', '', $sysmda_shortcodes->render_download( array( 'id' => 999999 ) ) );
+
+// The markup stays a bare anchor: one class, no inline style, no data-* hooks,
+// nothing a stylesheet or a script would need. The front-end button removed in
+// 0.34.0 began at exactly this size, so the shape is asserted, not assumed.
+$sysmda_dl_markup = $sysmda_shortcodes->render_download( array( 'id' => $sysmda_dl_post->ID ) );
+check( 'download shortcode: no inline style', false, strpos( $sysmda_dl_markup, 'style=' ) );
+check( 'download shortcode: no data attributes', false, strpos( $sysmda_dl_markup, 'data-' ) );
+check( 'download shortcode: exactly one class attribute', 1, substr_count( $sysmda_dl_markup, 'class=' ) );
+check( 'download shortcode: single class value', 1, preg_match( '/class="sysmda-md-download"/', $sysmda_dl_markup ) );
+
+unset( $GLOBALS['sysmda_test_posts'][901], $GLOBALS['sysmda_test_posts'][ $sysmda_dl_post->ID ] );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
 unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
 
