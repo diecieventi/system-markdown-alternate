@@ -230,11 +230,10 @@ Removed from the body unless the corresponding filter changes them:
 
 Removed **unconditionally**, whatever the filters and the panel say:
 
-- **`[sysmda_md_button]`**, the plugin's own front-end button. It renders a UI
-  control — clipboard buttons and links — which has no meaning in a
-  machine-readable document. This is part of the contract: the `.md` of a post
-  containing the shortcode never carries a trace of it, and that holds on sites
-  that have replaced the excluded-shortcodes list from the settings page.
+- **`[sysmda_md_button]`**, the front-end button removed in 0.34.0. The tag is
+  still stripped so one left behind in old content does not surface as literal
+  text, and that holds on sites that have replaced the excluded-shortcodes list
+  from the settings page.
 
 ### Unknown HTML tags are not a stable surface
 

@@ -28,7 +28,6 @@ content consumable by tools that prefer Markdown over rendered HTML.
 - **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals — no IPs, no user-agent strings, no per-visitor data, no cookies, no external calls.
 - **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
 - **Shortcode** `[sysmda_md_url]` to print the `.md` URL anywhere.
-- **Optional Markdown button** for human readers: a small dropdown that copies the `.md` link, opens it in a new tab, downloads the file, or copies the Markdown itself to the clipboard, ready to paste into an AI assistant. Placed with `[sysmda_md_button]`, wherever you want it. Neutral styling driven by CSS custom properties, and it degrades to plain working links without JavaScript.
 - **Optional integrations**, shown only when the related plugin is active:
   - **Advanced Custom Fields**: subtitle and TL;DR (from ACF fields) as a preamble between the H1 and the body.
   - **GenerateBlocks 2.x**: auto-registered `{{sysmda_md_url}}` Dynamic Tag, usable in element fields (e.g. a Button URL).
@@ -53,54 +52,6 @@ ways:
 
 The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
-
-To point *readers* at the Markdown, add the button: place `[sysmda_md_button]`
-wherever you want it — in the post, a template or a widget — optionally with
-`id="123"` to target a specific post. It only ever renders on content that
-actually has a `.md`, and it is stripped from the Markdown itself.
-
-Its look is controlled with CSS custom properties, so no selector fights:
-
-```css
-/* Appearance → Customize → Additional CSS, or your child theme */
-.sysmda-md-button {
-  --sysmda-btn-fg: inherit;                     /* text                */
-  --sysmda-btn-bg: transparent;                 /* background          */
-  --sysmda-btn-hover-fg: inherit;               /* text on hover/focus */
-  --sysmda-btn-hover-bg: transparent;           /* bg on hover/focus   */
-  --sysmda-btn-border: 1px solid currentColor;  /* border              */
-  --sysmda-btn-radius: 0.375em;                 /* corner radius       */
-  --sysmda-btn-padding: 0.45em 0.85em;          /* padding             */
-  --sysmda-btn-font-size: 0.9em;                /* font size           */
-
-  /* Dropdown — omit any of these to reuse the button's value */
-  --sysmda-btn-menu-fg: inherit;                /* entry text          */
-  --sysmda-btn-menu-bg: #fff;                   /* dropdown backdrop   */
-  --sysmda-btn-menu-hover-fg: inherit;          /* entry on hover      */
-  --sysmda-btn-menu-hover-bg: transparent;      /* entry bg on hover   */
-}
-```
-
-Padding and font size are shared with the dropdown entries, so one value moves
-the button and its menu together, and focus reuses the hover colours so there is
-no third state to style. The entry text colour falls back to the button's, so a
-plain dark button already gives a readable menu; the dropdown's backdrop and its
-hover background stand on their own, because a colour chosen against the page
-background is not safe to reuse on top of the menu.
-
-The plugin **never declares these properties itself**; it only reads them, with
-the defaults baked in as `var()` fallbacks. So your rule always wins, from the
-Customizer or a child theme alike, regardless of which stylesheet the browser
-loads last. The same list is shown as a copy-ready snippet under **Settings →
-Markdown Alternate → Markdown button**.
-
-Not everything gets a Markdown version: drafts, private and password-protected
-content, media attachments, and posts with a **non-standard post format** (aside,
-status, quote, link, gallery, image, video, audio, chat) are excluded — the last
-of these is filterable through `sysmda_markdown_excluded_post_formats`. Markdown
-is also never served at URL *variants* of a post (its feed, oEmbed view,
-trackback endpoint, paged comments or `<!--nextpage-->` sub-pages), only at the
-canonical permalink and its `.md` URL.
 
 ## Extending via filters
 
@@ -132,16 +83,6 @@ add_filter( 'sysmda_front_matter_enabled', '__return_false' );
 // first reader after an edit does not pay for the conversion.
 add_filter( 'sysmda_markdown_prewarm', '__return_true' );
 
-// Style the Markdown button yourself: skip the plugin stylesheet entirely.
-add_filter( 'sysmda_md_button_enqueue_style', '__return_false' );
-
-// Or keep it and restyle through the custom properties, no stylesheet needed:
-//   .sysmda-md-button { --sysmda-btn-bg: #111; --sysmda-btn-fg: #fff; }
-
-// Offer only the two entries that need no clipboard access.
-add_filter( 'sysmda_md_button_items', function () {
-    return array( 'view', 'download' );
-} );
 ```
 
 The full public contract (every filter with its default value) is documented in

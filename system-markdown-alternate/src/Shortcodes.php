@@ -48,9 +48,11 @@ class Shortcodes {
 	 * same URL. get_post() follows the global `$post`, which is what the
 	 * surrounding loop sets, and falls back to the main post outside any loop.
 	 *
-	 * Static and public because MarkdownButton resolves its post the same way:
-	 * the loop-before-queried-object reasoning above is subtle enough that a
-	 * second copy would drift.
+	 * Static because it depends on no instance state. It was made public in
+	 * 0.31.0 so the Markdown button could resolve its post identically; that
+	 * button is gone as of 0.34.0, but the signature is kept — the
+	 * loop-before-queried-object reasoning above is subtle enough to be worth
+	 * sharing rather than copying, and narrowing it again would buy nothing.
 	 */
 	public static function resolve_post( int $id ): ?\WP_Post {
 		if ( $id > 0 ) {

@@ -9,6 +9,29 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.34.0
+
+* **Removed the Markdown button**, three versions after it shipped. It was the
+  wrong answer to a real problem. Reported from a live site: the dropdown broke
+  the layout on mobile, and it put a stylesheet and a script on the front end for
+  a control most readers never use. Each round of feedback had already bought
+  another round of CSS — auto-insert removed in 0.32.0, the cascade fixed so
+  overrides worked at all, then twelve custom properties and a specificity fight
+  with the theme in 0.33.0. A plugin whose value is a clean machine-readable
+  representation should not be shipping a presentational widget it cannot test
+  against an unknown theme.
+* `MarkdownButton.php`, `assets/md-button.css`, `assets/md-button.js`, the
+  **Markdown button** panel tab, the five `sysmda_md_button_*` filters and both
+  saved options are gone. The options remain in `uninstall.php` as legacy keys so
+  they are still cleaned up.
+* **No output change**: the `.md` is byte-for-byte what it was, and discovery is
+  unaffected — `rel="alternate"`, `/llms.txt`, content negotiation and
+  `[sysmda_md_url]` all behave exactly as before.
+* `ShortcodeCleaner::ALWAYS_EXCLUDED` deliberately keeps stripping
+  `[sysmda_md_button]`. The shortcode is no longer registered, so one left in old
+  post content would otherwise survive into the Markdown as the literal text
+  `[sysmda_md_button]`.
+
 ## 0.33.0
 
 * **The dropdown can now be coloured separately from the button**, and hover and
