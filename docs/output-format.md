@@ -317,6 +317,15 @@ Two request paths reach the same Markdown:
 strong validator, unlike the `.md` one, because the index already exists in full
 before the response is written.
 
+**No `Content-Disposition`, ever** (decided `0.35.0`). The `.md` has exactly one
+representation and one behaviour, and the response carries no header — and reads
+no request argument — that changes how a client stores it. Saving the file is a
+client-side concern: `[sysmda_md_download]` renders a same-origin link with the
+HTML `download` attribute, which is all a browser needs. A `?download=1`
+argument was built and removed before release: it added a permanent public input
+to validate on every request, and it only covered the case of opening the URL by
+hand, where the browser decides anyway.
+
 ## Related
 
 - `AGENTS.md` → *Current state*, *Product decisions*, *Filters (public

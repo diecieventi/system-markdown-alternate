@@ -124,6 +124,30 @@ class MetadataBuilder {
 	}
 
 	/**
+	 * File name offered by the `download` attribute of [sysmda_md_download].
+	 *
+	 * ASCII-only on purpose. The slug is percent-decoded first (WordPress stores
+	 * non-Latin slugs encoded, so skipping this yields names like
+	 * `d0bfd180d0b8`), transliterated by remove_accents(), then reduced to the
+	 * safe set. Falls back to the post ID when nothing survives: a fully
+	 * non-Latin slug, or a post saved without one.
+	 *
+	 * The strict character set is not only about tidy file names — it is what
+	 * makes the value safe to interpolate into markup and, should this ever be
+	 * reused in a header, into a quoted header value.
+	 */
+	public static function download_filename( \WP_Post $post ): string {
+		$slug = sanitize_file_name( remove_accents( rawurldecode( (string) $post->post_name ) ) );
+		$slug = (string) preg_replace( '/[^A-Za-z0-9._-]/', '', $slug );
+
+		if ( '' === $slug ) {
+			$slug = 'post-' . (int) $post->ID;
+		}
+
+		return $slug . '.md';
+	}
+
+	/**
 	 * Adds featured_image (and alt text) when available.
 	 *
 	 * @param string[] $lines Reference to the array of front matter lines.

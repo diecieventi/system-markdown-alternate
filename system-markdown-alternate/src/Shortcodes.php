@@ -8,20 +8,24 @@ namespace Diecieventi\SystemMarkdownAlternate;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * [sysmda_md_url] shortcode: returns the URL of the post's Markdown version.
+ * The plugin's shortcodes, both resolving their post the same way.
  *
- * The URL is calculated from the permalink at runtime (no data stored in the database).
+ *   [sysmda_md_url]       → the URL of the post's Markdown version, as bare text
+ *   [sysmda_md_download]  → an anchor that downloads it instead of opening it
  *
- *   [sysmda_md_url]           → .md URL of the current post
- *   [sysmda_md_url id="123"]  → .md URL of a specific post
+ * Each keeps a single return type: [sysmda_md_url] is always a URL, so it stays
+ * safe inside an `href`, and [sysmda_md_download] is always markup.
  *
- * Returns an empty string when the post is not servable (unsupported type,
- * unpublished, or password-protected), avoiding links to a 404 response.
+ * URLs are calculated from the permalink at runtime (nothing stored in the
+ * database). Both return an empty string when the post is not servable —
+ * unsupported type, unpublished, password-protected, or a non-standard post
+ * format — so neither can print a link to a 404.
  */
 class Shortcodes {
 
 	public function register(): void {
 		add_shortcode( 'sysmda_md_url', array( $this, 'render_url' ) );
+		add_shortcode( 'sysmda_md_download', array( $this, 'render_download' ) );
 	}
 
 	/**
@@ -37,6 +41,61 @@ class Shortcodes {
 		}
 
 		return esc_url( MetadataBuilder::markdown_url( $post ) );
+	}
+
+	/**
+	 * Renders a link that downloads the Markdown instead of opening it.
+	 *
+	 *   [sysmda_md_download]                 → link with the default label
+	 *   [sysmda_md_download text="Save it"]  → custom label
+	 *   [sysmda_md_download id="123"]        → a specific post
+	 *
+	 * The download is the HTML `download` attribute and nothing else: the URL is
+	 * same-origin, which is the condition browsers require for it to apply, so no
+	 * server-side `Content-Disposition` is needed to make a click save the file.
+	 * Same empty return as [sysmda_md_url] when the post is not servable, so a
+	 * link to a 404 is never printed.
+	 *
+	 * A separate shortcode rather than attributes on [sysmda_md_url]: that one
+	 * always returns a bare URL, and making its return type depend on an
+	 * attribute would break the common `<a href="[sysmda_md_url]">` usage the day
+	 * someone passed a label.
+	 *
+	 * The markup is a bare anchor carrying ONE class and nothing else — no
+	 * inline styles, no stylesheet, no script. `.sysmda-md-download` exists purely
+	 * so a theme can style it; the plugin never ships CSS for it. Keep it that
+	 * way: the front-end button removed in 0.34.0 started out this small.
+	 *
+	 * @param array<string,mixed>|string $atts Shortcode attributes.
+	 */
+	public function render_download( $atts ): string {
+		$atts = shortcode_atts(
+			array(
+				'id'   => 0,
+				'text' => '',
+			),
+			$atts,
+			'sysmda_md_download'
+		);
+
+		$post = self::resolve_post( (int) $atts['id'] );
+
+		if ( ! $post instanceof \WP_Post || ! PostSupport::is_servable( $post ) ) {
+			return '';
+		}
+
+		$text = trim( (string) $atts['text'] );
+
+		if ( '' === $text ) {
+			$text = __( 'Download MD', 'system-markdown-alternate' );
+		}
+
+		return sprintf(
+			'<a class="sysmda-md-download" href="%s" download="%s">%s</a>',
+			esc_url( MetadataBuilder::markdown_url( $post ) ),
+			esc_attr( MetadataBuilder::download_filename( $post ) ),
+			esc_html( $text )
+		);
 	}
 
 	/**
