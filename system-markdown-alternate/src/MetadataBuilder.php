@@ -124,31 +124,17 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * URL that serves the Markdown as a file download.
+	 * File name offered by the `download` attribute of [sysmda_md_download].
 	 *
-	 * The same representation as markdown_url(), plus the `download` argument the
-	 * controller answers with `Content-Disposition: attachment`. Deliberately a
-	 * separate URL rather than a header on the plain `.md`: the body is identical
-	 * and the difference is only in how a client stores it, so it belongs in the
-	 * URL — which keeps it out of `Vary` and gives caches a distinct key for free,
-	 * while the `.md` that agents and crawlers read inline stays untouched.
-	 */
-	public static function markdown_download_url( \WP_Post $post ): string {
-		return add_query_arg( 'download', '1', self::markdown_url( $post ) );
-	}
-
-	/**
-	 * File name offered for the download, derived from the post slug.
+	 * ASCII-only on purpose. The slug is percent-decoded first (WordPress stores
+	 * non-Latin slugs encoded, so skipping this yields names like
+	 * `d0bfd180d0b8`), transliterated by remove_accents(), then reduced to the
+	 * safe set. Falls back to the post ID when nothing survives: a fully
+	 * non-Latin slug, or a post saved without one.
 	 *
-	 * ASCII-only on purpose: the value is used both in an HTML `download`
-	 * attribute and in a `Content-Disposition` header, and the header form can
-	 * only carry anything else through the separate `filename*` extension of
-	 * RFC 6266. The slug is percent-decoded first (WordPress stores non-Latin
-	 * slugs encoded, so skipping this yields names like `d0bfd180d0b8`),
-	 * transliterated by remove_accents(), then reduced to the safe set — which
-	 * also removes the quotes, backslashes and control characters that would
-	 * otherwise break the header. Falls back to the post ID when nothing
-	 * survives: a fully non-Latin slug, or a post saved without one.
+	 * The strict character set is not only about tidy file names — it is what
+	 * makes the value safe to interpolate into markup and, should this ever be
+	 * reused in a header, into a quoted header value.
 	 */
 	public static function download_filename( \WP_Post $post ): string {
 		$slug = sanitize_file_name( remove_accents( rawurldecode( (string) $post->post_name ) ) );

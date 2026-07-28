@@ -50,11 +50,11 @@ class Shortcodes {
 	 *   [sysmda_md_download text="Save it"]  → custom label
 	 *   [sysmda_md_download id="123"]        → a specific post
 	 *
-	 * Two belts, either of which works alone: the HTML `download` attribute
-	 * covers a click in a browser, and the `?download=1` URL makes the server
-	 * answer with `Content-Disposition: attachment`, which also covers clients
-	 * that never parse the markup. Same empty return as [sysmda_md_url] when the
-	 * post is not servable, so a link to a 404 is never printed.
+	 * The download is the HTML `download` attribute and nothing else: the URL is
+	 * same-origin, which is the condition browsers require for it to apply, so no
+	 * server-side `Content-Disposition` is needed to make a click save the file.
+	 * Same empty return as [sysmda_md_url] when the post is not servable, so a
+	 * link to a 404 is never printed.
 	 *
 	 * A separate shortcode rather than attributes on [sysmda_md_url]: that one
 	 * always returns a bare URL, and making its return type depend on an
@@ -92,7 +92,7 @@ class Shortcodes {
 
 		return sprintf(
 			'<a class="sysmda-md-download" href="%s" download="%s">%s</a>',
-			esc_url( MetadataBuilder::markdown_download_url( $post ) ),
+			esc_url( MetadataBuilder::markdown_url( $post ) ),
 			esc_attr( MetadataBuilder::download_filename( $post ) ),
 			esc_html( $text )
 		);

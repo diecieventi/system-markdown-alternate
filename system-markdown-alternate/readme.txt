@@ -200,18 +200,11 @@ Use the `[sysmda_md_download]` shortcode. It prints a link that saves the file:
 `[sysmda_md_download text="Save the Markdown"]`
 `[sysmda_md_download id="123"]`
 
-It works on two levels, and either one is enough on its own: the link carries
-the HTML `download` attribute, which covers a click in a browser, and it points
-at a URL ending in `?download=1`, which makes the server answer with
-`Content-Disposition: attachment` — so the file is saved even by clients that
-never look at the markup. You can use that URL directly if you prefer, on either
-request path:
-
-`https://example.com/my-post.md?download=1`
-`https://example.com/my-post/?format=markdown&download=1`
-
-The response body is exactly the same as without the argument; only the way the
-client handles it changes. The file name comes from the post slug.
+The link carries the HTML `download` attribute, which is what tells the browser
+to save the file instead of displaying it. The file name comes from the post
+slug. Nothing changes on the server side: the `.md` URL itself behaves exactly
+as it always has, so opening it directly still shows whatever your browser
+normally does with a Markdown file.
 
 The shortcode outputs a plain link with a single `sysmda-md-download` class, and
 the plugin loads **no CSS and no JavaScript** on your site for it. If you want it
@@ -360,15 +353,10 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
   (default "Download MD") and `id=""` for another post, exactly like
   `[sysmda_md_url]`. Like that one, it outputs nothing when the post has no
   Markdown version, so it can never link to a 404.
-* **New `?download=1` argument** on both request paths (`/my-post.md?download=1`
-  and `?format=markdown&download=1`): the response adds
-  `Content-Disposition: attachment` with a file name derived from the post slug.
-  The body is byte-for-byte identical to the same URL without the argument — only
-  the way the client handles it changes — so caches and `ETag`s are unaffected,
-  and the plain `.md` that agents read inline is untouched.
-  The two work independently: the shortcode's link carries the HTML `download`
-  attribute *and* points at that URL, so a browser click and a plain HTTP client
-  both save a file, and either mechanism is enough on its own.
+* **Nothing changes on the server side.** The download is the standard HTML
+  `download` attribute, which works because the link is on your own domain. The
+  `.md` URL itself is untouched: same headers, same body, same behaviour for the
+  agents and crawlers that read it inline.
 * **No CSS and no JavaScript are added to your site.** The shortcode outputs a
   plain link with a single `sysmda-md-download` class, there for your theme to
   style if you want it to look like a button. This is deliberate, and it is the

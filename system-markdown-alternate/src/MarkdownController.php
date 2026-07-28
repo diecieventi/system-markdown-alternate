@@ -356,29 +356,6 @@ class MarkdownController {
 	}
 
 	/**
-	 * Whether the request asked for the Markdown as a file download (`?download=1`).
-	 *
-	 * A query argument rather than an Accept extension, because it does not select
-	 * a representation: the body is byte-identical either way and only its
-	 * disposition changes. Living in the URL keeps it out of `Vary` and gives
-	 * caches a distinct key with no extra work. An empty value or `0` reads as
-	 * "no", so `?download=0` serves the ordinary inline response.
-	 *
-	 * Applies to both routes: the `.md` suffix ignores the query string when
-	 * resolving the post, and `?format=markdown&download=1` negotiates as usual.
-	 */
-	private static function download_requested(): bool {
-		if ( ! isset( $_GET['download'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification -- Public read-only endpoint, no state change.
-			return false;
-		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput -- Compared against a literal below; never echoed or stored.
-		$value = trim( (string) wp_unslash( $_GET['download'] ) );
-
-		return '' !== $value && '0' !== $value;
-	}
-
-	/**
 	 * Whether the client's Accept header rejects EVERY offered representation
 	 * (neither HTML nor Markdown, and no wildcard), making it a candidate for
 	 * `406 Not Acceptable`.
@@ -976,13 +953,6 @@ class MarkdownController {
 
 		status_header( 200 );
 		header( 'Content-Type: text/markdown; charset=utf-8' );
-
-		// Only on the 200: a 304 carries validators, not representation metadata,
-		// and the client already holds the body this would have named.
-		if ( self::download_requested() ) {
-			header( 'Content-Disposition: attachment; filename="' . MetadataBuilder::download_filename( $post ) . '"' );
-		}
-
 		header( 'ETag: ' . self::etag( $version ) );
 
 		$modified_ts = $this->last_modified_timestamp( $post );

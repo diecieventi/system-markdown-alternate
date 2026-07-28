@@ -164,7 +164,7 @@ function remove_accents( $text ) {
 
 /**
  * Stub: core's file-name sanitizer, reduced to the characters that matter here —
- * the ones that would break a Content-Disposition header if they survived.
+ * the ones that must not survive into the `download` attribute.
  */
 function sanitize_file_name( $name ) {
 	$name = str_replace( array( '?', '[', ']', '/', '\\', '=', '<', '>', ':', ';', ',', "'", '"', '&', '$', '#', '*', '(', ')', '|', '~', '`', '!', '{', '}', '%', '+', chr( 0 ) ), '', $name );
@@ -641,18 +641,8 @@ check( 'url: query string → format=markdown', 'https://example.com/?page_id=2&
 $p = new WP_Post( array( 'permalink' => 'https://example.com/' ) );
 check( 'url: homepage → format=markdown', 'https://example.com/?format=markdown', MetadataBuilder::markdown_url( $p ) );
 
-// ─── MetadataBuilder::markdown_download_url / download_filename ──────────────
+// ─── MetadataBuilder::download_filename ──────────────────────────────────────
 
-$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
-
-$p = new WP_Post( array( 'permalink' => 'https://example.com/my-post/' ) );
-check( 'download url: appended to the .md', 'https://example.com/my-post.md?download=1', MetadataBuilder::markdown_download_url( $p ) );
-
-// Plain permalinks have no .md suffix to hang the argument on: it joins the
-// negotiated URL instead, which is what markdown_url() already falls back to.
-$GLOBALS['sysmda_test_options']['permalink_structure'] = '';
-$p = new WP_Post( array( 'permalink' => 'https://example.com/?p=123' ) );
-check( 'download url: plain permalink keeps format=markdown', 'https://example.com/?p=123&format=markdown&download=1', MetadataBuilder::markdown_download_url( $p ) );
 $GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
 
 check( 'filename: from the slug', 'my-post.md', MetadataBuilder::download_filename( new WP_Post( array( 'post_name' => 'my-post' ) ) ) );
@@ -677,11 +667,11 @@ check(
 
 check( 'filename: empty slug → ID fallback', 'post-7.md', MetadataBuilder::download_filename( new WP_Post( array( 'ID' => 7 ) ) ) );
 
-// The value lands inside a quoted Content-Disposition header, so what matters is
-// the invariant, not the exact spelling: whatever a hostile slug contains, the
-// result stays within the safe set and cannot close the quoted string early or
-// inject a second header line. Asserted as a property so the test exercises
-// download_filename()'s own filter rather than the sanitize_file_name() stub.
+// What matters is the invariant, not the exact spelling: whatever a hostile slug
+// contains, the result stays within the safe set, so it cannot break out of the
+// attribute it is interpolated into. Asserted as a property so the test
+// exercises download_filename()'s own filter rather than the
+// sanitize_file_name() stub.
 foreach (
 	array(
 		'quote'     => 'evil"; rm -rf /".md',
@@ -1922,13 +1912,13 @@ $sysmda_shortcodes = new Shortcodes();
 
 check(
 	'download shortcode: default markup',
-	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Download MD</a>',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md" download="my-post.md">Download MD</a>',
 	$sysmda_shortcodes->render_download( array( 'id' => $sysmda_dl_post->ID ) )
 );
 
 check(
 	'download shortcode: custom text',
-	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Save it</a>',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md" download="my-post.md">Save it</a>',
 	$sysmda_shortcodes->render_download(
 		array(
 			'id'   => $sysmda_dl_post->ID,
@@ -1940,7 +1930,7 @@ check(
 // A blank text= falls back to the default rather than producing an empty link.
 check(
 	'download shortcode: blank text falls back to the default',
-	'<a class="sysmda-md-download" href="https://example.com/my-post.md?download=1" download="my-post.md">Download MD</a>',
+	'<a class="sysmda-md-download" href="https://example.com/my-post.md" download="my-post.md">Download MD</a>',
 	$sysmda_shortcodes->render_download(
 		array(
 			'id'   => $sysmda_dl_post->ID,

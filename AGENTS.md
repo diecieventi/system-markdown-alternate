@@ -276,14 +276,13 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Shortcodes**: `[sysmda_md_url]` (+ `id="123"`), always a bare URL; and
   `[sysmda_md_download]` (+ `id`, `text`), always markup — an anchor that saves
   the file instead of opening it. See the decision below for why they are two.
-- **`?download=1`** on either request path (`.md` suffix or `?format=markdown`)
-  adds `Content-Disposition: attachment; filename="<slug>.md"` to the `200`.
-  The body is byte-identical to the same URL without it, so the `ETag` is
-  unchanged and the inline `.md` is untouched; the header is not sent on a
-  `304`. File name via `MetadataBuilder::download_filename()`: percent-decoded,
-  transliterated, reduced to `[A-Za-z0-9._-]`, `post-<ID>.md` as fallback — it
-  lands inside a quoted header value, so the charset is the safety property
-  (tested as such, not as a fixed string).
+  The download is purely client-side: the link is same-origin and carries the
+  HTML `download` attribute, which is all a browser needs. The response sends no
+  `Content-Disposition` and the plugin reads no `download` argument — see the
+  decision below. File name via `MetadataBuilder::download_filename()`:
+  percent-decoded, transliterated, reduced to `[A-Za-z0-9._-]`, `post-<ID>.md`
+  as fallback; the charset is the safety property, tested as such rather than as
+  a fixed string.
 - **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
 - `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
@@ -694,11 +693,11 @@ The v1 scope is done and widely exceeded. Implemented:
   are gone; the options stay in `uninstall.php` as legacy keys, and
   `ShortcodeCleaner::ALWAYS_EXCLUDED` keeps stripping `[sysmda_md_button]` so a
   tag left in old content does not surface as literal text in the `.md`.
-- **Downloading the `.md` is two independent mechanisms, and the link stays a
-  bare anchor** (decided July 2026, `0.35.0` — read together with the button
-  decision above, which it deliberately does not reopen): `[sysmda_md_download]`
-  renders `<a class="sysmda-md-download" href="…?download=1" download="slug.md">`
-  and nothing else. Three parts, each load-bearing:
+- **Downloading the `.md` is client-side only, and the link stays a bare
+  anchor** (decided July 2026, `0.35.0` — read together with the button decision
+  above, which it deliberately does not reopen): `[sysmda_md_download]` renders
+  `<a class="sysmda-md-download" href="…/post.md" download="post.md">` and
+  nothing else. Three parts, each load-bearing:
   - **A second shortcode, not attributes on `[sysmda_md_url]`.** That one always
     returns a bare URL, which is exactly what makes `<a href="[sysmda_md_url]">`
     safe in a template. A `text=` attribute would make its return type depend on
@@ -706,14 +705,30 @@ The v1 scope is done and widely exceeded. Implemented:
     usage the first time someone passed a label. Two shortcodes, two return
     types, no conditionals. `resolve_post()` is shared (it was already `public
     static` from the button era; this is its second real caller).
-  - **Server-side `Content-Disposition` as well as the HTML attribute**, because
-    they cover different clients: the attribute only works for a click on
-    rendered markup, and the header only when the request actually reaches PHP.
-    Either alone is a partial answer; together neither is load-bearing. The
-    header hangs off `?download=1` rather than a media type because it selects
-    no representation — the body is byte-identical, so it must not enter `Vary`,
-    and the URL split gives caches a distinct key for nothing. It is sent on the
-    `200` only.
+  - **NO `Content-Disposition`, and no request argument to trigger one**
+    (decided before release, do not propose it again without a concrete case).
+    A `?download=1` argument was implemented and removed within the same PR. Two
+    reasons, in this order:
+    - **What it cost was permanent.** Every argument read from the request is a
+      public input to validate forever. Codex caught the first instance
+      immediately: `?download[]=1` makes `$_GET` an array, `(string) $array`
+      raises a warning, and because the check ran inside `send_headers()` after
+      `status_header()`, a site with `display_errors` on would flush the
+      headers sent so far and lose `ETag`, `Last-Modified` and `X-Robots-Tag`
+      to "headers already sent" — from an anonymous request. The guard was a
+      one-liner; the class of problem was not, and it renews itself with each
+      new input.
+    - **What it bought was nearly nothing.** The `download` attribute is
+      reliable because the URL is same-origin, so a click already saves the
+      file. The header only added the case of pasting the URL into a tab by
+      hand — where, without the argument, the browser decides as it always has.
+      Not a regression: a case that was never in scope.
+    Corollary: the `.md` keeps exactly one representation and one behaviour, and
+    the response carries no header that varies by how a client intends to store
+    it. `MetadataBuilder::download_filename()` stays, because the HTML attribute
+    needs a name; its strict `[A-Za-z0-9._-]` charset stays too, tested as a
+    property rather than a fixed string, so reusing it in a header some day is
+    safe by construction.
   - **One class, no CSS, no JS, and it stays that way.** `.sysmda-md-download`
     exists so a theme can style it; the plugin ships no stylesheet for it and
     never will. This is the same rule that removed the button, applied before
@@ -1210,13 +1225,12 @@ Test posts:
     tag appears nowhere in the `.md`, not even as literal text, including with
     the panel's "Excluded shortcodes" textarea filled in with a custom list.
 
-12. `[sysmda_md_download]` on a servable post → a link that **saves** the file;
-    `curl -sI '<permalink>.md?download=1'` shows
-    `Content-Disposition: attachment` with the slug as the file name, while the
-    same URL without the argument does not. Bodies identical
-    (`diff <(curl -s …md) <(curl -s …md?download=1)` → empty), and `?download=0`
-    behaves like no argument. On a non-servable post the shortcode outputs
-    nothing at all.
+12. `[sysmda_md_download]` on a servable post → clicking the link **saves** the
+    file instead of opening it, with the slug as its name. On a non-servable
+    post the shortcode outputs nothing at all. `curl -sI '<permalink>.md'` must
+    show **no** `Content-Disposition` (the download is client-side only), and
+    the response headers must be identical with and without a `?download=1`
+    that the plugin now ignores entirely.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
