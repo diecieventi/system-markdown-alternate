@@ -9,6 +9,14 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.35.2
+
+* Removed the CSS snippet the `[sysmda_md_download]` FAQ offered as an example of
+  styling the link as a button. The plugin ships no stylesheet for that link and
+  never will, so it has no business suggesting one either: the readme states that
+  the link carries a single `sysmda-md-download` class and that styling is the
+  theme's job, and stops there.
+
 ## 0.35.1
 
 * **Fixed: the settings panel never mentioned `[sysmda_md_download]`.** The

@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.35.1
+Stable tag: 0.35.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -207,10 +207,8 @@ as it always has, so opening it directly still shows whatever your browser
 normally does with a Markdown file.
 
 The shortcode outputs a plain link with a single `sysmda-md-download` class, and
-the plugin loads **no CSS and no JavaScript** on your site for it. If you want it
-to look like a button, style that class in your theme:
-
-`.sysmda-md-download { display: inline-block; padding: .5em 1em; }`
+the plugin loads **no CSS and no JavaScript** on your site for it. Any styling is
+your theme's job.
 
 Like `[sysmda_md_url]`, it outputs nothing when the post has no Markdown version,
 so it can never produce a link to a 404.
@@ -346,6 +344,14 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.35.2 =
+
+* Removed the CSS snippet the `[sysmda_md_download]` FAQ offered as an example of
+  styling the link as a button. The plugin ships no stylesheet for that link and
+  never will, so it has no business suggesting one either: the readme states that
+  the link carries a single `sysmda-md-download` class and that styling is the
+  theme's job, and stops there.
+
 = 0.35.1 =
 
 * **Fixed: the settings panel never mentioned `[sysmda_md_download]`.** The
@@ -369,25 +375,9 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
   `.md` URL itself is untouched: same headers, same body, same behaviour for the
   agents and crawlers that read it inline.
 * **No CSS and no JavaScript are added to your site.** The shortcode outputs a
-  plain link with a single `sysmda-md-download` class, there for your theme to
-  style if you want it to look like a button. This is deliberate, and it is the
-  same rule that removed the front-end button in 0.34.0.
-
-= 0.34.0 =
-
-* **Removed the Markdown button.** It shipped in 0.31.0 and was reshaped twice
-  after that; testing it on a real site settled it. The dropdown broke the layout
-  on mobile, and it put a stylesheet and a script on the front end for a control
-  most readers never use. A plugin whose job is a clean machine-readable copy of
-  your content should not be shipping a presentational widget it cannot test
-  against your theme.
-* Nothing else changes. The Markdown version stays discoverable exactly as
-  before — the `rel="alternate"` link, `/llms.txt`, content negotiation and the
-  `[sysmda_md_url]` shortcode — and the `.md` output is byte-for-byte identical.
-* If you had `[sysmda_md_button]` in a post, remove it: the shortcode no longer
-  renders anything. It is still stripped from the Markdown, so a forgotten one
-  never shows up as stray text in your `.md`. Its two saved settings are removed
-  on uninstall.
+  plain link with a single `sysmda-md-download` class; any styling is your
+  theme's job. This is deliberate, and it is the same rule that removed the
+  front-end button in 0.34.0.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
