@@ -337,10 +337,11 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Screenshots ==
 
-1. Settings — General and Markdown output: choose which content types expose a `.md`, set the cache TTL, and define the shortcode/block exclusions.
-2. Settings — exclusion defaults (blocks and CSS classes) and the ACF availability notice, above the `/llms.txt` section.
-3. Settings — the `/llms.txt` controls: enable the endpoint and, optionally, the enriched output (site summary and curated key content).
-4. Settings — Integrations and Advanced: the `[sysmda_md_url]` shortcode, ACF/GenerateBlocks detection, and the `X-Robots-Tag` header.
+1. Settings — General: pick the content types that expose a `.md` (nothing is served until at least one is ticked) and set the cache TTL. The sidebar reports the `/llms.txt` status at a glance.
+2. Settings — Markdown output: what stays out of the `.md`. Excluded shortcodes, blocks and CSS classes (leave empty for the built-in defaults), plus the custom taxonomies added to the front matter and the ACF fields.
+3. Settings — llms.txt: enable the endpoint, the enriched output and the last modified date on each entry, then add the site summary and the curated key content.
+4. Settings — Integrations: the `[sysmda_md_url]` and `[sysmda_md_download]` shortcodes, with the GenerateBlocks and ACF detection status.
+5. Settings — Advanced: the `X-Robots-Tag` header, the opt-in LiteSpeed cache bypass rules and the `.md` hit counter, split bot vs human.
 
 == Changelog ==
 

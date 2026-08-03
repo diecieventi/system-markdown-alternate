@@ -49,7 +49,9 @@ variants are in `docs/f3-2-taxonomy-selection-plan.md`.
    **real, recurring `.md` requests from important clients in the logs**. Do not
    promote any of it to a plan without that.
 4. Housekeeping tracked in `AGENTS.md` *Open / to do*: the wordpress.org
-   screenshots are stale (pre-0.17.0 UI), and Italian translation happens on
+   screenshot files are missing (the stale pre-0.17.0 ones were deleted, the
+   captions now describe five new shots that still have to be saved into
+   `.wordpress-org/`), and Italian translation happens on
    translate.wordpress.org once the plugin is live — never in this repo.
 
 ## The five durable constraints not to trip over

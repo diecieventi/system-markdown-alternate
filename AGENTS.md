@@ -316,10 +316,16 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in the "Filters (public contract)" list + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **`.wordpress-org/screenshot-*.jpg` are stale**: they show the pre-0.17.0 admin
-  UI (before the tabs/cards restyle). Recapture them and update the
-  `== Screenshots ==` captions in `readme.txt` whenever convenient (no version
-  bump needed: they live in the SVN `/assets` folder, independent of `/trunk`).
+- **`.wordpress-org/` is missing its screenshot files**: the four stale
+  `screenshot-*.jpg` (pre-0.17.0 UI, before the tabs/cards restyle) were deleted
+  and the `== Screenshots ==` captions in `readme.txt` were rewritten for a new
+  set of **five**, one per settings tab in panel order (General, Markdown output,
+  `/llms.txt`, Integrations, Advanced). The images themselves still have to be
+  saved into `.wordpress-org/` as `screenshot-1.png` … `screenshot-5.png`: an
+  agent that is shown a screenshot in chat cannot write it to disk, so this step
+  is the maintainer's. Until they land, the listing would show captions with no
+  images — add them before the first asset sync. No version bump needed: they
+  live in the SVN `/assets` folder, independent of `/trunk`.
 
 ### To check next time (not urgent, parked here)
 
