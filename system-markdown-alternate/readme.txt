@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.35.2
+Stable tag: 0.35.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -345,6 +345,18 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.35.3 =
+
+* **New screenshots for this listing.** The previous four still showed the admin
+  panel as it looked before the tabbed restyle, so none of them matched what you
+  actually see after installing. There are now five, one per settings tab, with
+  captions rewritten to match — covering the parts the old set never showed at
+  all: the `[sysmda_md_download]` shortcode, the last modified dates in
+  `/llms.txt`, the LiteSpeed cache rules and the `.md` hit counter.
+* Updated a development dependency (the coding-standards tooling) to pick up a
+  security fix. It has never been part of the distributed plugin, so nothing
+  changes in what runs on your site.
+
 = 0.35.2 =
 
 * Removed the CSS snippet the `[sysmda_md_download]` FAQ offered as an example of
@@ -363,22 +375,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * Fixed: the same card claimed a shortcode returns empty for a post that is
   "type not enabled, draft, or password-protected", omitting **non-standard post
   formats**, which have been a reason for exclusion since 0.26.x.
-
-= 0.35.0 =
-
-* **New `[sysmda_md_download]` shortcode**: a link that saves the Markdown as a
-  file instead of opening it in the browser. Optional `text=""` for the label
-  (default "Download MD") and `id=""` for another post, exactly like
-  `[sysmda_md_url]`. Like that one, it outputs nothing when the post has no
-  Markdown version, so it can never link to a 404.
-* **Nothing changes on the server side.** The download is the standard HTML
-  `download` attribute, which works because the link is on your own domain. The
-  `.md` URL itself is untouched: same headers, same body, same behaviour for the
-  agents and crawlers that read it inline.
-* **No CSS and no JavaScript are added to your site.** The shortcode outputs a
-  plain link with a single `sysmda-md-download` class; any styling is your
-  theme's job. This is deliberate, and it is the same rule that removed the
-  front-end button in 0.34.0.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
