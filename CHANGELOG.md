@@ -9,6 +9,30 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.35.3
+
+* **Refreshed the wordpress.org listing assets.** The four screenshots still
+  showed the pre-0.17.0 admin UI, from before the tabs/cards restyle, so every
+  one of them misrepresented the panel a user actually sees. They are replaced
+  by five, one per settings tab in panel order (General, Markdown output,
+  `/llms.txt`, Integrations, Advanced), and the `== Screenshots ==` captions in
+  `readme.txt` are rewritten to match — including the parts the old set never
+  showed at all: `[sysmda_md_download]`, the last modified dates in
+  `/llms.txt`, the LiteSpeed bypass rules and the `.md` hit counter.
+* **Why this is a release and not just an asset update.** The captions live in
+  `readme.txt`, which ships in the package, and the deploy workflow builds from
+  the version tag rather than from `main`. Without a new version, a deploy of
+  `0.35.2` would have published the old captions and the old images, silently
+  undoing the refresh.
+* Updated the `wp-coding-standards/wpcs` development dependency to 3.4.1, which
+  fixes an arbitrary code execution advisory in the
+  `WordPress.WP.EnqueuedResourceParameters` sniff (it evaluated the `$ver`
+  argument of `wp_enqueue_script()` through `eval()`, so scanning untrusted PHP
+  could run commands on the scanning host — the repository's own CI being the
+  realistic case). No effect on the distributed plugin: the coding-standards
+  tooling is a development dependency and the build installs with `--no-dev`,
+  so it has never been part of the package.
+
 ## 0.35.2
 
 * Removed the CSS snippet the `[sysmda_md_download]` FAQ offered as an example of
