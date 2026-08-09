@@ -75,6 +75,7 @@
 				<element value="childNodes"/>
 				<element value="parentNode"/>
 				<element value="firstChild"/>
+				<element value="nextSibling"/>
 				<element value="textContent"/>
 				<element value="nodeName"/>
 				<element value="nodeValue"/>

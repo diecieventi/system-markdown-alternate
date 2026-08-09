@@ -147,6 +147,15 @@ The v1 scope is done and widely exceeded. Implemented:
     `<dl>` is flattened to a bold term plus paragraphs.
   - **whitespace normalization skips fenced code**: trailing spaces and blank-line
     runs are meaningful inside a fence (Markdown hard breaks, transcripts, diffs).
+  - **no Markdown delimiter is ever chosen without looking at what it wraps**
+    (`0.38.0`, `CodeFence` + the three `Safe*` converters). The library hardcodes
+    three backticks for a block and one for a span, so content carrying that
+    delimiter escaped its own construct: a code sample containing ` ``` ` closed
+    its fence early, the rest of the sample became prose, and the trailing
+    delimiter opened a fence that ran to the end of the document — heading and
+    all. Fences are now sized to the longest run inside them and prose fences are
+    escaped. Do not "simplify" this back to a constant; and if a new construct
+    with a delimiter is ever added, size it the same way.
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
@@ -421,6 +430,47 @@ The v1 scope is done and widely exceeded. Implemented:
   representations" model (the `Cache` helper already covers it without growing
   the DB) and every Nginx/Varnish/VCL/Worker snippet — the "do not ship
   host-specific config" rule from the `0.29.0` measurement stands.
+- **Block-native Markdown engine: evaluated, not built** (August 2026 — a
+  handoff document proposed replacing the generic HTML conversion with a
+  pipeline rendering Markdown straight from `parse_blocks()`, keeping
+  `render_block()` + League only as a fallback). Recorded so the evaluation is
+  not redone from scratch. Outcome: **the premise did not survive measurement**,
+  and what shipped instead was `0.38.0`'s delimiter hardening. What was found,
+  against `league/html-to-markdown` 5.1.1 with this plugin's config:
+  - **The library is already correct on most of what the proposal wanted to
+    replace.** Nested lists at three levels, `<ol start>`, ordered-in-unordered,
+    multi-paragraph list items, nested blockquotes, GFM tables with escaped
+    pipes, `core/buttons` → a plain link, separators, and links with spaces or
+    parentheses all convert correctly today. Nested lists in particular were
+    singled out in the proposal as the biggest expected win; they were already
+    right.
+  - **The defects that are real were all one class — an unsized delimiter — and
+    none of them is fixed by rendering blocks natively.** A native `core/code`
+    renderer would fix the fence breakout for `core/code` only, leaving Code
+    Block Pro (a third-party block), Classic content and ACF WYSIWYG broken;
+    and the prose-fence case is `core/paragraph`, where a native renderer would
+    need the identical escaping anyway. Overriding the library's converters
+    fixes every source at once, which is why that is what shipped.
+  - **Performance is not a motivator.** Measured on an 18 KB article: the whole
+    conversion stage is **8.6 ms** and the DOM pass **1.1 ms**, against the
+    ~1000–1200 ms `.md` TTFB already documented in the `0.29.0` measurement
+    above. Under 1% of the response; the WordPress boot dominates, as it does
+    everywhere else in this plugin.
+  - **It would retire none of the five DOM passes.** Class exclusion, `<dl>`
+    flattening, highlighter normalization and URL absolutization must all stay
+    for the fallback path, so the engine is strictly additive — a second
+    permanent pipeline, which is the proposal's own stated risk.
+  - The one obstacle the proposal treated as decisive had already been removed:
+    `sysmda_markdown_source_content`, `_rendered_html` and `_preamble` were
+    classified **Advanced** in `0.37.0` precisely so a future engine could move
+    them (`docs/filters.md`). That is not a reason to build it, only a reason it
+    would not be blocked.
+  **What would reopen it**: a census of real content showing a large share of
+  the corpus inside blocks whose *meaning* — not merely layout — is lost through
+  `render_block()`. Layout wrappers do not count: their children already convert
+  correctly. The single genuinely block-aware idea worth keeping is
+  `core/embed` → the canonical URL rather than the rendered oEmbed markup, and
+  that is one converter, not an engine.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -1032,7 +1082,11 @@ running code at the WP level.
         ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
-        ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown)
+        ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + the three Safe* overrides)
+        ├── CodeFence.php           ← content-sized code delimiters (pure logic, no WP/library deps)
+        ├── SafeCodeConverter.php        ← replaces the library's <code> converter
+        ├── SafePreformattedConverter.php ← replaces the library's <pre> converter
+        ├── SafeParagraphConverter.php   ← wraps the library's <p> converter (escapes a prose fence)
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
         ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)

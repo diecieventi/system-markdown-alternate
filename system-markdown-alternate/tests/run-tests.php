@@ -436,7 +436,17 @@ require __DIR__ . '/../src/AcceptNegotiator.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/ContentRenderer.php';
+require __DIR__ . '/../src/CodeFence.php';
 require __DIR__ . '/../src/MarkdownConverter.php';
+
+// These implement a library interface, so they can only be loaded with vendor/
+// present. MarkdownConverter references them inside a method body, which PHP
+// resolves only when that method runs.
+if ( $GLOBALS['sysmda_has_vendor'] ) {
+	require __DIR__ . '/../src/SafeCodeConverter.php';
+	require __DIR__ . '/../src/SafePreformattedConverter.php';
+	require __DIR__ . '/../src/SafeParagraphConverter.php';
+}
 require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
@@ -2135,6 +2145,44 @@ check(
 	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>' )
 );
 
+// Captions (0.38.0): <figcaption> is another tag the converter does not know,
+// so with strip_tags on its text was emitted flush against the media it
+// captioned — "![Alt](url)My caption" on one line. Promoted to a sibling
+// paragraph it separates, and the same fix covers every captioned construct.
+check(
+	'dom: image caption promoted to its own paragraph',
+	'<p><img src="https://example.com/a.png" alt="x"></p><p>Cap</p>',
+	$sysmda_dom( '<figure class="wp-block-image"><img src="/a.png" alt="x"/><figcaption>Cap</figcaption></figure>' )
+);
+check(
+	'dom: table caption promoted out of the figure',
+	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure><p>Cap</p>',
+	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table><figcaption>Cap</figcaption></figure>' )
+);
+check(
+	'dom: caption inline markup survives promotion',
+	'<p><img src="https://example.com/a.png" alt="x"></p><p>See <a href="https://example.com/blog/my-post/x">this</a></p>',
+	$sysmda_dom( '<figure><img src="/a.png" alt="x"/><figcaption>See <a href="x">this</a></figcaption></figure>' )
+);
+check(
+	'dom: empty caption leaves nothing behind',
+	'<p><img src="https://example.com/a.png" alt="x"></p>',
+	$sysmda_dom( '<figure><img src="/a.png" alt="x"/><figcaption></figcaption></figure>' )
+);
+
+// Disclosures (0.38.0): core/details came out as "MoreHidden body" — summary
+// and body concatenated with nothing between them.
+check(
+	'dom: details flattened to bold summary + body',
+	'<p><strong>More</strong></p><p>Hidden body</p>',
+	$sysmda_dom( '<details class="wp-block-details"><summary>More</summary><p>Hidden body</p></details>' )
+);
+check(
+	'dom: details without a summary keeps its body',
+	'<p>Body only</p>',
+	$sysmda_dom( '<details><p>Body only</p></details>' )
+);
+
 // Definition lists: the converter has no dl support and strip_tags is on, so an
 // untouched <dl> came out as "TermDefinition".
 check(
@@ -2493,9 +2541,13 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 	// delimiter. A sample that itself shows fenced code puts ``` four spaces in,
 	// and CommonMark caps a delimiter at three: reading that line as the close
 	// ends the fence early and hands the rest of the block to the prose rules.
+	//
+	// Since 0.38.0 the opening delimiter is also sized to the content, so this
+	// block opens with FOUR backticks: the indentation is no longer the only
+	// thing keeping the inner ``` from closing it.
 	check(
 		'convert: indented backticks inside a fence are content',
-		"```\nExample:  \n    ```\n    x  \n\n\n    ```\ndone  \n```\n",
+		"````\nExample:  \n    ```\n    x  \n\n\n    ```\ndone  \n````\n",
 		$sysmda_conv->convert( "<pre><code>Example:  \n    ```\n    x  \n\n\n    ```\ndone  </code></pre>" )
 	);
 
@@ -2512,6 +2564,111 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 	check( 'convert: dash list items', "- a\n- b\n", $sysmda_conv->convert( '<ul><li>a</li><li>b</li></ul>' ) );
 	check( 'convert: script node removed', "text\n", $sysmda_conv->convert( '<p>text</p><script>evil()</script>' ) );
 	check( 'convert: empty input', '', $sysmda_conv->convert( '   ' ) );
+
+	// ── Delimiter safety (0.38.0) ───────────────────────────────────────────
+	//
+	// The library picks a delimiter without looking at what it wraps, so content
+	// carrying that delimiter escaped its own construct. These pin the fix at
+	// the point where it matters: the text AFTER the construct must still be
+	// prose, which is what a breakout destroys.
+
+	// A code block whose body contains a bare fence. Before the fix the fence
+	// closed on the inner ``` and everything from "still code" to the end of
+	// the document — the following paragraph and heading included — was
+	// re-read as prose and then swallowed by a stray reopening fence.
+	check(
+		'convert: code containing a bare fence gets a longer delimiter',
+		"````\na\n```\nb\n````\n\nAfter.\n\n## Heading\n",
+		$sysmda_conv->convert( "<pre><code>a\n```\nb</code></pre><p>After.</p><h2>Heading</h2>" )
+	);
+
+	// Escalates: four backticks inside means five outside.
+	check(
+		'convert: fence grows past the longest run inside',
+		"`````\na\n````\nb\n`````\n",
+		$sysmda_conv->convert( "<pre><code>a\n````\nb</code></pre>" )
+	);
+
+	// The language info string survives the longer fence.
+	check(
+		'convert: language preserved on a widened fence',
+		"````php\n```\n````\n",
+		$sysmda_conv->convert( '<pre><code class="language-php">```</code></pre>' )
+	);
+
+	// Inline code containing a backtick: one delimiter backtick used to end the
+	// span in the middle of the content.
+	check(
+		'convert: inline code containing a backtick',
+		"Run `` git log --format=`%h` `` then stop.\n",
+		$sysmda_conv->convert( '<p>Run <code>git log --format=`%h`</code> then stop.</p>' )
+	);
+
+	// Content that starts and ends with a backtick needs padding, or the
+	// delimiters merge with it.
+	check(
+		'convert: inline code starting and ending with a backtick',
+		"a `` `x` `` b\n",
+		$sysmda_conv->convert( '<p>a <code>`x`</code> b</p>' )
+	);
+
+	check(
+		'convert: ordinary inline code keeps a single backtick',
+		"a `x` b\n",
+		$sysmda_conv->convert( '<p>a <code>x</code> b</p>' )
+	);
+
+	// A fence typed as prose. Nothing here is code at all, and the paragraph
+	// used to open a fence that ran to the end of the document.
+	check(
+		'convert: a bare fence written as prose is escaped',
+		"\\```\n\nRegular paragraph.\n",
+		$sysmda_conv->convert( '<p>```</p><p>Regular paragraph.</p>' )
+	);
+
+	check(
+		'convert: a fence with an info string written as prose is escaped',
+		"\\```php\n\nRegular paragraph.\n",
+		$sysmda_conv->convert( '<p>```php</p><p>Regular paragraph.</p>' )
+	);
+
+	// …but an inline code span whose delimiter happens to be three backticks
+	// must NOT be escaped: its closing run puts a backtick later on the line,
+	// which is exactly what tells the two cases apart.
+	check(
+		'convert: an inline span with a long delimiter is left alone',
+		"```a``b```\n",
+		$sysmda_conv->convert( '<p><code>a``b</code></p>' )
+	);
+
+	// ── DOM pass + converter, end to end ────────────────────────────────────
+	//
+	// The separation fixes live in the DOM pass and only pay off once the
+	// converter has run, so the two are pinned together: asserting the HTML
+	// alone would not have caught a converter that glues the pieces back.
+	$sysmda_e2e = static function ( $html ) use ( $sysmda_dom, $sysmda_conv ) {
+		return $sysmda_conv->convert( $sysmda_dom( $html ) );
+	};
+
+	check(
+		'e2e: captioned image separates from its caption',
+		"![Alt](https://example.com/a.png)\n\nMy caption\n",
+		$sysmda_e2e( '<figure class="wp-block-image"><img src="/a.png" alt="Alt"/><figcaption>My caption</figcaption></figure>' )
+	);
+
+	check(
+		'e2e: details renders as a bold lead-in plus its body',
+		"**More**\n\nHidden body\n",
+		$sysmda_e2e( '<details class="wp-block-details"><summary>More</summary><p>Hidden body</p></details>' )
+	);
+
+	// The whole point of the fence fix, stated as the property that matters:
+	// text that followed the code block is still text.
+	check(
+		'e2e: a code sample showing a fence does not swallow the article',
+		"````\nSee:\n```\nx\n```\n````\n\nThe article continues here.\n",
+		$sysmda_e2e( "<pre><code>See:\n```\nx\n```</code></pre><p>The article continues here.</p>" )
+	);
 }
 
 // ─── LiteSpeedCompat::update (read-modify-write on a real file) ──────────────

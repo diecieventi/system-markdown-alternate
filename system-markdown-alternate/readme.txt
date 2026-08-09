@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.37.0
+Stable tag: 0.38.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -309,6 +309,18 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.38.0 =
+
+* Fixed: a code sample containing a ``` fence used to break out of its own code
+  block and swallow the rest of the document. Fenced blocks and inline code
+  spans now size their delimiters to the content they wrap.
+* Fixed: a paragraph whose text is a bare ``` fence is escaped instead of
+  opening a code block that runs to the end of the document.
+* Fixed: image, table and embed captions are separated from what they caption
+  instead of being glued to it on one line.
+* Fixed: `core/details` no longer renders its summary and body concatenated; the
+  summary becomes a bold lead-in paragraph.
+
 = 0.37.0 =
 
 * Supported canonical HTML pages now advertise their Markdown representation in
@@ -360,12 +372,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * Hardened the wordpress.org release workflow: every GitHub Action is pinned to
   an exact revision, and a deploy is refused unless the tag exists and the
   version agrees across the plugin header, the readme and the changelog.
-
-= 0.35.4 =
-
-* Moved the developer filter reference into a dedicated, better organized page
-  (linked from the FAQ below and from the GitHub repository), out of the
-  contributor guide it used to share. No behaviour changed.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

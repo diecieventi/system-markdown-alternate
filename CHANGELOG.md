@@ -9,6 +9,31 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.38.0
+
+* **Code samples can no longer break out of their own code block.** The
+  conversion library picks a Markdown delimiter without looking at what it
+  wraps, so a code block whose body contained ` ``` ` closed early: the rest of
+  the sample was re-read as prose and the trailing delimiter opened a new fence
+  that swallowed everything after it, headings and paragraphs included. Fenced
+  blocks now open with a delimiter longer than the longest backtick run inside
+  them, and inline code spans do the same (with padding when the content starts
+  or ends with a backtick).
+* **A fence written as ordinary prose is escaped.** A paragraph whose text was
+  three backticks — writing about Markdown, or pasted terminal output — used to
+  open a code fence that ran to the end of the document. An inline code span
+  that happens to use a long delimiter is deliberately left alone.
+* **Captions are separated from what they caption.** `<figcaption>` is not a tag
+  the converter knows, so with tag stripping on a captioned image came out as
+  `![Alt](url)My caption` on a single line. Captions are now promoted to their
+  own paragraph, which fixes images, tables and embeds at once.
+* **`core/details` is readable.** The summary and the body used to be
+  concatenated with nothing between them ("MoreHidden body"); the summary is now
+  a bold lead-in paragraph followed by the disclosure body.
+* Documented all of the above in the output-format contract, and pinned each
+  case with golden tests — including end-to-end ones that assert the text
+  *after* a code block is still text.
+
 ## 0.37.0
 
 * **Supported canonical HTML pages now advertise their Markdown representation
