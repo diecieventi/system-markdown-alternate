@@ -2445,6 +2445,16 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		"- ```php\n    x = 1  \n    \n    \n    y = 2  \n    ```\n",
 		$sysmda_conv->convert( "<ul><li><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></li></ul>" )
 	);
+	// Nesting positions the delimiter without indenting it: a second-level list
+	// emits "    - ```php", where the four spaces belong to the nested list, not
+	// to the fence. Counting them as indentation pushed it past the three-space
+	// cap and the whole block fell through to the prose rules.
+	check(
+		'convert: code inside a nested list preserved',
+		"- Outer\n    - ```php\n        x = 1  \n        \n        \n        y = 2  \n        ```\n",
+		$sysmda_conv->convert( "<ul><li>Outer<ul><li><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></li></ul></li></ul>" )
+	);
+
 	check(
 		'convert: code inside a nested blockquote preserved',
 		"> > ```\n> > x = 1  \n> > \n> > \n> > y = 2  \n> > ```\n",

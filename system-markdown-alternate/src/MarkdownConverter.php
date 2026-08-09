@@ -123,7 +123,7 @@ class MarkdownConverter {
 	 * Being permissive here is the safe direction: a false positive preserves a
 	 * region of prose verbatim, while a false negative rewrites code.
 	 */
-	const FENCE_PATTERN = '/^(?P<prefix>(?:[ \t]*(?:>|[-*+][ \t]|\d{1,9}[.)][ \t]))*[ \t]*)(?P<fence>`{3,}|~{3,})/';
+	const FENCE_PATTERN = '/^(?P<prefix>(?:[ \t]*(?:>|[-*+][ \t]|\d{1,9}[.)][ \t]))*)(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})/';
 
 	/**
 	 * Everything the fence logic needs about a delimiter line, or null when the
@@ -136,10 +136,13 @@ class MarkdownConverter {
 	 *   ``- ```php `` is closed by an indented ``` ``` ``` four spaces in, so
 	 *   comparing literal prefixes would never match, while the quote depth is
 	 *   the part that does stay identical;
-	 * - `indent`: the leading whitespace CommonMark counts, i.e. what is left
-	 *   after the block markers. A blockquote marker takes one optional space
-	 *   with it (`> ` is the marker, not one space of indentation), so that
-	 *   space is discounted;
+	 * - `indent`: the whitespace left AFTER the last block marker, which is the
+	 *   only part CommonMark counts. Measuring the whole prefix instead is
+	 *   wrong the moment anything nests: a `<pre>` in a second-level list comes
+	 *   out as ``    - ```php ``, where the four spaces position the nested list
+	 *   and belong to it, not to the delimiter. A blockquote marker also takes
+	 *   one optional space with it (`> ` is the marker, not one space of
+	 *   indentation), so that space is discounted too;
 	 * - `list`: whether a list marker opened this line.
 	 *
 	 * @return array{marker:string,depth:string,indent:int,list:bool}|null
@@ -150,20 +153,19 @@ class MarkdownConverter {
 		}
 
 		$prefix = $matches['prefix'];
+		$indent = strlen( $matches['indent'] );
 
-		// Whitespace after the last block marker, with the one space a `>`
-		// carries discounted.
-		$tail = $prefix;
-		$last = strrpos( $prefix, '>' );
-		if ( false !== $last ) {
-			$tail = (string) substr( $prefix, $last + 1 );
-			$tail = (string) preg_replace( '/^ /', '', $tail );
+		// A list marker swallows its own separator, so `indent` is already
+		// measured from the item's content column. `>` does not, so the single
+		// space that belongs to the marker is discounted here.
+		if ( '>' === substr( rtrim( $prefix ), -1 ) && $indent > 0 ) {
+			--$indent;
 		}
 
 		return array(
 			'marker' => $matches['fence'],
 			'depth'  => (string) preg_replace( '/[^>]/', '', $prefix ),
-			'indent' => strlen( (string) preg_replace( '/[^ \t]/', '', $tail ) ),
+			'indent' => $indent,
 			'list'   => 1 === preg_match( '/[-*+]|\d/', $prefix ),
 		);
 	}

@@ -1,4 +1,4 @@
 plugin_version: 0.36.0
-git_commit: c9fe5d4eebf7cb430604e34572936125903c1c7f
-git_describe: c9fe5d4-dirty
-built_at: 2026-08-09T15:30:09Z
+git_commit: 23e18ac7e419ef42ef0e1d99a6aafe727480a747
+git_describe: 23e18ac-dirty
+built_at: 2026-08-09T15:50:32Z
