@@ -427,6 +427,20 @@ The v1 scope is done and widely exceeded. Implemented:
   "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
   enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
   `/llms.txt` stays silent as well (see below).
+  **The public policy is applied to the SAVED SELECTION and nowhere else**
+  (decided August 2026, `0.36.0`): the AdminSettings callback that feeds the
+  option into this filter at priority 20 drops any slug whose type is not
+  currently registered `public` (`PostSupport::type_is_public()`). Two sources,
+  two treatments, and the seam between them is the point — `sanitize_post_types()`
+  deliberately KEEPS a saved slug whose provider is temporarily inactive, so an
+  afternoon of deactivation does not turn the endpoint off for its content, but
+  a type re-registered as `public => false` (or replaced by an internal one of
+  the same name) must not stay servable on the strength of a stale option; the
+  slug survives and comes back by itself. Site code adding a non-public CPT
+  **through the filter**, by contrast, is an explicit request, and widening what
+  is served is this filter's documented job. So do NOT re-apply the check in
+  `is_servable()` — a first attempt did, which silently overruled the filter and
+  contradicted its own docblock (caught in review).
 - **Password-protected content has NO Markdown representation, ever** (decided
   July 2026, closes M1 of the 0.26.3 review): the test is
   `'' === $post->post_password`, deliberately NOT `post_password_required()`.
@@ -616,10 +630,20 @@ The v1 scope is done and widely exceeded. Implemented:
   everyone, for up to a day — and the `.md` route additionally invited shared
   intermediaries to store it. Enforced now in two places:
   - `MarkdownController::representation_is_shared()` (= `! is_user_logged_in()`)
-    gates both. An authenticated request neither reads nor writes the shared
-    body cache, and its response is `private, no-store, must-revalidate` —
-    **deliberately not filterable**, so `sysmda_cache_control` cannot make a
-    possibly personalized response publicly cacheable by accident. Anonymous
+    gates **three** things, and all three have to move together or the rule
+    contradicts itself. An authenticated request (a) neither reads nor writes
+    the shared body cache; (b) is answered `private, no-store, must-revalidate`
+    — **deliberately not filterable**, so `sysmda_cache_control` cannot make a
+    possibly personalized response publicly cacheable by accident; and (c) is
+    never answered `304` and carries **no `ETag` or `Last-Modified`**. That
+    third one was missed first time round and caught in review: rebuilding the
+    body for a visitor and then answering that same visitor `304` on a
+    validator describing the *shared* body hands them exactly what the rebuild
+    avoided — their browser reuses a copy built for everyone, off an
+    `If-None-Match` kept from an earlier anonymous fetch. The precondition
+    lives inside `handle_conditional()` rather than at its call site, so no
+    caller can forget it, and the validators are suppressed for the same reason
+    the ETag is weak: do not send a claim this plugin cannot back. Anonymous
     traffic, which is the entire audience for this endpoint, is untouched and
     keeps the full shared-cache behaviour.
   - `sysmda_post_is_servable` is the per-post **veto**, honoured by every
@@ -1147,8 +1171,12 @@ not exist as far as the public API is concerned.
      silently did nothing. The leading timestamp is read by
      `MarkdownController::salt_changed_at()`, so keep the shape.
    **Corollary in `date_is_strong_validator()`** (0.36.0): the date is refused
-   as a validator not only when either fingerprint is non-empty, but also once
-   **the salt is newer than `post_modified_gmt`**. A client sending only
+   as a validator not only when either fingerprint is non-empty, but unless
+   **the salt is strictly older than `post_modified_gmt`**. Strictly, not
+   "not newer": both have one-second resolution, so an equal pair is ambiguous
+   — a save and a bump in the same second are indistinguishable, and if the
+   bump came second the date is already lying. Ambiguity resolves against the
+   date. A client sending only
    `If-Modified-Since` presents no ETag, so every site-wide bump above would
    otherwise keep answering `304` with a body the salt had already invalidated,
    for every post older than the change. It becomes usable again for a post the

@@ -1452,6 +1452,17 @@ check(
 );
 check( 'conditional: no stale 304 after a salt bump', array(), $GLOBALS['sysmda_test_status'] );
 
+// Equality is ambiguous at one-second resolution: a post save and a site-wide
+// invalidation landing in the same second are indistinguishable, and if the
+// salt came second the date is already lying. Ambiguity resolves against the
+// date.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-01 08:30:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS ignored when salt and post share a second',
+	false,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+
 // A salt older than the post's own modification date says nothing about it: the
 // post has been rebuilt since, so the date is trustworthy again. This is what
 // keeps a single settings save from disabling the IMS path for good.
@@ -1461,6 +1472,30 @@ check(
 	true,
 	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
 );
+
+// An authenticated request is rebuilt rather than served from the shared cache,
+// so it must not be answered 304 on a validator that describes that shared
+// body: the browser would reuse a copy built for everyone, off an If-None-Match
+// kept from an earlier anonymous fetch.
+$GLOBALS['sysmda_test_status'] = array();
+$GLOBALS['sysmda_test_logged_in'] = true;
+$_SERVER['HTTP_IF_NONE_MATCH']    = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check(
+	'conditional: an authenticated request is never answered 304',
+	false,
+	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+);
+check( 'conditional: no 304 sent to an authenticated visitor', array(), $GLOBALS['sysmda_test_status'] );
+// The very same request, anonymous, still revalidates — the split is the only
+// thing deciding it.
+$GLOBALS['sysmda_test_logged_in'] = false;
+check(
+	'conditional: the same request anonymous still yields 304',
+	true,
+	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+);
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+$GLOBALS['sysmda_test_status'] = array();
 
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
@@ -2204,27 +2239,47 @@ check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_se
 check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
 
-// The saved option deliberately keeps a slug whose provider is temporarily
-// inactive, so an afternoon of deactivation does not silently turn the endpoint
-// off. That survival rule shipped with a comment promising "the emission path
-// validates the type again" — and nothing did, so a type re-registered as
-// public => false, or replaced by an internal one of the same name, stayed
-// fully servable and /llms.txt kept advertising it.
-$GLOBALS['sysmda_test_post_types']['post'] = (object) array(
-	'name'               => 'post',
+// The public policy applies to the SAVED SELECTION, which AdminSettings filters
+// through here before feeding it to sysmda_markdown_supported_post_types.
+// sanitize_post_types() keeps a slug whose provider is temporarily inactive, so
+// an afternoon of deactivation does not turn the endpoint off — but a type
+// re-registered as public => false, or replaced by an internal one of the same
+// name, must not stay servable on the strength of a stale option.
+$GLOBALS['sysmda_test_post_types']['secret_records'] = (object) array(
+	'name'               => 'secret_records',
 	'public'             => false,
 	'publicly_queryable' => false,
 );
-check( 'servable: a type that is no longer public is inert', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+check( 'public policy: a non-public type is rejected', false, PostSupport::type_is_public( 'secret_records' ) );
 
-// Unregistered entirely (the provider is simply gone): no object, not servable.
-$GLOBALS['sysmda_test_post_types']['post'] = null;
-check( 'servable: an unregistered type is inert', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+$GLOBALS['sysmda_test_post_types']['gone'] = null;
+check( 'public policy: an unregistered type is rejected', false, PostSupport::type_is_public( 'gone' ) );
+check( 'public policy: a public type passes', true, PostSupport::type_is_public( 'post' ) );
 
-// …and the slug is still in the option, so the endpoint comes back by itself
-// once the type is registered publicly again. Nothing was lost from settings.
-unset( $GLOBALS['sysmda_test_post_types']['post'] );
-check( 'servable: it comes back when the type is public again', true, PostSupport::is_servable( $sysmda_mk_post() ) );
+// …and it is NOT applied to the filter's result. Site code adding a non-public
+// CPT through sysmda_markdown_supported_post_types is making an explicit
+// request, and widening what is served is that filter's documented job;
+// enforcing the policy afterwards would silently overrule it. A stale saved
+// slug is not a request — that is the whole distinction.
+// Whatever reached supported_post_types() got there either from the saved
+// option — already filtered by the callback above — or from an explicit
+// site-code opt-in through the filter, and both have been decided by then.
+// Re-applying the policy here would silently overrule the second one, so a type
+// that is in the list is servable even when it is not public.
+$GLOBALS['sysmda_test_post_types']['post'] = (object) array(
+	'name'   => 'post',
+	'public' => false,
+);
+check(
+	'servable: the emission path does not re-apply the public policy',
+	true,
+	PostSupport::is_servable( $sysmda_mk_post() )
+);
+unset(
+	$GLOBALS['sysmda_test_post_types']['post'],
+	$GLOBALS['sysmda_test_post_types']['secret_records'],
+	$GLOBALS['sysmda_test_post_types']['gone']
+);
 
 // A membership or paywall plugin protects a PUBLISHED post from a later
 // template_redirect callback or a the_content filter, and neither reaches this
@@ -2394,6 +2449,16 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'convert: code inside a nested blockquote preserved',
 		"> > ```\n> > x = 1  \n> > \n> > \n> > y = 2  \n> > ```\n",
 		$sysmda_conv->convert( "<blockquote><blockquote><pre><code>{$sysmda_nested_code}</code></pre></blockquote></blockquote>" )
+	);
+
+	// Accepting a container prefix must not turn ARBITRARY indentation into a
+	// delimiter. A sample that itself shows fenced code puts ``` four spaces in,
+	// and CommonMark caps a delimiter at three: reading that line as the close
+	// ends the fence early and hands the rest of the block to the prose rules.
+	check(
+		'convert: indented backticks inside a fence are content',
+		"```\nExample:  \n    ```\n    x  \n\n\n    ```\ndone  \n```\n",
+		$sysmda_conv->convert( "<pre><code>Example:  \n    ```\n    x  \n\n\n    ```\ndone  </code></pre>" )
 	);
 
 	// The fence must still CLOSE, or everything after it would be preserved

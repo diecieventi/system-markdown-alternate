@@ -735,6 +735,20 @@ class MarkdownController {
 	 * validator for this representation (see date_is_strong_validator()).
 	 */
 	private function handle_conditional( \WP_Post $post, string $version ): bool {
+		// Conditional handling belongs to the shared representation, and the
+		// precondition lives here rather than at the call site so no caller can
+		// forget it. The two halves of the anonymous-representation rule have to
+		// agree: get_markdown() rebuilds for an authenticated visitor precisely
+		// because the shared body may not be theirs, so answering that same
+		// visitor `304` on a validator describing the shared body hands them
+		// exactly what the rebuild was meant to avoid — their browser reuses a
+		// copy built for everyone, off an `If-None-Match` kept from an earlier
+		// anonymous fetch. Such a request is always answered in full, and
+		// send_headers() leaves the validators off it for the same reason.
+		if ( ! self::representation_is_shared() ) {
+			return false;
+		}
+
 		$etag        = self::etag( $version );
 		$modified_ts = $this->last_modified_timestamp( $post );
 
@@ -804,7 +818,15 @@ class MarkdownController {
 
 		$modified = $this->last_modified_timestamp( $post );
 
-		return $modified > 0 && self::salt_changed_at() <= $modified;
+		// Strictly older, not "not newer". Both values have one-second
+		// resolution, so an equal pair is ambiguous — a post saved and a
+		// site-wide invalidation raised in the same second are
+		// indistinguishable from each other, and if the salt came second the
+		// date is already lying. Ambiguity resolves against the date: the cost
+		// is that a post saved in the very second of a bump loses the
+		// `If-Modified-Since` path until its next save, which is nothing next
+		// to answering `304` with an invalidated body indefinitely.
+		return $modified > 0 && self::salt_changed_at() < $modified;
 	}
 
 	/**
@@ -1090,11 +1112,20 @@ class MarkdownController {
 
 		status_header( 200 );
 		header( 'Content-Type: text/markdown; charset=utf-8' );
-		header( 'ETag: ' . self::etag( $version ) );
 
-		$modified_ts = $this->last_modified_timestamp( $post );
-		if ( $modified_ts > 0 ) {
-			header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+		// Both validators describe the SHARED representation — the version hashes
+		// the post, the plugin version, the salt and the two fingerprints, and
+		// none of them knows who is asking. On a response rebuilt for an
+		// authenticated visitor they would be a claim this plugin cannot back,
+		// which is the same rule that made the ETag weak in 0.28.0. The response
+		// is `no-store` anyway, so there is nothing for them to validate later.
+		if ( self::representation_is_shared() ) {
+			header( 'ETag: ' . self::etag( $version ) );
+
+			$modified_ts = $this->last_modified_timestamp( $post );
+			if ( $modified_ts > 0 ) {
+				header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+			}
 		}
 
 		/** Filter: X-Robots-Tag header. Empty string means the header is not sent. */

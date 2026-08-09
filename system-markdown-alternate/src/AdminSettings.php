@@ -800,7 +800,24 @@ class AdminSettings {
 				if ( false === $v ) {
 					return $defaults;
 				}
-				$list = (array) $v;
+
+				// The saved slugs are the ONLY place the public policy is
+				// enforced, and deliberately so. sanitize_post_types() keeps a
+				// slug whose provider is temporarily inactive, so an afternoon
+				// of deactivation does not turn the endpoint off for its
+				// content — but a type re-registered as `public => false`, or
+				// replaced by an internal one of the same name, must not stay
+				// servable on the strength of a stale option. The slug survives
+				// in the settings and comes back by itself when the type is
+				// public again.
+				//
+				// Applying the same rule to the filter's RESULT would be a
+				// different thing entirely: site code adding a non-public CPT
+				// here is an explicit request, and this filter's documented job
+				// is to widen what is served. It runs at 20, so anything hooked
+				// later passes through untouched.
+				$list = array_values( array_filter( (array) $v, array( PostSupport::class, 'type_is_public' ) ) );
+
 				return ! empty( $list ) ? $list : $defaults;
 			},
 			20
