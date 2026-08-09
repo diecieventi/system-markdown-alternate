@@ -66,6 +66,10 @@ apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' );
 `Cache-Control` on the URLs the plugin owns (the `.md` endpoint and
 `/llms.txt`). `''` sends no header at all, WordPress's own included.
 
+It does **not** apply to Markdown negotiated on the canonical permalink: that
+representation shares its URL with the HTML page, so it is always sent
+non-cacheable and this filter is not consulted there.
+
 > **Setting a freshness lifetime here (`s-maxage`, `max-age`) makes stale
 > Markdown possible**: no page cache purges a `.md` when the post is saved,
 > because cache plugins purge the permalink and have no idea `permalink.md`
@@ -92,6 +96,12 @@ that can change the emitted Markdown without touching `post_modified_gmt` has
 to be declared here, or a client holding the old validator keeps getting `304`
 with stale content.
 
+⚠️ **It runs on every request, including `304`s** — it feeds the `ETag`, which
+is computed before the cache is consulted. Declare a value you already have or
+one that is cheap to read; a remote call or a heavy query here is paid even on
+responses that send no body. See
+[Filters on the every-request path](#filters-on-the-every-request-path).
+
 ```php
 apply_filters( 'sysmda_markdown_prewarm', false, $post_id );
 ```
@@ -103,18 +113,26 @@ get cached. No-op when the TTL is `0`.
 
 ## The conversion pipeline
 
-Listed in the order they run.
+Two kinds of hook live here, and treating them alike is the mistake this
+section exists to prevent: four run once, in a known order; three run wherever
+content is cleaned, an unbounded number of times.
+
+### The document hooks, in order
+
+These four run **once per document build**, in this order.
 
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 ```
-Raw source content, before any rendering.
+Raw source content, before any rendering. This is where the ACF integration
+appends its fields.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 ```
-Cleaned HTML, after block rendering and exclusions, before the Markdown
-conversion.
+Cleaned HTML — after shortcode stripping, block cleaning, block rendering,
+code-block normalization and URL absolutization. The last point before the
+Markdown conversion.
 
 ```php
 apply_filters( 'sysmda_markdown_preamble', '', $post );
@@ -122,18 +140,103 @@ apply_filters( 'sysmda_markdown_preamble', '', $post );
 Markdown inserted between the `# Title` heading and the body. This is what the
 ACF integration uses for subtitle and TL;DR.
 
+<a id="the-preamble-re-entry"></a>
+**A preamble that renders HTML re-enters the cleaning path.** A callback here
+that turns HTML into Markdown has to clean that HTML too, and
+`ContentRenderer::render_fragment()` exists for exactly that. It strips
+shortcodes and runs the DOM pass, so two of the cleaning filters below fire
+again — after `sysmda_markdown_rendered_html` has already run. It does not
+parse blocks.
+
+In the bundled ACF integration this is the TL;DR path only (a WYSIWYG field, so
+it carries markup) and only when the field is configured and non-empty; the
+subtitle goes through `wp_strip_all_tags()` and never re-enters.
+
 ```php
 apply_filters( 'sysmda_markdown_output', $markdown, $post );
 ```
-The final Markdown document, front matter included.
+The final Markdown document, front matter included. Last hook of the build.
+
+### The cleaning filters, which are not points in that sequence
 
 ```php
-apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
+apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
 ```
-Gutenberg blocks, shortcodes and CSS classes whose elements are dropped from
-the conversion. See [Default exclusions](#default-exclusions).
+
+Shortcodes, Gutenberg blocks and CSS classes dropped from the output. See
+[Default exclusions](#default-exclusions) for the values they receive.
+
+These are **not** stages of the ordered sequence above. They are consulted
+wherever the plugin cleans content, which is more places than the body
+conversion — including one that runs *before* `sysmda_markdown_source_content`,
+and one on a different endpoint entirely. Known call sites:
+
+| Filter | Called from |
+|--------|-------------|
+| `sysmda_markdown_excluded_shortcodes` | the post body; rendered preamble fragments; expanded synced patterns (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt`, for entries that carry a description |
+| `sysmda_markdown_excluded_block_names` | block cleaning — only when the post has blocks |
+| `sysmda_markdown_excluded_classes` | block cleaning (blocks only); every DOM pass, body and fragments alike, unless the HTML is empty or fails to parse |
+
+**Treat that column as illustrative, not as a contract.** It spans four classes
+and two endpoints, and it has been wrong every time it was written down as a
+count. A new call site can appear in any release without notice.
+
+What is guaranteed instead is the shape of the callback. Write these filters as
+**pure, cheap functions of their input**: same list every time, no accumulated
+state, no counting of invocations, no side effects, no expensive work. A
+callback that assumes a single invocation will be wrong on a post with synced
+patterns, and a slow one is paid again for every entry `/llms.txt` describes.
+
+### None of them run on a cache hit
+
+`MarkdownController::get_markdown()` returns the stored document before
+`build_markdown()` is reached, so a request served from cache fires none of
+the hooks in this section — document hooks and cleaning filters alike. With the
+default TTL that is the common case.
+
+**Do not read that as "filters only run when the document is rebuilt."** Others
+run on the opposite schedule — see below.
+
+## Filters on the every-request path
+
+Eligibility is decided before anything else, and `cache_version()` produces the
+`ETag`, so it runs **before** the cache lookup and before any header is sent.
+Both are reached on cache hits and on `304 Not Modified` responses that send no
+body at all. The filters they read are reached with them:
+
+| Filter | Reached through |
+|--------|-----------------|
+| `sysmda_markdown_supported_post_types` | route eligibility, on every candidate request |
+| `sysmda_markdown_excluded_post_formats` | `PostSupport::is_servable()`, same |
+| `sysmda_front_matter_taxonomy_slugs` | `cache_version()` → `taxonomies_fingerprint()` |
+| `sysmda_front_matter_taxonomies` | same |
+| `sysmda_markdown_cache_dependencies` | `cache_version()` → `dependencies_fingerprint()` |
+| `sysmda_acf_field_keys` | same, and only while ACF is active |
+| `sysmda_acf_subtitle_key` | same |
+| `sysmda_acf_tldr_key` | same |
+
+The header filters are not alike, and the difference is the `304`:
+
+- `sysmda_markdown_robots_header` and `sysmda_markdown_canonical_url` are
+  applied in `send_headers()`, on the `200` path only. A `304` sends `ETag` and
+  `Last-Modified` and nothing filtered, so neither is reached.
+- `sysmda_cache_control` is sent before the body on the `.md` route, so the
+  conditional `304` carries the same policy as the `200` and the filter is
+  reached by both. The negotiated permalink does not use it at all: that route
+  sends a fixed no-cache set instead, because the Markdown variant shares its
+  URL with the HTML page.
+
+As with the cleaning filters, **this is membership, not a schedule**: which of
+these a given request reaches depends on the route, on whether the body is
+rebuilt, and on which integrations are active. Do not derive a count from it.
+
+**Keep them cheap, and never do I/O in them.** A `304` exists to cost almost
+nothing, and work attached here is paid even by responses that send no body.
+This matters most for `sysmda_markdown_cache_dependencies`, whose whole purpose
+is to describe out-of-post data: declare a value you already have, or a cheap
+one — do not fetch it here.
 
 ## Front matter
 
@@ -174,6 +277,16 @@ apply_filters( 'sysmda_acf_tldr_key', '', $post );
 ```
 ACF field names for the subtitle and the TL;DR. `''` disables each one. Both are
 also configurable from the settings panel when ACF is active.
+
+All three are read from two places, for different reasons: where the value is
+used, and inside the cache validator, so that editing an ACF field moves the
+`ETag`. Both are skipped entirely while ACF is inactive — `acf_dependencies()`
+and the bundled callbacks return before applying them if `get_field()` does not
+exist.
+
+The validator read is on the
+[every-request path](#filters-on-the-every-request-path). Return a field name,
+not the result of looking one up.
 
 ## `/llms.txt`
 
