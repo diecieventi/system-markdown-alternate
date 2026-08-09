@@ -44,6 +44,7 @@ $GLOBALS['sysmda_test_taxonomies']  = array(); // post type => taxonomy slug => 
 $GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return value
 $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
 $GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
+$GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is authenticated
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -73,6 +74,14 @@ function update_option( $name, $value ) {
 	$GLOBALS['sysmda_test_options'][ $name ] = $value;
 
 	return true;
+}
+
+/**
+ * Stub: whether a visitor is authenticated. Drives the split between the shared
+ * public representation and a request that may render in a visitor's context.
+ */
+function is_user_logged_in() {
+	return ! empty( $GLOBALS['sysmda_test_logged_in'] );
 }
 
 /** Stub: user objects, read when a display-name change invalidates the cache. */
@@ -1523,6 +1532,36 @@ check( 'cache-control: header injection stripped', true, false === strpos( Markd
 
 $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = array( 'not', 'a', 'string' );
 check( 'cache-control: a non-string filter value sends nothing', '', MarkdownController::cache_control_value() );
+
+// A request that is not the shared public representation is never publicly
+// cacheable, and the site filter must not be able to make it so — the body may
+// have been rendered in that visitor's context by a dynamic block or shortcode.
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = 'public, s-maxage=600';
+check(
+	'cache-control: an authenticated request is private and unstorable',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( false )
+);
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = '';
+check(
+	'cache-control: the filter cannot publish a personalized response',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( false )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] );
+
+// The split itself: anonymous traffic — the audience this endpoint exists for —
+// keeps the full shared-cache behaviour, and only an authenticated request
+// leaves it.
+check( 'shared: an anonymous request is the public representation', true, MarkdownController::representation_is_shared() );
+$GLOBALS['sysmda_test_logged_in'] = true;
+check( 'shared: an authenticated request is not', false, MarkdownController::representation_is_shared() );
+check(
+	'cache-control: the default follows the visitor',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( MarkdownController::representation_is_shared() )
+);
+$GLOBALS['sysmda_test_logged_in'] = false;
 $GLOBALS['sysmda_test_filters'] = array();
 
 // lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
@@ -2039,6 +2078,25 @@ $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array
 check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
 check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
+
+// A membership or paywall plugin protects a PUBLISHED post from a later
+// template_redirect callback or a the_content filter, and neither reaches this
+// endpoint: it runs at template_redirect priority 0 and exits, and it renders
+// cleaned blocks instead of the_content by design. sysmda_post_is_servable is
+// how such a plugin denies one post, everywhere at once.
+$GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] = false;
+check( 'servable: a site filter can veto a single post', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+
+// Veto ONLY. It is consulted just when the built-in rules already said yes, so
+// returning true can never publish a draft, protected content, or a type the
+// site has not enabled.
+$GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] = true;
+check( 'servable: the veto filter cannot publish a draft', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_status' => 'draft' ) ) ) );
+check( 'servable: the veto filter cannot publish protected content', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) ) );
+check( 'servable: the veto filter cannot publish an unsupported type', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_type' => 'product' ) ) ) );
+check( 'servable: the veto filter cannot publish an excluded format', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
+check( 'servable: an allowed post is unaffected', true, PostSupport::is_servable( $sysmda_mk_post() ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] );
 
 // ─── Shortcodes::render_download ──────────────────────────────────────────────
 

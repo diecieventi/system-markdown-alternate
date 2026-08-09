@@ -588,15 +588,54 @@ The v1 scope is done and widely exceeded. Implemented:
   This matters more than it looks, because **no page cache purges a `.md`**:
   cache plugins purge the permalink on save and have no idea `permalink.md`
   exists, so correctness cannot rest on purging and has to come from
-  revalidation. `public` states what is true by construction — the
-  representation never varies by visitor (protected content has no `.md`,
-  drafts 404, and the body comes from cleaned blocks rather than `the_content`,
-  so personalisation filters never run). Freshness is still not imposed, but it
+  revalidation. `public` states what the `.md` **is defined to be** — the
+  anonymous representation of the post — and not something that holds by
+  construction: see the decision below, which corrects the claim this paragraph
+  used to make. It is enforced by only sending `public` to anonymous requests.
+  Freshness is still not imposed, but it
   is now reachable: `sysmda_cache_control` may return an `s-maxage`, and whoever
   does that accepts the staleness the missing purge implies. Returning `''`
   removes the header entirely (WordPress's included).
   Do not go back to sending nothing, and do not "restore" `no-store` here: both
   were measured and both are worse.
+- **The `.md` is the ANONYMOUS representation, and that is a definition the
+  plugin enforces — not a property it gets for free** (decided August 2026,
+  `0.36.0`, correcting a claim this guide made until then). The old wording
+  said the representation "never varies by visitor" because the body is built
+  from cleaned blocks rather than `the_content`. That is only true of
+  `the_content` filters. The body is assembled with `render_block()` and
+  `do_shortcode()`, and every stage passes through site filters, so a dynamic
+  block or shortcode reading the current user, a cookie, a cart or a
+  membership state renders **in the caller's context**. Two consequences
+  followed, and both were real: an authenticated visitor could be the first to
+  populate the per-post body cache — keyed by post ID alone, shared by
+  everyone, for up to a day — and the `.md` route additionally invited shared
+  intermediaries to store it. Enforced now in two places:
+  - `MarkdownController::representation_is_shared()` (= `! is_user_logged_in()`)
+    gates both. An authenticated request neither reads nor writes the shared
+    body cache, and its response is `private, no-store, must-revalidate` —
+    **deliberately not filterable**, so `sysmda_cache_control` cannot make a
+    possibly personalized response publicly cacheable by accident. Anonymous
+    traffic, which is the entire audience for this endpoint, is untouched and
+    keeps the full shared-cache behaviour.
+  - `sysmda_post_is_servable` is the per-post **veto**, honoured by every
+    consumer through `PostSupport::is_servable()`. It exists because the
+    built-in checks know WordPress's own notion of access (status, the core
+    password field) and nothing else: a membership or paywall plugin protects
+    a published post from a later `template_redirect` callback or a
+    `the_content` filter, and this plugin runs at `template_redirect` priority
+    `0` and exits, so neither ever gets a say. Veto only — consulted just when
+    the built-in rules already said yes, so it can never publish a draft or
+    protected content.
+  What this does **not** claim: `is_user_logged_in()` is the tractable half of
+  visitor variance, not all of it. Anonymous output can still vary by cookie
+  (cart, geolocation, A/B assignment), and no plugin can detect that. Such a
+  site declares it through `sysmda_markdown_cache_dependencies` or vetoes the
+  post. Equally, do **not** present that filter as an answer to personalization
+  in general: it contributes validator inputs, and a validator does not
+  partition a shared cache or authorize anybody. Leaving the hook at priority
+  `0` is deliberate (moving it would break the route on sites where something
+  else 404s first); the veto filter is how other plugins participate.
 - **Negotiated Markdown and `406` responses are always no-cache** (decided,
   binding — outcome of the July 2026 LiteSpeed/Vary diagnosis on two production
   hosts): they share their URL with the HTML page, and honouring `Vary: Accept`

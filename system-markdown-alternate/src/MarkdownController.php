@@ -539,7 +539,7 @@ class MarkdownController {
 		// reads Expires first, and it contradicts the header sent below.
 		header_remove( 'Expires' );
 
-		$value = self::cache_control_value();
+		$value = self::cache_control_value( self::representation_is_shared() );
 
 		if ( '' === $value ) {
 			// Explicit opt-out: no policy from the plugin, and none inherited
@@ -553,12 +553,51 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether the representation being produced is the shared, public one.
+	 *
+	 * The `.md` is defined as the **anonymous** representation of a post, and
+	 * `public, max-age=0, must-revalidate` states exactly that. The premise is
+	 * not free, though: the body is assembled with `render_block()` and
+	 * `do_shortcode()`, and every stage passes through site filters, so a
+	 * dynamic block or shortcode reading the current user, a cookie or a cart
+	 * renders in the CALLER's context — "built from cleaned blocks rather than
+	 * `the_content`" keeps `the_content` filters out, and nothing more.
+	 *
+	 * So an authenticated request may produce output that is not the public
+	 * representation. Such a response must not be stored in the per-post body
+	 * cache (shared by every visitor, keyed by post ID alone) and must not be
+	 * storable by any cache in front of PHP. Anonymous traffic — which is what
+	 * the audience for this endpoint is made of — is unaffected and keeps the
+	 * full shared-cache behaviour.
+	 *
+	 * `is_user_logged_in()` is the tractable half of the question, not the
+	 * whole of it: anonymous output can vary by cookie too (a cart, a
+	 * geolocation, an A/B assignment). A site whose blocks do that should
+	 * declare it through `sysmda_markdown_cache_dependencies` or veto the post
+	 * with `sysmda_post_is_servable`; there is no way for the plugin to detect
+	 * it.
+	 */
+	public static function representation_is_shared(): bool {
+		return ! is_user_logged_in();
+	}
+
+	/**
 	 * The `Cache-Control` value for the plugin's own URLs.
 	 *
 	 * Public and separate from the header call so the policy is testable
 	 * without a live response.
+	 *
+	 * @param bool $shared Whether this response is the public representation.
 	 */
-	public static function cache_control_value(): string {
+	public static function cache_control_value( bool $shared = true ): string {
+		if ( ! $shared ) {
+			// Deliberately NOT filterable. `sysmda_cache_control` exists to let a
+			// site grant a freshness lifetime to the public representation; it
+			// must not be able to make a possibly personalized response
+			// publicly cacheable, least of all by accident.
+			return 'private, no-store, must-revalidate';
+		}
+
 		/**
 		 * Filter: `Cache-Control` for the URLs the plugin owns (`.md` and
 		 * `/llms.txt`). The default grants storage but forbids reuse without
@@ -899,6 +938,16 @@ class MarkdownController {
 		/** Filter: cache TTL in seconds. 0 disables the cache. */
 		$ttl       = (int) apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );
 		$cache_key = 'sysmda_md_' . $post->ID;
+
+		// The entry is keyed by post ID alone and shared by every visitor, so an
+		// authenticated request neither reads nor writes it: a dynamic block or
+		// shortcode rendering in that visitor's context would otherwise be
+		// served to everyone else for the rest of the TTL, and conversely the
+		// visitor would be handed a copy built for someone else. See
+		// representation_is_shared().
+		if ( ! self::representation_is_shared() ) {
+			return $this->build_markdown( $post );
+		}
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( $cache_key );
