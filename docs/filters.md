@@ -108,10 +108,26 @@ consulted inside `ContentRenderer::render()`, between the source-content and
 rendered-HTML hooks — not, as a flat list might suggest, after the final
 output. Attach a transformation to the stage that still has the shape you need.
 
-This is the order for the body only. A preamble that renders HTML of its own
-fires the exclusion filters **again, after `sysmda_markdown_rendered_html`** —
-see [the preamble hook](#the-preamble-re-entry) below. Never assume an
-exclusion filter runs once per request.
+### When the exclusion filters actually run
+
+They are not called a fixed number of times per request: it depends on whether
+the body is block-based and on whether a preamble renders HTML of its own.
+
+| Filter | Body | Preamble fragment |
+|--------|------|-------------------|
+| `sysmda_markdown_excluded_shortcodes` | always, once | once per fragment |
+| `sysmda_markdown_excluded_block_names` | only when the post has blocks | never |
+| `sysmda_markdown_excluded_classes` | once in the DOM pass, plus once more when the post has blocks | once per fragment |
+
+So `sysmda_markdown_excluded_classes` runs twice for a block-based post, once
+for classic content, and once more for each rendered fragment. It is also
+skipped entirely when the HTML is empty or fails to parse, because
+`process_dom()` returns before reaching it.
+
+**Write these filters as pure functions of their input.** Returning a different
+list depending on when the filter is called produces output where one pass
+disagrees with another — the reason to state the call sites rather than a
+count.
 
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
@@ -123,25 +139,23 @@ appends its fields.
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 ```
 Shortcodes stripped from the raw source, block content included. Runs first,
-so an excluded shortcode never reaches the renderer. Fires again for any
-rendered preamble fragment.
+so an excluded shortcode never reaches the renderer.
 
 ```php
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 ```
 Gutenberg blocks dropped while the block tree is cleaned, before
-`render_block()` is called on what remains.
+`render_block()` is called on what remains. Classic (non-block) content never
+reaches this filter.
 
 ```php
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
 ```
-CSS classes whose elements are dropped. **Consulted more than once per request,
-and it must return the same list every time**: once against each block's
-`className` attribute during block cleaning, once during the DOM pass over the
-rendered HTML — which is what catches nested elements a block attribute cannot
-describe — and once more per rendered preamble fragment. A filter that returns
-a different list depending on when it is called produces inconsistent output
-between the passes.
+CSS classes whose elements are dropped. Applied against each block's
+`className` attribute during block cleaning, and again during the DOM pass over
+the rendered HTML — the latter is what catches nested elements a block
+attribute cannot describe. See [the table above](#when-the-exclusion-filters-actually-run)
+for how many times it runs.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
@@ -160,9 +174,9 @@ ACF integration uses for subtitle and TL;DR.
 Markdown here has to clean that HTML too, and the plugin exposes
 `ContentRenderer::render_fragment()` for exactly that. It strips shortcodes and
 runs the DOM pass, so `sysmda_markdown_excluded_shortcodes` and
-`sysmda_markdown_excluded_classes` fire **a second time, after
+`sysmda_markdown_excluded_classes` fire **again, after
 `sysmda_markdown_rendered_html` has already run**. It does not parse blocks, so
-`sysmda_markdown_excluded_block_names` is not consulted again.
+`sysmda_markdown_excluded_block_names` is not consulted for a fragment.
 
 In the bundled ACF integration this happens only on the TL;DR path (a WYSIWYG
 field, so it carries markup), and only when the field is configured and
