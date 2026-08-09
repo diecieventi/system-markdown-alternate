@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.36.0
+Stable tag: 0.37.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,7 +33,10 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
   HTML and Markdown representations of the same address apart. Because some page
   caches key by URL only and ignore `Vary`, the negotiated Markdown (and `406`)
   responses are also sent non-cacheable, so safety never depends on `Vary` alone.
-* **`rel="alternate"` link** in the `<head>` of supported singular content.
+* **Markdown discovery in HTML and HTTP**: supported canonical pages advertise
+  the representation with both `<link rel="alternate" type="text/markdown">`
+  in the document head and a typed `Link: rel="alternate"` response header.
+  The HTTP form is also available to `HEAD` requests.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag`
   (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
 * **Clean conversion**: Gutenberg blocks are rendered individually (no injected
@@ -302,6 +305,18 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.37.0 =
+
+* Supported canonical HTML pages now advertise their Markdown representation in
+  the HTTP `Link` header as well as in the document `<head>`. The header is also
+  present on `HEAD` responses, appends without replacing other link relations
+  and is not emitted on `.md`, negotiated Markdown, `406` or redirect responses.
+* Simplified release packaging around one shared `.distignore`: the local build
+  and the wordpress.org deploy now stage the same files, and the obsolete
+  `BUILD-INFO.txt` artifact is gone.
+* Cleaned up the test bootstrap for PHP 8.5 and removed an empty duplicate
+  `php_codesniffer` test suite from CI.
+
 = 0.36.0 =
 
 * **Renaming a category or tag now refreshes the Markdown.** `categories:` and
@@ -347,18 +362,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * Moved the developer filter reference into a dedicated, better organized page
   (linked from the FAQ below and from the GitHub repository), out of the
   contributor guide it used to share. No behaviour changed.
-
-= 0.35.3 =
-
-* **New screenshots for this listing.** The previous four still showed the admin
-  panel as it looked before the tabbed restyle, so none of them matched what you
-  actually see after installing. There are now five, one per settings tab, with
-  captions rewritten to match — covering the parts the old set never showed at
-  all: the `[sysmda_md_download]` shortcode, the last modified dates in
-  `/llms.txt`, the LiteSpeed cache rules and the `.md` hit counter.
-* Updated a development dependency (the coding-standards tooling) to pick up a
-  security fix. It has never been part of the distributed plugin, so nothing
-  changes in what runs on your site.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

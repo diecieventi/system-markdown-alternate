@@ -102,7 +102,9 @@ class MarkdownController {
 			exit;
 		}
 
-		// Default: WordPress serves HTML (Vary: Accept already sent).
+		// Default: WordPress serves HTML (Vary: Accept already sent). The alternate
+		// Link field is added by maybe_send_alternate_link_header() only after the
+		// rest of template_redirect has had a chance to redirect this request.
 	}
 
 	/**
@@ -167,6 +169,28 @@ class MarkdownController {
 			'<link rel="alternate" type="text/markdown" href="%s" />' . "\n",
 			esc_url( MetadataBuilder::markdown_url( $post ) )
 		);
+	}
+
+	/**
+	 * Hook: template_redirect (last priority). Advertises the Markdown alternate
+	 * only when the request has survived canonical and access redirects.
+	 *
+	 * maybe_render_markdown() has already served and exited for negotiated
+	 * Markdown or `406`, so reaching this callback means WordPress is going to
+	 * render HTML. Keeping the header out of the priority-0 callback matters:
+	 * core's canonical redirect runs later and does not remove headers queued by
+	 * earlier callbacks, which otherwise left this Link field attached to a 301.
+	 */
+	public function maybe_send_alternate_link_header(): void {
+		if ( ! $this->is_negotiable_request() ) {
+			return;
+		}
+
+		$post = get_queried_object();
+
+		if ( $post instanceof \WP_Post ) {
+			$this->send_alternate_link_header( $post );
+		}
 	}
 
 	/**
@@ -467,6 +491,136 @@ class MarkdownController {
 				$field = trim( $field );
 
 				if ( '*' === $field || 0 === strcasecmp( 'accept', $field ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Advertises the Markdown alternate on the canonical HTML response.
+	 *
+	 * This deliberately runs only after negotiation has selected HTML and later
+	 * redirect callbacks have returned: the dedicated `.md` route, negotiated
+	 * Markdown, `406` and redirects all leave earlier. `false` appends the field
+	 * rather than replacing a Link header emitted by WordPress, a theme or
+	 * another plugin.
+	 */
+	private function send_alternate_link_header( \WP_Post $post ): void {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		$alternate = esc_url_raw( MetadataBuilder::markdown_url( $post ) );
+
+		if ( '' === $alternate || self::link_header_has_alternate( headers_list(), $alternate ) ) {
+			return;
+		}
+
+		header( 'Link: <' . $alternate . '>; rel="alternate"; type="text/markdown"', false );
+	}
+
+	/**
+	 * Whether an existing Link field already advertises this alternate target.
+	 *
+	 * A Link field may occur more than once or carry a comma-separated list. The
+	 * comma is not always a separator, though: it may occur inside the `<…>` URI
+	 * or a quoted parameter. Splitting those cases naively would miss a duplicate
+	 * and emit another field. Public only so the parsing can be tested under CLI,
+	 * where `headers_list()` is empty.
+	 *
+	 * @param string[] $sent Headers as returned by headers_list().
+	 */
+	public static function link_header_has_alternate( array $sent, string $target ): bool {
+		foreach ( $sent as $header ) {
+			if ( 0 !== stripos( $header, 'link:' ) ) {
+				continue;
+			}
+
+			foreach ( self::split_link_header_value( substr( $header, strlen( 'link:' ) ) ) as $link ) {
+				if ( ! preg_match( '/^\s*<([^>]*)>/', $link, $matches ) ) {
+					continue;
+				}
+
+				if ( $target === $matches[1] && self::link_value_has_relation( $link, 'alternate' ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Splits one Link field without treating commas inside a URI or quoted
+	 * parameter as separators.
+	 *
+	 * @return string[]
+	 */
+	private static function split_link_header_value( string $value ): array {
+		$links    = array();
+		$current  = '';
+		$in_uri   = false;
+		$in_quote = false;
+		$escaped  = false;
+		$length   = strlen( $value );
+
+		for ( $i = 0; $i < $length; $i++ ) {
+			$character = $value[ $i ];
+
+			if ( $escaped ) {
+				$current .= $character;
+				$escaped  = false;
+				continue;
+			}
+
+			if ( $in_quote && '\\' === $character ) {
+				$current .= $character;
+				$escaped  = true;
+				continue;
+			}
+
+			if ( ! $in_uri && '"' === $character ) {
+				$in_quote = ! $in_quote;
+			} elseif ( ! $in_quote && '<' === $character ) {
+				$in_uri = true;
+			} elseif ( ! $in_quote && '>' === $character ) {
+				$in_uri = false;
+			}
+
+			if ( ',' === $character && ! $in_uri && ! $in_quote ) {
+				if ( '' !== trim( $current ) ) {
+					$links[] = trim( $current );
+				}
+				$current = '';
+				continue;
+			}
+
+			$current .= $character;
+		}
+
+		if ( '' !== trim( $current ) ) {
+			$links[] = trim( $current );
+		}
+
+		return $links;
+	}
+
+	/**
+	 * Whether one parsed link-value contains the requested relation token.
+	 */
+	private static function link_value_has_relation( string $link, string $relation ): bool {
+		if ( ! preg_match_all( '/;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s,]+))/i', $link, $matches, PREG_SET_ORDER ) ) {
+			return false;
+		}
+
+		foreach ( $matches as $match ) {
+			$value = '' !== $match[1] ? $match[1] : $match[2];
+
+			foreach ( preg_split( '/\s+/', trim( $value ) ) as $token ) {
+				if ( 0 === strcasecmp( $relation, $token ) ) {
 					return true;
 				}
 			}

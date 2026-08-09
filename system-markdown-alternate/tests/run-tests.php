@@ -1381,6 +1381,27 @@ check( 'vary: a second Vary header is inspected too', true, MarkdownController::
 check( 'vary: the * wildcard covers everything', true, MarkdownController::vary_covers_accept( array( 'Vary: *' ) ) );
 check( 'vary: other headers are ignored', false, MarkdownController::vary_covers_accept( array( 'X-Accept: yes', 'Content-Type: text/html' ) ) );
 
+// ─── Link alternate: append without duplicating discovery metadata ──
+//
+// WordPress, a theme or another plugin may already have emitted one or more
+// Link fields. The Markdown alternate is appended, never allowed to overwrite
+// them, but the exact relation/target must not be repeated. Link's grammar also
+// permits commas inside a URI or quoted parameter, so a plain explode(',') is
+// not sufficient for the duplicate check.
+$sysmda_alternate = 'https://example.com/article.md';
+check( 'Link alternate: nothing sent yet', false, MarkdownController::link_header_has_alternate( array(), $sysmda_alternate ) );
+check( 'Link alternate: X-Link is not a Link field', false, MarkdownController::link_header_has_alternate( array( 'X-Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: canonical is not alternate', false, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="canonical"' ), $sysmda_alternate ) );
+check( 'Link alternate: a different target is not a duplicate', false, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/other.md>; rel="alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: typed alternate is detected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="alternate"; type="text/markdown"' ), $sysmda_alternate ) );
+check( 'Link alternate: field and relation matching is case-insensitive', true, MarkdownController::link_header_has_alternate( array( 'lInK: <https://example.com/article.md>; ReL="AlTeRnAtE"' ), $sysmda_alternate ) );
+check( 'Link alternate: relation token list is detected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="next alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: an untyped alternate still deduplicates', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel=alternate' ), $sysmda_alternate ) );
+check( 'Link alternate: repeated Link fields are inspected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/>; rel="canonical"', 'Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: comma-separated link-values are inspected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/>; rel="canonical", <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: comma inside the URI is not a separator', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md?parts=one,two>; rel="alternate"' ), 'https://example.com/article.md?parts=one,two' ) );
+check( 'Link alternate: comma inside a quoted parameter is not a separator', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; title="One, two"; rel="alternate"' ), $sysmda_alternate ) );
+
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //
 // The ETag carries the taxonomy fingerprint, but Last-Modified is derived from

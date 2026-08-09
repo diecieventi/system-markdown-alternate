@@ -263,8 +263,25 @@ split with `<!--nextpage-->` — regardless of the `Accept` header.
 
 ## HTTP contract (summary)
 
-The transport behaviour is documented in full in `AGENTS.md`; in brief, a
-successful `.md` response carries:
+The canonical HTML permalink advertises the Markdown representation on both
+`GET` and `HEAD` with:
+
+```http
+Link: <https://example.com/my-post.md>; rel="alternate"; type="text/markdown"
+```
+
+The field is appended without replacing Link relations emitted elsewhere and
+is not duplicated when that exact target is already advertised as an alternate.
+It is emitted only when the canonical singular URL is actually negotiable:
+feeds, embeds, trackbacks, paged comments, post sub-pages and unsupported content
+do not receive it. Nor do `.md`, negotiated Markdown, `406` responses or
+canonical/access redirects: header emission runs only after those redirect
+callbacks have had the opportunity to end the request. With plain permalinks
+the target is the same `?format=markdown` URL returned by
+`MetadataBuilder::markdown_url()`.
+
+The remaining transport behaviour is documented in full in `AGENTS.md`; in
+brief, a successful Markdown response carries:
 
 - `Content-Type: text/markdown; charset=utf-8`
 - `X-Robots-Tag: noindex, follow` (filterable; the Markdown representation is

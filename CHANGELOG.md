@@ -9,6 +9,27 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.37.0
+
+* **Supported canonical HTML pages now advertise their Markdown representation
+  in the HTTP `Link` header as well as in the document `<head>`.** The response
+  field is `Link: <markdown URL>; rel="alternate"; type="text/markdown"` and is
+  present on both `GET` and `HEAD`, which lets clients discover the alternate
+  without downloading or parsing the HTML body. It is appended without
+  replacing Link relations emitted by WordPress, a theme or another plugin, and
+  the exact relation/target is not duplicated when it already exists. The same
+  canonical-request predicate still owns discovery and negotiation: feeds,
+  embeds, trackbacks, paged comments, post sub-pages and unsupported content do
+  not advertise it, while `.md`, negotiated Markdown, `406` responses and
+  canonical/access redirects leave before the late HTML-only header is sent.
+* **Simplified release packaging around one shared `.distignore`.** The local
+  ZIP build and the wordpress.org deploy now stage the same files through the
+  same exclusion list, instead of maintaining a second partial copy inside the
+  workflow. The obsolete `BUILD-INFO.txt` artifact and its release plumbing are
+  gone; integrity and version checks remain in place.
+* Cleaned up the test bootstrap for PHP 8.5 and removed the empty duplicate
+  `php_codesniffer` test suite from CI. The actual PHPCS job remains unchanged.
+
 ## 0.36.0
 
 * **Renaming a category or tag now refreshes the Markdown.** `categories:` and
@@ -853,4 +874,3 @@ code review of the shipped code. Two fixes change the output on real content.
 ## 0.1.0
 * Initial release: `.md` endpoint, alternate link, front matter, block/shortcode
   cleaning and transient cache.
-

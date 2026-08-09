@@ -76,20 +76,34 @@ The v1 scope is done and widely exceeded. Implemented:
   feeds, oEmbed views, trackbacks, paged comments (`cpage`) and `<!--nextpage-->`
   sub-pages (`page > 1`) are excluded — `is_singular()` stays true for all of
   them, so `Accept: text/markdown` on `/my-post/feed/` used to return the article
-  body instead of the feed. `print_alternate_link()` **calls that same
-  predicate** (since `0.36.0`): what declares `Vary: Accept` and what advertises
-  a Markdown alternate must stay in step, and two guards written to mirror each
-  other did not — the link guard checked only the enabled type and
-  servability, so on an embed view (the one excluded variant that still runs
-  `wp_head`) the link was advertised for a URL that does not negotiate. One
-  predicate, not two; do not fork it again. The `.md` suffix route sets up the loop
+  body instead of the feed. Both discovery paths — `print_alternate_link()` in
+  the document head and, since `0.37.0`, the typed HTTP `Link: rel="alternate"`
+  header on HTML `GET`/`HEAD` — **call that same predicate**: what declares
+  `Vary: Accept` and what advertises a Markdown alternate must stay in step, and
+  two guards written to mirror each other did not — the old HTML-link guard
+  checked only the enabled type and servability, so on an embed view (the one
+  excluded variant that still runs `wp_head`) the link was advertised for a URL
+  that does not negotiate. The HTTP header is sent from a separate
+  `template_redirect` callback at `PHP_INT_MAX`, only after Markdown, `406` and
+  canonical/access redirects have taken their exit; emitting it in the
+  priority-0 controller left the field attached to a later `301`. It therefore
+  describes the canonical HTML response, never the alternate or a redirect.
+  One predicate, not two; do not fork it again. The `.md`
+  suffix route sets up the loop
   (`setup_postdata` + global `$post`) before converting, because on that route the
   main query 404s and dynamic blocks/shortcodes would otherwise render against no
   post — and the two routes would disagree.
-- **`rel="alternate"` link** in the `<head>` of supported singular content.
-- **HTTP headers**: `Content-Type: text/markdown; charset=utf-8`,
-  `X-Robots-Tag: noindex, follow`, `Link: <permalink>; rel="canonical"`,
-  `Vary: Accept` (on negotiable URLs), **`ETag` + `Last-Modified`**. Negotiated
+- **Markdown discovery in HTML and HTTP**: supported canonical singular content
+  advertises the representation with both `<link rel="alternate"
+  type="text/markdown">` in the document head and `Link: <markdown URL>;
+  rel="alternate"; type="text/markdown"` in the HTML response headers. The
+  latter also works for `HEAD`, appends rather than replacing other Link fields
+  and suppresses an exact relation/target duplicate.
+- **HTTP headers**: Markdown responses carry `Content-Type: text/markdown;
+  charset=utf-8`, `X-Robots-Tag: noindex, follow` and `Link: <permalink>;
+  rel="canonical"`; negotiable canonical HTML responses carry the alternate
+  Link field above plus `Vary: Accept`. Markdown responses also carry **`ETag` +
+  `Last-Modified`**. Negotiated
   Markdown and `406` responses additionally send
   `Cache-Control: no-cache, no-store, must-revalidate, private` (server-agnostic
   no-cache invariant — see "Product decisions"); the `.md` URLs send
@@ -757,8 +771,9 @@ The v1 scope is done and widely exceeded. Implemented:
   custom properties and a specificity fight with the theme in `0.33.0`. A plugin
   whose value is a clean machine-readable representation should not be shipping a
   presentational widget it cannot test against an unknown theme. The `.md` stays
-  discoverable through `rel="alternate"`, `/llms.txt`, negotiation and
-  `[sysmda_md_url]`; anything visual is the theme's job. `MarkdownButton.php`,
+  discoverable through the HTML and HTTP `rel="alternate"`, `/llms.txt`,
+  negotiation and `[sysmda_md_url]`; anything visual is the theme's job.
+  `MarkdownButton.php`,
   `assets/md-button.{css,js}`, the panel tab, the five filters and both options
   are gone; the options stay in `uninstall.php` as legacy keys, and
   `ShortcodeCleaner::ALWAYS_EXCLUDED` keeps stripping `[sysmda_md_button]` so a
@@ -821,8 +836,9 @@ The v1 scope is done and widely exceeded. Implemented:
   marked noindex") — exactly the SEO risk the plugin promises not to create —
   and a second sitemap generator would overlap with the SEO plugin's sitemaps
   (Rank Math & co.). Discovery for the real audience (LLMs/agents) is already
-  covered by the `rel="alternate"` link and by `/llms.txt`. Freshness signals
-  go into `/llms.txt` itself (see the `lastmod` item in "Open / to do"): no
+  covered by the HTML and HTTP `rel="alternate"` links and by `/llms.txt`.
+  Freshness signals go into `/llms.txt` itself (see the `lastmod` item in "Open
+  / to do"): no
   separate machine-index endpoint either.
 - **`.md` hit counter is count-only** (decided): when enabled it stores ONLY
   aggregate daily counters split bot/human. NEVER store IP addresses, raw
@@ -1083,7 +1099,12 @@ not exist as far as the public API is concerned.
    A wildcard or missing Accept → HTML (so curl/library `Accept: */*` stays
    HTML). Every servable content declares **`Vary: Accept`** (both when serving
    Markdown and when leaving the HTML to WP), so caches/CDNs never mix the two
-   representations. If the Accept allows neither HTML nor Markdown, respond
+   representations. When HTML wins, that same canonical request also appends a
+   typed HTTP `Link: rel="alternate"` field (on both `GET` and `HEAD`) pointing
+   at `MetadataBuilder::markdown_url()`. It runs in a separate
+   `template_redirect` callback at the last priority, so Markdown, `406` and
+   canonical/access redirects exit before it. If the Accept allows neither HTML
+   nor Markdown, respond
    **`406`** (`sysmda_markdown_strict_406` filter, default on; real clients always
    send `text/html` or a wildcard, never hit). The `.md` suffix ignores the
    Accept header instead (the URL itself is the explicit Markdown request).
@@ -1335,6 +1356,12 @@ Test posts:
     show **no** `Content-Disposition` (the download is client-side only), and
     the response headers must be identical with and without a `?download=1`
     that the plugin now ignores entirely.
+
+13. `curl -sI '<permalink>'` on a servable canonical post → a typed
+    `Link: <…md>; rel="alternate"; type="text/markdown"` field is present and
+    any pre-existing Link relation is preserved. The field is absent from the
+    `.md` response, negotiated Markdown, `406`, feed, embed, trackback, paged
+    comments and `<!--nextpage-->` sub-pages.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
