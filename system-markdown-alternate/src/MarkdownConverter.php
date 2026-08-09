@@ -44,6 +44,13 @@ class MarkdownConverter {
 	 * cells together ("NamePriceCoffee2"), which is worse than useless for a
 	 * machine-readable representation. Registered explicitly, it produces GFM
 	 * pipe tables and escapes `|` inside cells.
+	 *
+	 * The three `Safe*` converters replace library defaults rather than adding
+	 * to them (`Environment::addConverter()` keys by tag, so the last
+	 * registration for a tag wins). All three close the same class of defect:
+	 * the library picks a Markdown delimiter without looking at what it is
+	 * wrapping, so content carrying that delimiter escapes its own construct and
+	 * corrupts the rest of the document. See CodeFence.
 	 */
 	private function converter(): HtmlConverter {
 		$converter = new HtmlConverter(
@@ -56,7 +63,12 @@ class MarkdownConverter {
 			)
 		);
 
-		$converter->getEnvironment()->addConverter( new TableConverter() );
+		$environment = $converter->getEnvironment();
+
+		$environment->addConverter( new TableConverter() );
+		$environment->addConverter( new SafeCodeConverter() );
+		$environment->addConverter( new SafePreformattedConverter() );
+		$environment->addConverter( new SafeParagraphConverter() );
 
 		return $converter;
 	}

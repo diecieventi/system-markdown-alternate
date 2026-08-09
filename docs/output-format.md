@@ -195,7 +195,8 @@ theme/plugin-injected related-posts and CTA blocks are not reintroduced:
    - fenced code blocks;
    - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells;
    - `script` / `style` / `iframe` nodes removed;
-   - `strip_tags => true` — see the note below.
+   - `strip_tags => true` — see the note below;
+   - **content-sized code delimiters** (since `0.38.0`) — see below.
 4. **Whitespace normalization** — trailing whitespace is trimmed and runs of blank
    lines are collapsed to one, **outside fenced code blocks only**. Inside a fence
    the content is preserved byte-for-byte: trailing spaces and blank-line runs are
@@ -219,6 +220,28 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 | `<figure>` around an image | paragraph (so images and captions get blank-line separation) |
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
 | `<pre>` from a syntax highlighter | fenced block, with the `language-*` class preserved as the info string and line breaks reconstructed when the highlighter relies on CSS for them |
+| `<figcaption>` (image, table or embed caption) | its own paragraph, following the element it captions |
+| `<details>` / `<summary>` | `**Summary**` as its own paragraph, followed by the disclosure body as ordinary content |
+
+### Code delimiters are sized to their content
+
+Since `0.38.0`, a fenced block opens with a run of backticks **longer than the
+longest backtick run inside it** (never fewer than three), and an inline code
+span does the same (padded with a space when the content starts or ends with a
+backtick, which CommonMark strips again on the way back).
+
+This is a correctness property, not a formatting preference. A fixed three-
+backtick fence is closed by any ` ``` ` in the code it wraps, so a sample that
+shows fenced Markdown — or a heredoc, or pasted terminal output — used to
+terminate its own block: the remainder of the sample was re-read as prose, and
+the trailing delimiter opened a *new* fence that swallowed the rest of the
+document. **Text that follows a code block is always text**; content inside a
+code block can never change how the document after it is parsed.
+
+For the same reason, a paragraph whose text is a bare fence (` ``` `, or
+` ```php `) is emitted **escaped** (`\``` `). An inline code span that happens to
+use a three-backtick delimiter is not escaped — its closing run puts a backtick
+later on the line, which is what distinguishes the two.
 
 ### Default exclusions
 

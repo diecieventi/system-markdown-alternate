@@ -113,6 +113,8 @@ class ContentRenderer {
 
 		$removed = $this->remove_excluded_nodes( $dom );
 		$this->flatten_definition_lists( $dom );
+		$this->flatten_disclosures( $dom );
+		$this->promote_figcaptions( $dom );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
@@ -226,6 +228,106 @@ class ContentRenderer {
 			}
 
 			$list->parentNode->replaceChild( $fragment, $list );
+		}
+	}
+
+	/**
+	 * Flattens `<details>`/`<summary>` into a bold lead-in paragraph followed by
+	 * the disclosure body.
+	 *
+	 * The converter knows neither tag, and `strip_tags` is on, so `core/details`
+	 * came out as its summary and body concatenated with nothing between them
+	 * ("MoreHidden body"). The `<dt>` treatment in flatten_definition_lists() is
+	 * the precedent: a label that introduces what follows becomes a bold
+	 * paragraph, and the content it hid becomes ordinary content — a Markdown
+	 * document has no collapsed state to represent, and hiding it from an agent
+	 * would defeat the point of the representation.
+	 */
+	private function flatten_disclosures( \DOMDocument $dom ): void {
+		foreach ( iterator_to_array( $dom->getElementsByTagName( 'summary' ) ) as $summary ) {
+			if ( ! $summary->parentNode ) {
+				continue;
+			}
+
+			$paragraph = $dom->createElement( 'p' );
+			$strong    = $dom->createElement( 'strong' );
+			$paragraph->appendChild( $strong );
+
+			foreach ( iterator_to_array( $summary->childNodes ) as $child ) {
+				$strong->appendChild( $child );
+			}
+
+			if ( $strong->hasChildNodes() ) {
+				$summary->parentNode->replaceChild( $paragraph, $summary );
+				continue;
+			}
+
+			$summary->parentNode->removeChild( $summary );
+		}
+
+		foreach ( iterator_to_array( $dom->getElementsByTagName( 'details' ) ) as $details ) {
+			if ( ! $details->parentNode ) {
+				continue;
+			}
+
+			$fragment = $dom->createDocumentFragment();
+
+			foreach ( iterator_to_array( $details->childNodes ) as $child ) {
+				$fragment->appendChild( $child );
+			}
+
+			if ( ! $fragment->hasChildNodes() ) {
+				$details->parentNode->removeChild( $details );
+				continue;
+			}
+
+			$details->parentNode->replaceChild( $fragment, $details );
+		}
+	}
+
+	/**
+	 * Moves a `<figcaption>` out of its `<figure>` and turns it into the
+	 * paragraph that follows it.
+	 *
+	 * `<figcaption>` is another tag the converter does not know, so with
+	 * `strip_tags` on its text was emitted flush against whatever it captioned:
+	 * a captioned image came out as `![Alt](url)My caption`, on one line, with
+	 * the caption indistinguishable from the alt text. Promoting it to a sibling
+	 * paragraph works for every captioned construct at once — images, tables and
+	 * embeds all use the same element — and leaves the figure holding only the
+	 * media, which is what unwrap_figures() below expects.
+	 *
+	 * Only direct children are promoted: a caption belonging to a nested figure
+	 * stays with that figure and is handled when its own turn comes.
+	 */
+	private function promote_figcaptions( \DOMDocument $dom ): void {
+		foreach ( iterator_to_array( $dom->getElementsByTagName( 'figure' ) ) as $figure ) {
+			if ( ! $figure->parentNode ) {
+				continue;
+			}
+
+			$anchor = $figure;
+
+			foreach ( iterator_to_array( $figure->childNodes ) as $caption ) {
+				if ( ! $caption instanceof \DOMElement || 'figcaption' !== strtolower( $caption->nodeName ) ) {
+					continue;
+				}
+
+				$paragraph = $dom->createElement( 'p' );
+
+				foreach ( iterator_to_array( $caption->childNodes ) as $child ) {
+					$paragraph->appendChild( $child );
+				}
+
+				$figure->removeChild( $caption );
+
+				if ( ! $paragraph->hasChildNodes() ) {
+					continue;
+				}
+
+				$figure->parentNode->insertBefore( $paragraph, $anchor->nextSibling );
+				$anchor = $paragraph;
+			}
 		}
 	}
 
