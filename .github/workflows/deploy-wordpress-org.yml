@@ -1,46 +1,111 @@
 name: Deploy to WordPress.org
 
-# INACTIVE until the plugin is accepted on wordpress.org (no assigned SVN slug
-# and no configured secrets). The primary trigger is publishing a GitHub Release
-# (not merely pushing a tag, to avoid accidental runs without SVN credentials).
-# A manual workflow_dispatch trigger is also available as a fallback in case the
-# `release: published` event does not fire (observed to be unreliable for releases
-# created as drafts and published later, with distant `created_at` and
+# Publishes a released version to the wordpress.org SVN repository.
+#
+# The primary trigger is publishing a GitHub Release (not merely pushing a tag,
+# so a run can never happen by accident on an unreleased commit). A manual
+# workflow_dispatch trigger is also available as a fallback in case the
+# `release: published` event does not fire (observed to be unreliable for
+# releases created as drafts and published later, with distant `created_at` and
 # `published_at` timestamps).
 # It also does not fire for a Release published by the "Publish release"
 # workflow: GitHub raises no workflow-starting event from the default
 # GITHUB_TOKEN. Either run this one manually with the tag, or add a
 # RELEASE_TOKEN secret (a PAT with `contents: write`), which that workflow
 # prefers when present and whose events do start other workflows.
-# Once accepted on wordpress.org:
-#   1. add the SVN_USERNAME / SVN_PASSWORD repository secrets
-#      (Settings → Secrets and variables → Actions);
-#   2. publish a GitHub Release for the version tag (for example v0.18.0):
-#      the job synchronizes svn/trunk and creates svn/tags/<version>;
-#      if it does not start automatically, run it manually from Actions →
-#      "Deploy to WordPress.org" → "Run workflow" using the same tag.
+#
+# The job refuses to deploy anything that is not an existing `vX.Y.Z` tag whose
+# plugin header, SYSMDA_VERSION constant, readme.txt stable tag and CHANGELOG.md
+# entry all agree. An SVN version number cannot be withdrawn once published, so
+# the guard runs before a single byte is staged.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to deploy (for example v0.18.0) — required only for manual runs'
+        description: 'Tag to deploy (for example v0.36.0) — required only for manual runs'
         required: true
         type: string
+
+# The job only reads the repository; the SVN credentials it needs are secrets,
+# not GITHUB_TOKEN scopes.
+permissions:
+  contents: read
 
 jobs:
   deploy:
     name: Deploy to SVN
     runs-on: ubuntu-latest
     steps:
+      # The tag decides both what gets checked out and the version number
+      # published to wordpress.org, so it is validated before it is used for
+      # either. Passed through `env` rather than interpolated into the script:
+      # a `${{ }}` expression is substituted textually before the shell parses
+      # the line, which would make the input executable.
+      - name: Resolve and validate the release tag
+        id: tag
+        env:
+          RAW_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${RAW_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'${RAW_TAG}' is not a release tag of the form vX.Y.Z."
+            exit 1
+          fi
+
+          {
+            echo "ref=refs/tags/${RAW_TAG}"
+            echo "version=${RAW_TAG#v}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Explicitly `refs/tags/…`, so a branch sharing the tag's name cannot be
+      # checked out in its place. A tag that does not exist fails here.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ steps.tag.outputs.ref }}
+          persist-credentials: false
+
+      - name: Verify the version surfaces agree with the tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          plugin_file='system-markdown-alternate/system-markdown-alternate.php'
+          readme='system-markdown-alternate/readme.txt'
+
+          # First match only, taken with parameter expansion rather than a
+          # `| head -1` pipe: under `pipefail` the early reader can leave sed
+          # with SIGPIPE and fail the step for no reason.
+          header=$(sed -nE 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*([^[:space:]]+).*/\1/p' "${plugin_file}")
+          constant=$(sed -nE "s/.*'SYSMDA_VERSION',[[:space:]]*'([^']+)'.*/\1/p" "${plugin_file}")
+          stable=$(sed -nE 's/^Stable tag:[[:space:]]*([^[:space:]]+).*/\1/p' "${readme}")
+          header=${header%%$'\n'*}
+          constant=${constant%%$'\n'*}
+          stable=${stable%%$'\n'*}
+
+          status=0
+          for surface in "plugin header:${header}" "SYSMDA_VERSION:${constant}" "readme.txt stable tag:${stable}"; do
+            name="${surface%%:*}"
+            value="${surface#*:}"
+            if [ "${value}" != "${VERSION}" ]; then
+              echo "::error::${name} is '${value}', expected '${VERSION}'."
+              status=1
+            fi
+          done
+
+          if ! grep -qE "^## ${VERSION}([[:space:]]|$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${VERSION}' entry."
+            status=1
+          fi
+
+          exit "${status}"
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.4'
           coverage: none
@@ -63,22 +128,12 @@ jobs:
             --exclude=vendor/bin \
             --exclude=vendor/league/html-to-markdown/bin
 
-      - name: Resolve plugin version from tag
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RAW_TAG="${{ inputs.tag }}"
-          else
-            RAW_TAG="${GITHUB_REF_NAME}"
-          fi
-          echo "value=${RAW_TAG#v}" >> "$GITHUB_OUTPUT"
-
       - name: WordPress Plugin Deploy
-        uses: 10up/action-wordpress-plugin-deploy@stable
+        uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
           SLUG: system-markdown-alternate
-          VERSION: ${{ steps.version.outputs.value }}
+          VERSION: ${{ steps.tag.outputs.version }}
           BUILD_DIR: build/system-markdown-alternate
           ASSETS_DIR: .wordpress-org
