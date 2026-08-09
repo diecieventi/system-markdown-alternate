@@ -66,53 +66,10 @@ prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
     preamble between the H1 and the body.
   * **GenerateBlocks 2.x**: a `{{sysmda_md_url}}` Dynamic Tag, available
     automatically, usable in element fields (e.g. a Button URL).
-
-= Developer filters =
-
-The output is customizable through filters:
-
-* `sysmda_markdown_supported_post_types` — post types that expose `.md` (default: none).
-* `sysmda_markdown_excluded_post_formats` — post formats that never expose a `.md`
-  (default: every non-standard format; return an empty array to serve them all).
-* `sysmda_markdown_robots_header` — the `X-Robots-Tag` value (`''` = no header).
-* `sysmda_markdown_strict_406` — return `406` when the client accepts neither HTML nor
-  Markdown (default `true`; `false` always serves the HTML default).
-* `sysmda_markdown_canonical_url` — canonical URL for the `Link` header (`''` = no header).
-* `sysmda_markdown_cache_ttl` — cache TTL in seconds (`0` = disabled).
-* `sysmda_markdown_prewarm` — rebuild a post's Markdown cache in the background
-  after every save instead of on the first request (default `false`).
-* `sysmda_cache_control` — the `Cache-Control` sent on the URLs the plugin owns
-  (`.md` and `/llms.txt`); default `public, max-age=0, must-revalidate`, `''` =
-  no header at all. Setting a freshness lifetime here (`s-maxage`, `max-age`)
-  makes stale Markdown possible: no page cache purges a `.md` on save.
-* `sysmda_markdown_source_content` — raw source content before rendering.
-* `sysmda_markdown_rendered_html` — cleaned HTML before conversion.
-* `sysmda_markdown_preamble` — Markdown inserted between the H1 and the body.
-* `sysmda_markdown_output` — final Markdown.
-* `sysmda_markdown_excluded_block_names` — Gutenberg blocks to drop.
-* `sysmda_markdown_excluded_shortcodes` — shortcodes to drop.
-* `sysmda_markdown_excluded_classes` — CSS classes whose elements are dropped.
-* `sysmda_front_matter_enabled` — emit the YAML front-matter block at all
-  (default `true`; `false` starts the document at the `# Title` heading).
-* `sysmda_front_matter_taxonomies` — kill switch for the `taxonomies:` block
-  (default: on as soon as one taxonomy is selected; `false` = never emit it).
-* `sysmda_front_matter_taxonomy_slugs` — which taxonomies are emitted. Receives
-  the selection saved in the panel and may narrow it or extend it (return an
-  empty array to opt out for a post).
-* `sysmda_acf_field_keys` — ACF fields appended to the source.
-* `sysmda_acf_subtitle_key` / `sysmda_acf_tldr_key` — ACF fields for subtitle/TL;DR.
-* `sysmda_llms_txt_max_posts` — max posts per type in `/llms.txt`.
-* `sysmda_llms_txt_cache_ttl` — `/llms.txt` cache TTL in seconds (`0` = disabled).
-* `sysmda_llms_txt_enriched` — enable the enriched `/llms.txt` output (default `false`).
-* `sysmda_llms_txt_lastmod` — append `(updated: YYYY-MM-DD)` to every `/llms.txt`
-  entry (default `false`).
-* `sysmda_llms_txt_summary` — site summary paragraph (enriched mode only).
-* `sysmda_llms_txt_key_content` — featured content, post IDs or URLs (enriched mode only).
-* `sysmda_llms_txt_main_posts` — posts per type in the main sections before the
-  overflow moves to `Optional` (enriched mode only, default 25).
-* `sysmda_llms_txt_footer` — free-form block appended at the end (enriched mode only).
-* `sysmda_md_hits_bot_patterns` — user-agent substrings the hit counter classifies as bot.
-* `sysmda_md_hits_retention_days` — retention of the daily hit-counter buckets (default 90).
+* **Developer-extensible**: every behaviour above — which content is served, the
+  headers, the caching, the conversion pipeline, the front matter and
+  `/llms.txt` — is exposed as a WordPress filter. See the FAQ below for
+  examples and a link to the full documented list.
 
 == Installation ==
 
@@ -235,9 +192,10 @@ mechanism and you would rather trade that guarantee for raw speed, the
 
 = Can I customize the plugin from my own code? =
 
-Yes: the plugin is developer-extensible through WordPress filters — every
-behaviour listed in the "Developer filters" section above can be changed from a
-theme or site plugin. A few examples:
+Yes: the plugin is developer-extensible through WordPress filters — which
+content is served, the HTTP headers, the caching, every stage of the conversion
+pipeline, the front matter and `/llms.txt` can all be changed from a theme or a
+site plugin. A few examples:
 
 `add_filter( 'sysmda_markdown_output', fn( $md, $post ) => $md . "\n---\nCustom footer.\n", 10, 2 );`
 
@@ -245,9 +203,8 @@ theme or site plugin. A few examples:
 
 `add_filter( 'sysmda_llms_txt_enriched', '__return_true' );`
 
-The full, always up-to-date list (with default values) lives in the
-[GitHub repository](https://github.com/diecieventi/system-markdown-alternate)
-under "Filters (public contract)" in `AGENTS.md`.
+Every filter, with its default value and what changing it does, is documented
+here: [Filters (public contract)](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/filters.md).
 
 = Content negotiation misbehaves behind LiteSpeed cache. What can I do? =
 

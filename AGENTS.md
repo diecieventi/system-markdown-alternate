@@ -207,7 +207,9 @@ The v1 scope is done and widely exceeded. Implemented:
   the output). Both options removed on uninstall.
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
-  all pointing to the full "Filters (public contract)" list in `AGENTS.md`.
+  all pointing to the full "Filters (public contract)" list in `docs/filters.md`
+  (moved out of this file: the filter API is developer-facing documentation and
+  does not belong inside the agent guide).
 - **Custom taxonomies in the front matter** (per-taxonomy selection in the panel,
   option `sysmda_front_matter_taxonomy_slugs`, **nothing selected by default**;
   empty = front matter and cache validator byte-identical to 0.23.x): appends a
@@ -313,7 +315,7 @@ The v1 scope is done and widely exceeded. Implemented:
   - `print_alternate_link()` guards on `is_singular($types)`, which is false
     for a front page whose type isn't enabled → guard to revisit.
   - Verify conversion quality first: front pages are block-heavy.
-  - New toggle in the "Filters (public contract)" list + docs + translations;
+  - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
 - **`.wordpress-org/` is missing its screenshot files**: the four stale
@@ -992,46 +994,19 @@ running code at the WP level.
 
 ## Filters (public contract)
 
-```php
-apply_filters( 'sysmda_markdown_supported_post_types', array() );             // [] = plugin inactive until a type is selected; the result is normalized and `attachment` is always stripped (PostSupport::sanitize_types)
-apply_filters( 'sysmda_markdown_excluded_post_formats', $formats, $post );    // non-standard post formats that never expose a .md; [] = serve every format
-apply_filters( 'sysmda_markdown_robots_header', 'noindex, follow', $post );   // '' = do not send the header (sanitized before reaching header())
-apply_filters( 'sysmda_markdown_strict_406', true );                          // false = no 406, always serve the default HTML
-apply_filters( 'sysmda_markdown_canonical_url', get_permalink( $post ), $post ); // '' = do not send Link rel=canonical
-apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' ); // Cache-Control on the URLs the plugin owns (.md and /llms.txt); '' = send no header at all (WordPress's included). A freshness lifetime here makes staleness possible: no page cache purges a .md
-apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );          // 0 = cache disabled
-apply_filters( 'sysmda_markdown_cache_dependencies', array(), $post );        // extra cache-validator/ETag inputs for output the plugin cannot fingerprint (dynamic blocks, shortcodes, site filters); list of scalars, [] = none
-apply_filters( 'sysmda_markdown_prewarm', false, $post_id );                  // true = rebuild the post's Markdown cache on WP-Cron ~30 s after each save, instead of on the first request. Default false: cron has no request context (see the decision). No-op when the TTL is 0
-apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
-apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
-apply_filters( 'sysmda_markdown_preamble', '', $post );                       // block between # Title and body (subtitle/TL;DR)
-apply_filters( 'sysmda_markdown_output', $markdown, $post );
-apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
-apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
-apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
-apply_filters( 'sysmda_front_matter_enabled', true, $post );                 // false = emit no front matter at all; the document starts at `# Title` (no leading blank line). Per-site opt-out, NOT a change of default — see the decision
-apply_filters( 'sysmda_front_matter_taxonomies', ! empty( $slugs ) );        // kill switch for the nested `taxonomies:` block; default = at least one taxonomy is selected, false = never emit
-apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );        // $slugs = the selection saved in the panel (fed in at priority 5), NOT auto-detected. May narrow AND extend it (opting a non-public taxonomy in is deliberate); [] opts out. category/post_tag/post_format and invalid slugs are always stripped afterwards
-apply_filters( 'sysmda_acf_field_keys', array(), $post );                     // ACF fields appended to the source
-apply_filters( 'sysmda_acf_subtitle_key', '', $post );                       // ACF subtitle field ('' = off)
-apply_filters( 'sysmda_acf_tldr_key', '', $post );                          // ACF TL;DR field ('' = off)
-apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );              // max posts per type in /llms.txt
-apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );               // /llms.txt cache TTL (0 = off)
-apply_filters( 'sysmda_llms_txt_enriched', false );                         // true = enriched /llms.txt output
-apply_filters( 'sysmda_llms_txt_lastmod', false );                          // true = append (updated: YYYY-MM-DD) to each entry
-apply_filters( 'sysmda_llms_txt_summary', '' );                             // site summary (enriched only)
-apply_filters( 'sysmda_llms_txt_key_content', array() );                    // featured content: IDs or URLs (enriched only)
-apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );              // posts per type in the main section (enriched only)
-apply_filters( 'sysmda_llms_txt_footer', '' );                              // free-form trailing block (enriched only)
-apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );                  // case-insensitive UA substrings classified as bot (hit counter)
-apply_filters( 'sysmda_md_hits_retention_days', 90 );                       // retention of the daily .md hit buckets, in days
-```
+The full list — every filter, its default and what changing it does — lives in
+**[`docs/filters.md`](docs/filters.md)**, grouped by area (content selection,
+headers, caching, pipeline, front matter, ACF, `/llms.txt`, hit counter) with
+the default exclusion tables and runnable examples.
 
-Default exclusions:
-- Block names: `gravityforms/form`, `contact-form-7/contact-form-selector`,
-  `wpforms/form-selector`, `mailerlite/form`, `luckywp/toc`.
-- Shortcodes: `contact-form-7`, `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc`.
-- CSS classes: `no-md`, `md-exclude`, `exclude-from-markdown`.
+It is deliberately **not** duplicated here: a developer looking for the filter
+API should not have to read the agent guide to find it, and two copies of a
+contract drift. `readme.txt` (FAQ entry) and `README.md` ("Extending via
+filters") carry short examples and link to the same page.
+
+**When adding or changing a filter, update `docs/filters.md` in the same
+commit** — it is the contract, and a filter that is not documented there does
+not exist as far as the public API is concerned.
 
 ## Technical notes
 
