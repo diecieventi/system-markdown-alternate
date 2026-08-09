@@ -31,6 +31,10 @@ class Plugin {
 		// Priority 0: intercept *.md requests before the template loads.
 		add_action( 'template_redirect', array( $this->controller, 'maybe_render_markdown' ), 0 );
 
+		// Last: advertise the alternate only after canonical/access redirects have
+		// had the opportunity to end the request.
+		add_action( 'template_redirect', array( $this->controller, 'maybe_send_alternate_link_header' ), PHP_INT_MAX );
+
 		// Alternate link in the <head> of supported posts/CPTs.
 		add_action( 'wp_head', array( $this->controller, 'print_alternate_link' ) );
 

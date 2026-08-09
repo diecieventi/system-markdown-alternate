@@ -20,8 +20,8 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   the exact relation/target is not duplicated when it already exists. The same
   canonical-request predicate still owns discovery and negotiation: feeds,
   embeds, trackbacks, paged comments, post sub-pages and unsupported content do
-  not advertise it, while `.md`, negotiated Markdown and `406` responses leave
-  before the HTML-only header is sent.
+  not advertise it, while `.md`, negotiated Markdown, `406` responses and
+  canonical/access redirects leave before the late HTML-only header is sent.
 * **Simplified release packaging around one shared `.distignore`.** The local
   ZIP build and the wordpress.org deploy now stage the same files through the
   same exclusion list, instead of maintaining a second partial copy inside the

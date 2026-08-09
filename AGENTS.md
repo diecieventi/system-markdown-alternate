@@ -83,9 +83,12 @@ The v1 scope is done and widely exceeded. Implemented:
   two guards written to mirror each other did not — the old HTML-link guard
   checked only the enabled type and servability, so on an embed view (the one
   excluded variant that still runs `wp_head`) the link was advertised for a URL
-  that does not negotiate. The HTTP header is sent only after Markdown and `406`
-  have taken their exit, so it describes the canonical HTML response, never the
-  alternate itself. One predicate, not two; do not fork it again. The `.md`
+  that does not negotiate. The HTTP header is sent from a separate
+  `template_redirect` callback at `PHP_INT_MAX`, only after Markdown, `406` and
+  canonical/access redirects have taken their exit; emitting it in the
+  priority-0 controller left the field attached to a later `301`. It therefore
+  describes the canonical HTML response, never the alternate or a redirect.
+  One predicate, not two; do not fork it again. The `.md`
   suffix route sets up the loop
   (`setup_postdata` + global `$post`) before converting, because on that route the
   main query 404s and dynamic blocks/shortcodes would otherwise render against no
@@ -1098,8 +1101,10 @@ not exist as far as the public API is concerned.
    Markdown and when leaving the HTML to WP), so caches/CDNs never mix the two
    representations. When HTML wins, that same canonical request also appends a
    typed HTTP `Link: rel="alternate"` field (on both `GET` and `HEAD`) pointing
-   at `MetadataBuilder::markdown_url()`; Markdown and `406` exit before it. If
-   the Accept allows neither HTML nor Markdown, respond
+   at `MetadataBuilder::markdown_url()`. It runs in a separate
+   `template_redirect` callback at the last priority, so Markdown, `406` and
+   canonical/access redirects exit before it. If the Accept allows neither HTML
+   nor Markdown, respond
    **`406`** (`sysmda_markdown_strict_406` filter, default on; real clients always
    send `text/html` or a wildcard, never hit). The `.md` suffix ignores the
    Accept header instead (the URL itself is the explicit Markdown request).

@@ -310,7 +310,7 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * Supported canonical HTML pages now advertise their Markdown representation in
   the HTTP `Link` header as well as in the document `<head>`. The header is also
   present on `HEAD` responses, appends without replacing other link relations
-  and is not emitted on `.md`, negotiated Markdown or `406` responses.
+  and is not emitted on `.md`, negotiated Markdown, `406` or redirect responses.
 * Simplified release packaging around one shared `.distignore`: the local build
   and the wordpress.org deploy now stage the same files, and the obsolete
   `BUILD-INFO.txt` artifact is gone.

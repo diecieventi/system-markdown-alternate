@@ -102,12 +102,9 @@ class MarkdownController {
 			exit;
 		}
 
-		// Default: WordPress serves HTML. Advertise the Markdown representation
-		// in the response metadata too, including on HEAD requests where wp_head
-		// does not run and the HTML <link> is therefore unavailable.
-		if ( $queried instanceof \WP_Post ) {
-			$this->send_alternate_link_header( $queried );
-		}
+		// Default: WordPress serves HTML (Vary: Accept already sent). The alternate
+		// Link field is added by maybe_send_alternate_link_header() only after the
+		// rest of template_redirect has had a chance to redirect this request.
 	}
 
 	/**
@@ -172,6 +169,28 @@ class MarkdownController {
 			'<link rel="alternate" type="text/markdown" href="%s" />' . "\n",
 			esc_url( MetadataBuilder::markdown_url( $post ) )
 		);
+	}
+
+	/**
+	 * Hook: template_redirect (last priority). Advertises the Markdown alternate
+	 * only when the request has survived canonical and access redirects.
+	 *
+	 * maybe_render_markdown() has already served and exited for negotiated
+	 * Markdown or `406`, so reaching this callback means WordPress is going to
+	 * render HTML. Keeping the header out of the priority-0 callback matters:
+	 * core's canonical redirect runs later and does not remove headers queued by
+	 * earlier callbacks, which otherwise left this Link field attached to a 301.
+	 */
+	public function maybe_send_alternate_link_header(): void {
+		if ( ! $this->is_negotiable_request() ) {
+			return;
+		}
+
+		$post = get_queried_object();
+
+		if ( $post instanceof \WP_Post ) {
+			$this->send_alternate_link_header( $post );
+		}
 	}
 
 	/**
@@ -483,10 +502,11 @@ class MarkdownController {
 	/**
 	 * Advertises the Markdown alternate on the canonical HTML response.
 	 *
-	 * This deliberately runs only after negotiation has selected HTML: the
-	 * dedicated `.md` route, negotiated Markdown and `406` all leave earlier.
-	 * `false` appends the field rather than replacing a Link header emitted by
-	 * WordPress, a theme or another plugin.
+	 * This deliberately runs only after negotiation has selected HTML and later
+	 * redirect callbacks have returned: the dedicated `.md` route, negotiated
+	 * Markdown, `406` and redirects all leave earlier. `false` appends the field
+	 * rather than replacing a Link header emitted by WordPress, a theme or
+	 * another plugin.
 	 */
 	private function send_alternate_link_header( \WP_Post $post ): void {
 		if ( headers_sent() ) {
