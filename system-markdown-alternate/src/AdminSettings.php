@@ -45,6 +45,9 @@ class AdminSettings {
 	/** @var string Settings page hook (used to load assets only on that page). */
 	private $hook = '';
 
+	/** @var bool Whether this request still owes the cache salt a bump. */
+	private $salt_bump_pending = false;
+
 	public function boot(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -79,6 +82,38 @@ class AdminSettings {
 		add_action( 'profile_update', array( $this, 'maybe_bump_for_author' ), 10, 2 );
 		add_action( 'deleted_user', array( $this, 'bump_cache_salt' ) );
 
+		// The site timezone formats `date_published` and `date_modified`: both
+		// are printed with get_post_time()/get_post_modified_time() in LOCAL
+		// time, so their ISO offset — and the wall-clock reading itself —
+		// changes across the whole site the moment Settings => General is
+		// saved, with no post row touched.
+		add_action( 'update_option_timezone_string', array( $this, 'bump_cache_salt' ) );
+		add_action( 'update_option_gmt_offset', array( $this, 'bump_cache_salt' ) );
+
+		// `categories:` and `tags:` are ALWAYS emitted, and unlike the optional
+		// custom taxonomies they are excluded from taxonomies_fingerprint() —
+		// they have their own front-matter keys. Renaming or deleting a term
+		// therefore rewrote the front matter of every post carrying it while
+		// cache_version() stayed put, so a client holding the old ETag was told
+		// `304` for good. Term edits are rare, so the site-wide salt shape is
+		// the right one here: reading the terms of every post on every request
+		// would make dependencies_fingerprint() non-empty site-wide, which
+		// invalidates everything on upgrade AND permanently disables the
+		// `If-Modified-Since` path.
+		//
+		// Deliberately NOT hooked: `set_object_terms`, which fires on every
+		// single post save. Assigning terms from the editor already moves
+		// `post_modified_gmt`; the residue is a purely programmatic
+		// wp_set_object_terms() that touches no post row — the same bounded
+		// residue already accepted for post formats, and not worth a hook on
+		// the write path of every save.
+		add_action( 'edited_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
+		add_action( 'delete_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
+
+		// The write itself happens once, at the very end of the request: see
+		// flush_cache_salt().
+		add_action( 'shutdown', array( $this, 'flush_cache_salt' ) );
+
 		// After init, so taxonomies registered by themes/plugins are all visible.
 		add_action( 'wp_loaded', array( $this, 'maybe_migrate_legacy_taxonomies' ) );
 
@@ -106,20 +141,68 @@ class AdminSettings {
 	}
 
 	/**
-	 * Bumps the cache salt unconditionally: every cached Markdown body is
+	 * Marks the cache salt as needing a bump: every cached Markdown body is
 	 * rebuilt on the next request and every `ETag` changes once.
 	 *
 	 * Hooked directly to the site-wide changes listed in boot(); the option
-	 * handler above filters first and then calls this.
+	 * handler above filters first and then calls this. Recording the intent
+	 * rather than writing straight away is what makes a settings save safe —
+	 * see flush_cache_salt().
 	 */
 	public function bump_cache_salt(): void {
-		static $bumped = false;
-		if ( $bumped ) {
-			return; // Only one bump per request, even when several triggers fire.
-		}
-		$bumped = true;
+		$this->salt_bump_pending = true;
+	}
 
-		update_option( 'sysmda_cache_salt', (string) time() );
+	/**
+	 * Hook: shutdown. Performs the pending bump, once, after everything else
+	 * this request was going to write.
+	 *
+	 * Deferring is the point, and it is the same argument that already keeps
+	 * the triggers in boot() on post-write hooks, applied one level up. A
+	 * Settings API save writes the group's options one at a time, and the first
+	 * changed `sysmda_*` option used to bump the salt immediately: a front-end
+	 * request landing between that write and the last one would build its
+	 * Markdown from a half-old set of settings and cache it under the NEW salt,
+	 * where nothing would ever invalidate it again. Bumping at shutdown means
+	 * such a request caches under the old salt instead, and the bump that
+	 * follows throws it away.
+	 *
+	 * The value is a timestamp plus random bytes, not a bare `time()`. Two
+	 * genuine invalidations inside the same second used to produce the same
+	 * string, and `update_option()` short-circuits on an unchanged value: the
+	 * second one silently did nothing, leaving stale bodies and ETags valid.
+	 * The leading timestamp is not decoration either — MarkdownController reads
+	 * it to decide whether `post_modified_gmt` is still a trustworthy
+	 * validator, so keep the `<unix ts>-<random>` shape.
+	 */
+	public function flush_cache_salt(): void {
+		if ( ! $this->salt_bump_pending ) {
+			return;
+		}
+
+		$this->salt_bump_pending = false;
+
+		update_option( 'sysmda_cache_salt', time() . '-' . bin2hex( random_bytes( 4 ) ) );
+	}
+
+	/**
+	 * Hook: edited_term / delete_term. Bumps the salt when a term of a taxonomy
+	 * printed in the front matter changes name or disappears.
+	 *
+	 * Limited to `category` and `post_tag` on purpose: those two are always
+	 * emitted, under their own `categories:`/`tags:` keys, and are the ones
+	 * MetadataBuilder::taxonomies_fingerprint() explicitly leaves out. The
+	 * optional custom taxonomies need no hook — that fingerprint hashes their
+	 * term NAMES, so a rename already moves the validator by itself.
+	 *
+	 * @param int    $term_id  Term being edited or deleted (unused).
+	 * @param int    $tt_id    Term taxonomy ID (unused).
+	 * @param string $taxonomy Taxonomy the term belongs to.
+	 */
+	public function maybe_bump_for_term( $term_id, $tt_id, $taxonomy ): void {
+		if ( in_array( $taxonomy, array( 'category', 'post_tag' ), true ) ) {
+			$this->bump_cache_salt();
+		}
 	}
 
 	/**

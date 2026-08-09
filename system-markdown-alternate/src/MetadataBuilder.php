@@ -327,10 +327,15 @@ class MetadataBuilder {
 
 		$thumb_id = (int) get_post_thumbnail_id( $post );
 		if ( $thumb_id > 0 ) {
-			$thumb   = get_post( $thumb_id );
+			$thumb = get_post( $thumb_id );
+			// `_wp_attached_file` is in there because what the front matter
+			// prints is the resolved URL, not the ID: a plugin that swaps the
+			// file behind an existing attachment rewrites `featured_image`
+			// while leaving the attachment's own row, and its alt text, alone.
 			$parts[] = 'thumb:' . $thumb_id
 				. ':' . ( $thumb instanceof \WP_Post ? (string) $thumb->post_modified_gmt : '' )
-				. ':' . (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true );
+				. ':' . (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true )
+				. ':' . (string) get_post_meta( $thumb_id, '_wp_attached_file', true );
 		}
 
 		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );

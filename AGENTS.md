@@ -1069,17 +1069,48 @@ not exist as far as the public API is concerned.
    exactly what a `304` exists to avoid. Keep new inputs to values already in
    memory or cheap to read, and never do I/O there; `docs/filters.md` states
    the same rule for filter authors.
-   **Not every input belongs in the hash, though** (0.28.0): three of them are
+   **Not every input belongs in the hash, though** (0.28.0): some are
    *site-wide* — the author's display name (`author:`), the permalink structure
-   and the home URL (`url:`, `markdown_url:`, every absolute link in the body).
+   and the home URL (`url:`, `markdown_url:`, every absolute link in the body),
+   the site timezone (`date_published`/`date_modified` are printed in **local**
+   time, so their offset and wall-clock reading move with it), and the terms of
+   `category`/`post_tag` (always emitted under their own keys, and therefore
+   the two taxonomies `taxonomies_fingerprint()` excludes — the *optional*
+   custom taxonomies need no hook, that fingerprint hashes their term names).
    Reading them per request would make both fingerprints non-empty for every
    post, which invalidates the whole site on upgrade **and** permanently
    disables the `If-Modified-Since` path. They are rare, one-off events, so
    `AdminSettings` bumps the global salt instead
-   (`update_option_permalink_structure`, `update_option_home`, `profile_update`
+   (`update_option_permalink_structure`, `update_option_home`,
+   `update_option_timezone_string`, `update_option_gmt_offset`, `profile_update`
    guarded on an actual display-name change, `deleted_user` for the silent
-   reassignment `wp_delete_user()` performs with a direct DB write). Prefer that
-   shape for anything else that is site-wide and rare.
+   reassignment `wp_delete_user()` performs with a direct DB write,
+   `edited_term`/`delete_term` guarded on the two taxonomies above). Prefer that
+   shape for anything else that is site-wide and rare. Deliberately **not**
+   hooked: `set_object_terms`, which fires on every post save — assigning terms
+   from the editor already moves `post_modified_gmt`, and the residue (a purely
+   programmatic `wp_set_object_terms()` touching no post row) is the same
+   bounded one already accepted for post formats.
+   **Two rules the salt carries, both load-bearing:**
+   - **It is written once, at `shutdown`** (`flush_cache_salt()`; the triggers
+     only mark it pending). A Settings API save writes the group's options one
+     at a time, and bumping on the first changed one let a concurrent front-end
+     request cache half-old output *under the new salt*, where nothing would
+     invalidate it again. Same argument that already keeps the triggers on
+     post-write hooks, one level up.
+   - **Its value is `<unix ts>-<random>`, never a bare `time()`.** Two genuine
+     invalidations in the same second produced the same string, and
+     `update_option()` short-circuits on an unchanged value, so the second
+     silently did nothing. The leading timestamp is read by
+     `MarkdownController::salt_changed_at()`, so keep the shape.
+   **Corollary in `date_is_strong_validator()`** (0.36.0): the date is refused
+   as a validator not only when either fingerprint is non-empty, but also once
+   **the salt is newer than `post_modified_gmt`**. A client sending only
+   `If-Modified-Since` presents no ETag, so every site-wide bump above would
+   otherwise keep answering `304` with a body the salt had already invalidated,
+   for every post older than the change. It becomes usable again for a post the
+   next time that post is saved — which is exactly when the date starts telling
+   the truth again.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)

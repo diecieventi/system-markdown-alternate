@@ -687,10 +687,39 @@ class MarkdownController {
 	 * dependencies into the ETag alone would still answer `304` with a stale
 	 * body after a synced pattern, featured image, description or ACF change.
 	 * Every input added to cache_version() must be reflected here too.
+	 *
+	 * The salt is the third input, and the one the two fingerprints cannot
+	 * describe: it moves for site-wide reasons that belong to no post at all —
+	 * a settings save, the permalink structure, the home URL, the site
+	 * timezone, an author rename, a category or tag rename. Each of those
+	 * rewrites the output of posts whose `post_modified_gmt` has not moved, so
+	 * once the salt is newer than the post, the date has stopped knowing about
+	 * every input and may not answer `304` on its own. It becomes usable again
+	 * for that post the next time the post itself is saved, which is exactly
+	 * when the date starts telling the truth again.
 	 */
 	private function date_is_strong_validator( \WP_Post $post ): bool {
-		return '' === MetadataBuilder::taxonomies_fingerprint( $post )
-			&& '' === MetadataBuilder::dependencies_fingerprint( $post );
+		if ( '' !== MetadataBuilder::taxonomies_fingerprint( $post )
+			|| '' !== MetadataBuilder::dependencies_fingerprint( $post ) ) {
+			return false;
+		}
+
+		$modified = $this->last_modified_timestamp( $post );
+
+		return $modified > 0 && self::salt_changed_at() <= $modified;
+	}
+
+	/**
+	 * When the cache salt last changed, as a Unix timestamp (0 when never).
+	 *
+	 * AdminSettings writes the salt as `<unix ts>-<random>`; the cast reads the
+	 * leading integer and returns 0 for the `'0'` default, so a site that has
+	 * never invalidated anything keeps the `If-Modified-Since` path fully
+	 * available. Salts written before that shape existed were a bare `time()`
+	 * and parse identically.
+	 */
+	private static function salt_changed_at(): int {
+		return (int) get_option( 'sysmda_cache_salt', '0' );
 	}
 
 	/**

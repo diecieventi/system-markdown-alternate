@@ -1220,12 +1220,25 @@ $GLOBALS['sysmda_test_posts'][77] = new WP_Post(
 );
 $GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'Before';
 
+$GLOBALS['sysmda_test_meta'][77]['_wp_attached_file']        = '2026/06/before.jpg';
+
 $sysmda_img_before = $sysmda_cv( $sysmda_img_post );
 $GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'After';
 check(
 	'cache_version: featured-image alt change moves the ETag',
 	true,
 	$sysmda_img_before !== $sysmda_cv( $sysmda_img_post )
+);
+
+// What the front matter prints is the resolved URL, not the attachment ID, so a
+// plugin swapping the file behind an existing attachment rewrites
+// `featured_image` while leaving the attachment row and its alt text alone.
+$sysmda_img_file_before                               = $sysmda_cv( $sysmda_img_post );
+$GLOBALS['sysmda_test_meta'][77]['_wp_attached_file'] = '2026/06/after.jpg';
+check(
+	'cache_version: replacing the attached file moves the ETag',
+	true,
+	$sysmda_img_file_before !== $sysmda_cv( $sysmda_img_post )
 );
 
 // The description comes from post meta, which update_post_meta() writes without
@@ -1340,11 +1353,37 @@ check(
 	$sysmda_ims( $sysmda_cv_post, $sysmda_dep_since )
 );
 
+// The third input the two fingerprints cannot describe: the salt. It moves for
+// reasons that belong to no post — a settings save, the permalink structure,
+// the home URL, the site timezone, an author rename, a category or tag rename —
+// and each of those rewrites the output of posts whose post_modified_gmt has
+// not moved. A client sending only If-Modified-Since presents no ETag, so
+// without this the date answered 304 with a body the salt had already
+// invalidated, for every post older than the change.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS ignored once the salt is newer than the post',
+	false,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+check( 'conditional: no stale 304 after a salt bump', array(), $GLOBALS['sysmda_test_status'] );
+
+// A salt older than the post's own modification date says nothing about it: the
+// post has been rebuilt since, so the date is trustworthy again. This is what
+// keeps a single settings save from disabling the IMS path for good.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-06-01 00:00:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS honoured again once the post is newer than the salt',
+	true,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
 $GLOBALS['sysmda_test_taxonomies'] = array();
 $GLOBALS['sysmda_test_status'] = array();
 unset( $GLOBALS['sysmda_test_terms'][60], $GLOBALS['sysmda_test_terms'][61] );
+unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] );
 
 // ─── LlmsTxtController: line escaping ─────────────────────────────────
 
@@ -1714,41 +1753,90 @@ check(
 // nothing moves `post_modified_gmt` when they change: without a salt bump a
 // client holding the old ETag is told `304` for good — staleness no TTL bounds.
 //
-// Order matters here. bump_cache_salt() deliberately bumps at most once per
-// request, so every "must NOT bump" case has to run before the first real bump.
+// The bump is recorded by bump_cache_salt() and written by flush_cache_salt()
+// on `shutdown`, so "did it bump" is always asked after an explicit flush: a
+// settings save writes its options one at a time, and a salt written before the
+// last of them lets a concurrent front-end request cache half-old output under
+// the final salt, where nothing would ever invalidate it.
 
+$sysmda_now                                          = time();
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 $GLOBALS['sysmda_test_users'][7]                     = (object) array( 'display_name' => 'Jamie Rivers' );
 
 // A profile save that leaves the display name alone: the output cannot change,
 // and on a store with customer accounts this fires constantly.
 $sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: unchanged display name does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // Hooks that pass no user object at all (or an unknown user) must be inert too.
 $sysmda_admin->maybe_bump_for_author( 7, null );
 $sysmda_admin->maybe_bump_for_author( 999, (object) array( 'display_name' => 'Ghost' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: a profile update without usable data does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // Options that are not ours, and the two of ours that must never bump.
 $sysmda_admin->maybe_bump_cache_salt( 'blogname' );
 $sysmda_admin->maybe_bump_cache_salt( 'sysmda_cache_salt' );
 $sysmda_admin->maybe_bump_cache_salt( HitCounter::OPTION );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: unrelated and excluded options do not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Terms of a taxonomy that is NOT printed under its own front-matter key: the
+// optional custom taxonomies are hashed by name in taxonomies_fingerprint(), so
+// a rename already moves the validator and a salt bump would flush the whole
+// site for nothing.
+$sysmda_admin->maybe_bump_for_term( 11, 11, 'genre' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: a custom-taxonomy term edit does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // The rename itself: the author line of every post by that user changes.
 $GLOBALS['sysmda_test_users'][7]->display_name = 'Jamie R.';
 $sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: a display-name change bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// `categories:`/`tags:` are always emitted and are the two taxonomies
+// taxonomies_fingerprint() leaves out, so a term rename or deletion reaches the
+// validator through the salt or not at all.
+foreach ( array( 'category', 'post_tag' ) as $sysmda_tax ) {
+	$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+	$sysmda_admin->maybe_bump_for_term( 5, 5, $sysmda_tax );
+	$sysmda_admin->flush_cache_salt();
+	check( "salt: a {$sysmda_tax} term edit bumps the salt", true, '0' !== get_option( 'sysmda_cache_salt' ) );
+}
 
 // One bump per request, whatever else fires afterwards (a settings save can
 // write a dozen options; each would otherwise reissue every ETag again).
+$sysmda_admin->flush_cache_salt();
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = 'already-bumped';
-$sysmda_admin->bump_cache_salt();
-$sysmda_admin->maybe_bump_cache_salt( AdminSettings::OPTION_TAXONOMIES );
-check( 'salt: only one bump per request', 'already-bumped', get_option( 'sysmda_cache_salt' ) );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: nothing is written without a pending bump', 'already-bumped', get_option( 'sysmda_cache_salt' ) );
 
-unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'], $GLOBALS['sysmda_test_users'][7] );
+// Two invalidations in the same second must still produce different salts. A
+// bare `time()` did not: update_option() short-circuits on an unchanged value,
+// so the second bump silently left stale bodies and ETags valid.
+$sysmda_admin->bump_cache_salt();
+$sysmda_admin->flush_cache_salt();
+$sysmda_salt_a = get_option( 'sysmda_cache_salt' );
+$sysmda_admin->bump_cache_salt();
+$sysmda_admin->flush_cache_salt();
+check( 'salt: two bumps in the same second differ', true, $sysmda_salt_a !== get_option( 'sysmda_cache_salt' ) );
+
+// The leading field stays a Unix timestamp: MarkdownController reads it to
+// decide whether `post_modified_gmt` is still a trustworthy validator.
+check(
+	'salt: the value starts with a Unix timestamp',
+	true,
+	(int) get_option( 'sysmda_cache_salt' ) >= $sysmda_now - 60
+);
+
+unset(
+	$GLOBALS['sysmda_test_options']['sysmda_cache_salt'],
+	$GLOBALS['sysmda_test_users'][7],
+	$sysmda_tax,
+	$sysmda_salt_a
+);
 
 // ─── ContentRenderer::process_dom (DOM pipeline) ──────────────────────────────
 
