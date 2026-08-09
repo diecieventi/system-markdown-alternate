@@ -570,8 +570,10 @@ class AdminSettings {
 	 * The survival rule matters: a saved type whose plugin is temporarily
 	 * inactive would otherwise be dropped by the next save of this page, silently
 	 * turning the `.md` endpoint off for it when the plugin comes back. Same
-	 * reasoning as sanitize_taxonomy_slugs(); the emission path validates the
-	 * type again, so an unknown one is inert.
+	 * reasoning as sanitize_taxonomy_slugs(). The slug survives here and is
+	 * inert at runtime until the type is registered publicly again:
+	 * PostSupport::type_is_public() enforces that, and until 0.36.0 nothing
+	 * did — this comment claimed a validation that was not happening.
 	 *
 	 * @param mixed $value
 	 * @return string[]

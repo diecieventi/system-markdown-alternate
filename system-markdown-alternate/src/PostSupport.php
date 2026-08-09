@@ -105,6 +105,7 @@ class PostSupport {
 	 */
 	public static function is_servable( \WP_Post $post ): bool {
 		$servable = in_array( $post->post_type, self::supported_post_types(), true )
+			&& self::type_is_public( $post->post_type )
 			&& 'publish' === $post->post_status
 			&& '' === (string) $post->post_password
 			&& ! self::has_excluded_post_format( $post );
@@ -138,6 +139,35 @@ class PostSupport {
 		 * values already in memory or cheap to read, and never do I/O here.
 		 */
 		return (bool) apply_filters( 'sysmda_post_is_servable', true, $post );
+	}
+
+	/**
+	 * Whether the post type is currently registered as public.
+	 *
+	 * The saved option deliberately KEEPS a slug whose provider is temporarily
+	 * inactive, so that deactivating a plugin for an afternoon does not silently
+	 * turn the `.md` endpoint off for its content when it comes back. That
+	 * survival rule was written alongside a comment promising "the emission path
+	 * validates the type again" — and nothing did: `sanitize_types()` only
+	 * checks string shape, duplicates and `attachment`, and never looked at the
+	 * registered `WP_Post_Type` at all. A type re-registered as
+	 * `public => false`, or replaced by an internal one of the same name, stayed
+	 * fully servable: `/llms.txt` kept advertising it, and the shortcodes and
+	 * dynamic tag kept emitting its URLs.
+	 *
+	 * So the saved slug survives in the settings and is inert at runtime until
+	 * the type registered under it satisfies the same policy the panel applies
+	 * when it offers the choice (`get_post_types( array( 'public' => true ) )`).
+	 * An unregistered type has no object and is not servable either.
+	 *
+	 * Serving a deliberately non-public type is still possible, but it has to be
+	 * asked for: that is what `sysmda_markdown_supported_post_types` is, and a
+	 * stale saved option is not a request.
+	 */
+	private static function type_is_public( string $type ): bool {
+		$object = get_post_type_object( $type );
+
+		return is_object( $object ) && ! empty( $object->public );
 	}
 
 	/**

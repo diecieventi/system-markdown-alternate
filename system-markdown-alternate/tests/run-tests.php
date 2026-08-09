@@ -45,6 +45,7 @@ $GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return va
 $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
 $GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
 $GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is authenticated
+$GLOBALS['sysmda_test_post_types']  = array(); // post type => registered object (overrides the public default)
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -74,6 +75,21 @@ function update_option( $name, $value ) {
 	$GLOBALS['sysmda_test_options'][ $name ] = $value;
 
 	return true;
+}
+
+/**
+ * Stub: the registered post type. Types are public unless a test registers them
+ * otherwise, which is what an inactive-then-changed provider looks like.
+ */
+function get_post_type_object( $type ) {
+	if ( array_key_exists( $type, $GLOBALS['sysmda_test_post_types'] ) ) {
+		return $GLOBALS['sysmda_test_post_types'][ $type ];
+	}
+
+	return (object) array(
+		'name'   => $type,
+		'public' => true,
+	);
 }
 
 /**
@@ -2078,6 +2094,28 @@ $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array
 check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
 check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
+
+// The saved option deliberately keeps a slug whose provider is temporarily
+// inactive, so an afternoon of deactivation does not silently turn the endpoint
+// off. That survival rule shipped with a comment promising "the emission path
+// validates the type again" — and nothing did, so a type re-registered as
+// public => false, or replaced by an internal one of the same name, stayed
+// fully servable and /llms.txt kept advertising it.
+$GLOBALS['sysmda_test_post_types']['post'] = (object) array(
+	'name'               => 'post',
+	'public'             => false,
+	'publicly_queryable' => false,
+);
+check( 'servable: a type that is no longer public is inert', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+
+// Unregistered entirely (the provider is simply gone): no object, not servable.
+$GLOBALS['sysmda_test_post_types']['post'] = null;
+check( 'servable: an unregistered type is inert', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+
+// …and the slug is still in the option, so the endpoint comes back by itself
+// once the type is registered publicly again. Nothing was lost from settings.
+unset( $GLOBALS['sysmda_test_post_types']['post'] );
+check( 'servable: it comes back when the type is public again', true, PostSupport::is_servable( $sysmda_mk_post() ) );
 
 // A membership or paywall plugin protects a PUBLISHED post from a later
 // template_redirect callback or a the_content filter, and neither reaches this
