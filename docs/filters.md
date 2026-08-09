@@ -66,6 +66,10 @@ apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' );
 `Cache-Control` on the URLs the plugin owns (the `.md` endpoint and
 `/llms.txt`). `''` sends no header at all, WordPress's own included.
 
+It does **not** apply to Markdown negotiated on the canonical permalink: that
+representation shares its URL with the HTML page, so it is always sent
+non-cacheable and this filter is not consulted there.
+
 > **Setting a freshness lifetime here (`s-maxage`, `max-age`) makes stale
 > Markdown possible**: no page cache purges a `.md` when the post is saved,
 > because cache plugins purge the permalink and have no idea `permalink.md`
@@ -213,9 +217,16 @@ body at all. The filters they read are reached with them:
 | `sysmda_acf_subtitle_key` | same |
 | `sysmda_acf_tldr_key` | same |
 
-The header filters — `sysmda_markdown_robots_header`,
-`sysmda_markdown_canonical_url`, `sysmda_cache_control` — are reached on the
-responses they apply to, `304`s included.
+The header filters are not alike, and the difference is the `304`:
+
+- `sysmda_markdown_robots_header` and `sysmda_markdown_canonical_url` are
+  applied in `send_headers()`, on the `200` path only. A `304` sends `ETag` and
+  `Last-Modified` and nothing filtered, so neither is reached.
+- `sysmda_cache_control` is sent before the body on the `.md` route, so the
+  conditional `304` carries the same policy as the `200` and the filter is
+  reached by both. The negotiated permalink does not use it at all: that route
+  sends a fixed no-cache set instead, because the Markdown variant shares its
+  URL with the HTML page.
 
 As with the cleaning filters, **this is membership, not a schedule**: which of
 these a given request reaches depends on the route, on whether the body is
