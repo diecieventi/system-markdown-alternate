@@ -103,31 +103,13 @@ get cached. No-op when the TTL is `0`.
 
 ## The conversion pipeline
 
-Listed in the order they run **for the post body**. The exclusion filters are
-consulted inside `ContentRenderer::render()`, between the source-content and
-rendered-HTML hooks — not, as a flat list might suggest, after the final
-output. Attach a transformation to the stage that still has the shape you need.
+Two kinds of hook live here, and treating them alike is the mistake this
+section exists to prevent: four run once, in a known order; three run wherever
+content is cleaned, an unbounded number of times.
 
-### When the exclusion filters actually run
+### The document hooks, in order
 
-They are not called a fixed number of times per request: it depends on whether
-the body is block-based and on whether a preamble renders HTML of its own.
-
-| Filter | Body | Preamble fragment |
-|--------|------|-------------------|
-| `sysmda_markdown_excluded_shortcodes` | always, once | once per fragment |
-| `sysmda_markdown_excluded_block_names` | only when the post has blocks | never |
-| `sysmda_markdown_excluded_classes` | once in the DOM pass, plus once more when the post has blocks | once per fragment |
-
-So `sysmda_markdown_excluded_classes` runs twice for a block-based post, once
-for classic content, and once more for each rendered fragment. It is also
-skipped entirely when the HTML is empty or fails to parse, because
-`process_dom()` returns before reaching it.
-
-**Write these filters as pure functions of their input.** Returning a different
-list depending on when the filter is called produces output where one pass
-disagrees with another — the reason to state the call sites rather than a
-count.
+These four run **once per document build**, in this order.
 
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
@@ -136,32 +118,11 @@ Raw source content, before any rendering. This is where the ACF integration
 appends its fields.
 
 ```php
-apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
-```
-Shortcodes stripped from the raw source, block content included. Runs first,
-so an excluded shortcode never reaches the renderer.
-
-```php
-apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
-```
-Gutenberg blocks dropped while the block tree is cleaned, before
-`render_block()` is called on what remains. Classic (non-block) content never
-reaches this filter.
-
-```php
-apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
-```
-CSS classes whose elements are dropped. Applied against each block's
-`className` attribute during block cleaning, and again during the DOM pass over
-the rendered HTML — the latter is what catches nested elements a block
-attribute cannot describe. See [the table above](#when-the-exclusion-filters-actually-run)
-for how many times it runs.
-
-```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 ```
-Cleaned HTML, after block rendering, exclusions, code-block normalization and
-URL absolutization — the last point before the Markdown conversion.
+Cleaned HTML — after shortcode stripping, block cleaning, block rendering,
+code-block normalization and URL absolutization. The last point before the
+Markdown conversion.
 
 ```php
 apply_filters( 'sysmda_markdown_preamble', '', $post );
@@ -170,25 +131,62 @@ Markdown inserted between the `# Title` heading and the body. This is what the
 ACF integration uses for subtitle and TL;DR.
 
 <a id="the-preamble-re-entry"></a>
-**The preamble re-enters the pipeline.** A callback that turns HTML into
-Markdown here has to clean that HTML too, and the plugin exposes
-`ContentRenderer::render_fragment()` for exactly that. It strips shortcodes and
-runs the DOM pass, so `sysmda_markdown_excluded_shortcodes` and
-`sysmda_markdown_excluded_classes` fire **again, after
-`sysmda_markdown_rendered_html` has already run**. It does not parse blocks, so
-`sysmda_markdown_excluded_block_names` is not consulted for a fragment.
+**A preamble that renders HTML re-enters the cleaning path.** A callback here
+that turns HTML into Markdown has to clean that HTML too, and
+`ContentRenderer::render_fragment()` exists for exactly that. It strips
+shortcodes and runs the DOM pass, so two of the cleaning filters below fire
+again — after `sysmda_markdown_rendered_html` has already run. It does not
+parse blocks.
 
-In the bundled ACF integration this happens only on the TL;DR path (a WYSIWYG
-field, so it carries markup), and only when the field is configured and
-non-empty. The subtitle goes through `wp_strip_all_tags()` and never re-enters.
+In the bundled ACF integration this is the TL;DR path only (a WYSIWYG field, so
+it carries markup) and only when the field is configured and non-empty; the
+subtitle goes through `wp_strip_all_tags()` and never re-enters.
 
 ```php
 apply_filters( 'sysmda_markdown_output', $markdown, $post );
 ```
-The final Markdown document, front matter included. Last hook in the pipeline.
+The final Markdown document, front matter included. Last hook of the build.
 
-See [Default exclusions](#default-exclusions) for the values the three
-exclusion filters receive.
+### The cleaning filters, which are not points in that sequence
+
+```php
+apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
+apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
+apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+```
+
+Shortcodes, Gutenberg blocks and CSS classes dropped from the output. See
+[Default exclusions](#default-exclusions) for the values they receive.
+
+These are **not** stages of the ordered sequence above. They are consulted
+wherever the plugin cleans content, which is more places than the body
+conversion — including one that runs *before* `sysmda_markdown_source_content`,
+and one on a different endpoint entirely. Known call sites:
+
+| Filter | Called from |
+|--------|-------------|
+| `sysmda_markdown_excluded_shortcodes` | the post body; each rendered preamble fragment; each expanded synced pattern (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt` in enriched mode, **once per listed post** |
+| `sysmda_markdown_excluded_block_names` | block cleaning — only when the post has blocks |
+| `sysmda_markdown_excluded_classes` | block cleaning (blocks only); every DOM pass, body and fragments alike, unless the HTML is empty or fails to parse |
+
+**Treat that column as illustrative, not as a contract.** It spans four classes
+and two endpoints, and it has been wrong every time it was written down as a
+count. A new call site can appear in any release without notice.
+
+What is guaranteed instead is the shape of the callback. Write these filters as
+**pure, cheap functions of their input**: same list every time, no accumulated
+state, no counting of invocations, no side effects, no expensive work. A
+callback that assumes it runs once per request will be wrong on a post with
+synced patterns, and a callback that is slow will be multiplied by every entry
+in an enriched `/llms.txt`.
+
+### None of them run on a cache hit
+
+`MarkdownController::get_markdown()` returns the stored document before
+`build_markdown()` is reached, so a request served from cache fires none of
+the hooks in this section — document hooks and cleaning filters alike. With the
+default TTL that is the common case. Anything that must happen on every request
+belongs in the header filters or outside the plugin, not here.
 
 ## Front matter
 
