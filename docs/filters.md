@@ -92,6 +92,12 @@ that can change the emitted Markdown without touching `post_modified_gmt` has
 to be declared here, or a client holding the old validator keeps getting `304`
 with stale content.
 
+⚠️ **It runs on every request, including `304`s** — it feeds the `ETag`, which
+is computed before the cache is consulted. Declare a value you already have or
+one that is cheap to read; a remote call or a heavy query here is paid even on
+responses that send no body. See
+[Filters on the every-request path](#filters-on-the-every-request-path).
+
 ```php
 apply_filters( 'sysmda_markdown_prewarm', false, $post_id );
 ```
@@ -185,8 +191,37 @@ in an enriched `/llms.txt`.
 `MarkdownController::get_markdown()` returns the stored document before
 `build_markdown()` is reached, so a request served from cache fires none of
 the hooks in this section — document hooks and cleaning filters alike. With the
-default TTL that is the common case. Anything that must happen on every request
-belongs in the header filters or outside the plugin, not here.
+default TTL that is the common case.
+
+**Do not read that as "filters only run when the document is rebuilt."** Six
+others run on the opposite schedule — see below.
+
+## Filters on the every-request path
+
+`cache_version()` produces the `ETag`, so it runs **before** the cache lookup
+and before any header is sent: on cache hits, and on `304 Not Modified`
+responses that return no body at all. Everything it reads runs with it.
+
+| Filter | Reached through |
+|--------|-----------------|
+| `sysmda_front_matter_taxonomy_slugs` | `taxonomies_fingerprint()` → `taxonomy_terms()` |
+| `sysmda_front_matter_taxonomies` | same |
+| `sysmda_acf_field_keys` | `dependencies_fingerprint()` → `acf_dependencies()` |
+| `sysmda_acf_subtitle_key` | same |
+| `sysmda_acf_tldr_key` | same |
+| `sysmda_markdown_cache_dependencies` | `dependencies_fingerprint()` |
+
+`sysmda_markdown_cache_ttl` is also applied more than once per request
+(`cache_enabled()` and `get_markdown()`), and the header filters —
+`sysmda_markdown_robots_header`, `sysmda_markdown_canonical_url`,
+`sysmda_cache_control` — run on every response they apply to.
+
+**Keep these cheap, and never do I/O in them.** A `304` exists to cost almost
+nothing; an HTTP call or a heavy query in one of these filters is paid on every
+request, including the ones that send no body. This matters most for
+`sysmda_markdown_cache_dependencies`, whose whole purpose is to describe
+out-of-post data: declare a value you already have, or a cheap one — do not
+fetch it here.
 
 ## Front matter
 
@@ -227,6 +262,12 @@ apply_filters( 'sysmda_acf_tldr_key', '', $post );
 ```
 ACF field names for the subtitle and the TL;DR. `''` disables each one. Both are
 also configurable from the settings panel when ACF is active.
+
+All three are applied twice for different reasons: once where they are used,
+and once inside the cache validator, so a change to an ACF field moves the
+`ETag`. The second one is on the
+[every-request path](#filters-on-the-every-request-path) — return a field name,
+not the result of looking one up.
 
 ## `/llms.txt`
 
