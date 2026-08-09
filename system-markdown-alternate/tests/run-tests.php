@@ -2825,14 +2825,20 @@ $sysmda_stable_hooks = array(
 );
 
 /**
- * Every apply_filters() call in src/, as hook => highest `accepted_args` seen.
+ * Every apply_filters() call in src/, as hook => list of per-call-site
+ * `accepted_args`.
  *
- * Counted as the depth-0 commas following the tag, so the result is the number
- * of arguments a callback receives — the tag itself is not one of them. Nested
- * calls and array literals in an argument do not inflate it. Good enough for a
- * source guard, and it never has to parse PHP it did not write.
+ * Every call site is kept, not the highest: five hooks are applied from two
+ * places, and a callback registered once fires at all of them. Collapsing them
+ * to the maximum would let a complete call site mask one that dropped `$post`,
+ * which is precisely the regression these checks exist to catch.
  *
- * @return array<string,int>
+ * Counted as the depth-0 commas following the tag, so each number is what a
+ * callback receives — the tag itself is not one of them. Nested calls and array
+ * literals in an argument do not inflate it. Good enough for a source guard,
+ * and it never has to parse PHP it did not write.
+ *
+ * @return array<string,int[]>
  */
 function sysmda_applied_filters(): array {
 	$found = array();
@@ -2868,9 +2874,7 @@ function sysmda_applied_filters(): array {
 				}
 			}
 
-			if ( ! isset( $found[ $hook ] ) || $args > $found[ $hook ] ) {
-				$found[ $hook ] = $args;
-			}
+			$found[ $hook ][] = $args;
 		}
 	}
 
@@ -2888,11 +2892,13 @@ foreach ( $sysmda_stable_hooks as $sysmda_hook => $sysmda_arity ) {
 
 	if ( isset( $sysmda_applied[ $sysmda_hook ] ) ) {
 		// Dropping a documented parameter is breaking too: callbacks registered
-		// with the documented accepted_args would start receiving null.
+		// with the documented accepted_args would start receiving null. Checked
+		// against the WEAKEST call site, since one callback serves them all —
+		// the documented arity has to hold everywhere, not on average.
 		check(
-			"filter contract: Stable hook {$sysmda_hook} still passes {$sysmda_arity} argument(s)",
+			"filter contract: every call site of {$sysmda_hook} passes {$sysmda_arity} argument(s)",
 			true,
-			$sysmda_applied[ $sysmda_hook ] >= $sysmda_arity
+			min( $sysmda_applied[ $sysmda_hook ] ) >= $sysmda_arity
 		);
 	}
 }
@@ -2925,13 +2931,28 @@ if ( ! is_readable( $sysmda_filters_doc ) ) {
 		check( "filter contract: documented hook {$sysmda_hook} still exists in src/", true, isset( $sysmda_applied[ $sysmda_hook ] ) );
 	}
 
-	// And the two views of "Stable" must agree, or this file and the docs can
-	// drift apart while both look internally consistent.
+	// And the two views of "Stable" must agree **in both directions**, or this
+	// file and the docs drift apart while each stays internally consistent.
 	foreach ( $sysmda_stable_hooks as $sysmda_hook => $sysmda_unused ) {
 		check(
 			"filter contract: {$sysmda_hook} is documented as Stable",
 			'Stable',
 			isset( $sysmda_classified[ $sysmda_hook ] ) ? $sysmda_classified[ $sysmda_hook ] : 'MISSING'
+		);
+	}
+
+	// The reverse leg is the one that bites in practice: promoting a hook to
+	// Stable in the canonical table alone would leave it with none of the arity
+	// checks above, while the suite reported agreement it had never tested.
+	foreach ( $sysmda_classified as $sysmda_hook => $sysmda_level ) {
+		if ( 'Stable' !== $sysmda_level ) {
+			continue;
+		}
+
+		check(
+			"filter contract: documented-Stable {$sysmda_hook} is covered by the arity checks",
+			true,
+			isset( $sysmda_stable_hooks[ $sysmda_hook ] )
 		);
 	}
 }
