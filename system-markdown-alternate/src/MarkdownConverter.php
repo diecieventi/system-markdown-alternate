@@ -78,6 +78,7 @@ class MarkdownConverter {
 		$out   = '';
 		$plain = '';
 		$fence = '';
+		$depth = '';
 
 		foreach ( explode( "\n", $markdown ) as $line ) {
 			$marker = self::fence_marker( $line );
@@ -92,14 +93,16 @@ class MarkdownConverter {
 				$out  .= self::collapse_blank_lines( $plain );
 				$plain = '';
 				$fence = $marker;
+				$depth = self::fence_depth( $line );
 				$out  .= $line . "\n";
 				continue;
 			}
 
 			$out .= $line . "\n"; // Verbatim while inside the fence.
 
-			if ( self::closes_fence( $line, $marker, $fence ) ) {
+			if ( self::closes_fence( $line, $marker, $fence, $depth ) ) {
 				$fence = '';
+				$depth = '';
 			}
 		}
 
@@ -109,25 +112,59 @@ class MarkdownConverter {
 	}
 
 	/**
+	 * A fence delimiter, with whatever block containers hold it.
+	 *
+	 * The delimiter is not always at the left margin. `<blockquote><pre>` comes
+	 * out of the converter as ``> ```php ``, `<li><pre>` as ``- ```php `` with
+	 * its body indented four spaces, and the two nest. Matching only
+	 * `^ {0,3}` missed every one of those, so the code inside them was
+	 * normalized as prose: trailing spaces (a Markdown hard break, and
+	 * meaningful in a transcript or a diff) were trimmed, and runs of blank
+	 * lines collapsed. That is precisely the rewriting the fence tracking
+	 * exists to prevent.
+	 *
+	 * Being permissive here is the safe direction: a false positive preserves a
+	 * region of prose verbatim, while a false negative rewrites code.
+	 */
+	const FENCE_PATTERN = '/^(?P<prefix>(?:[ \t]*(?:>|[-*+][ \t]|\d{1,9}[.)][ \t]))*[ \t]*)(?P<fence>`{3,}|~{3,})/';
+
+	/**
 	 * The backtick/tilde run opening or closing a fence on this line, or '' when
-	 * the line is not a fence delimiter. Up to three leading spaces are allowed
-	 * (CommonMark §4.5).
+	 * the line is not a fence delimiter.
 	 */
 	private static function fence_marker( string $line ): string {
-		if ( 1 !== preg_match( '/^ {0,3}(`{3,}|~{3,})/', $line, $matches ) ) {
+		return 1 === preg_match( self::FENCE_PATTERN, $line, $matches ) ? $matches['fence'] : '';
+	}
+
+	/**
+	 * The blockquote nesting of a fence delimiter, as its run of `>`.
+	 *
+	 * Indentation and list markers are dropped on purpose: a fence opened as
+	 * ``- ```php `` is closed by an indented ``` ``` ``` four spaces in, so
+	 * comparing the literal prefixes would never match. The `>` run is the part
+	 * that does stay identical, and keeping it distinguishes a fence inside a
+	 * quote from one that merely follows it.
+	 */
+	private static function fence_depth( string $line ): string {
+		if ( 1 !== preg_match( self::FENCE_PATTERN, $line, $matches ) ) {
 			return '';
 		}
 
-		return $matches[1];
+		return (string) preg_replace( '/[^>]/', '', $matches['prefix'] );
 	}
 
 	/**
 	 * Whether the line closes the fence currently open: same delimiter character,
-	 * at least as long as the opening run, and nothing but whitespace after it
-	 * (an info string marks an opening fence, never a closing one).
+	 * at least as long as the opening run, the same blockquote nesting, and
+	 * nothing but whitespace after it (an info string marks an opening fence,
+	 * never a closing one).
 	 */
-	private static function closes_fence( string $line, string $marker, string $fence ): bool {
+	private static function closes_fence( string $line, string $marker, string $fence, string $depth ): bool {
 		if ( '' === $marker || $marker[0] !== $fence[0] || strlen( $marker ) < strlen( $fence ) ) {
+			return false;
+		}
+
+		if ( self::fence_depth( $line ) !== $depth ) {
 			return false;
 		}
 

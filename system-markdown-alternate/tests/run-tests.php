@@ -2168,6 +2168,37 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_conv->convert( '<p>a</p><p></p><p></p><p>b</p>' )
 	);
 
+	// …and a fence is not always at the left margin. The converter emits
+	// `<blockquote><pre>` as "> ```", `<li><pre>` as "- ```" with a four-space
+	// body, and the two nest. Matching only `^ {0,3}` missed all of them, so
+	// exactly the code that had to survive byte-for-byte was normalized as
+	// prose: hard-break spaces trimmed, blank-line runs collapsed.
+	$sysmda_nested_code = "x = 1  \n\n\ny = 2  ";
+
+	check(
+		'convert: code inside a blockquote preserved',
+		"> ```php\n> x = 1  \n> \n> \n> y = 2  \n> ```\n",
+		$sysmda_conv->convert( "<blockquote><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></blockquote>" )
+	);
+	check(
+		'convert: code inside a list item preserved',
+		"- ```php\n    x = 1  \n    \n    \n    y = 2  \n    ```\n",
+		$sysmda_conv->convert( "<ul><li><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></li></ul>" )
+	);
+	check(
+		'convert: code inside a nested blockquote preserved',
+		"> > ```\n> > x = 1  \n> > \n> > \n> > y = 2  \n> > ```\n",
+		$sysmda_conv->convert( "<blockquote><blockquote><pre><code>{$sysmda_nested_code}</code></pre></blockquote></blockquote>" )
+	);
+
+	// The fence must still CLOSE, or everything after it would be preserved
+	// verbatim and the rest of the document would stop being normalized.
+	check(
+		'convert: prose after a quoted fence is normalized again',
+		"> ```\n> x = 1  \n> ```\n\na\n\nb\n",
+		$sysmda_conv->convert( "<blockquote><pre><code>x = 1  </code></pre></blockquote><p>a</p><p></p><p></p><p>b</p>" )
+	);
+
 	// Ordinary conversions, pinned so the converter config cannot drift silently.
 	check( 'convert: atx heading', "## Title\n", $sysmda_conv->convert( '<h2>Title</h2>' ) );
 	check( 'convert: dash list items', "- a\n- b\n", $sysmda_conv->convert( '<ul><li>a</li><li>b</li></ul>' ) );
