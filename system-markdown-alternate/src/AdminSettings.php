@@ -291,7 +291,7 @@ class AdminSettings {
 	}
 
 	public function register_settings(): void {
-		// ── Opzioni sempre registrate ──────────────────────────────────────────
+		// ── Always-registered options ──────────────────────────────────────────
 		register_setting(
 			self::OPTION_GROUP,
 			'sysmda_cache_ttl',
@@ -427,7 +427,7 @@ class AdminSettings {
 			);
 		}
 
-		// ── Generale ───────────────────────────────────────────────────────────
+		// ── General ───────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_general', __( 'General', 'system-markdown-alternate' ), array( $this, 'render_general_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_supported_post_types', __( 'Enabled content types', 'system-markdown-alternate' ), array( $this, 'field_post_types' ), self::PAGE, 'sysmda_general' );
 		add_settings_field( 'sysmda_cache_ttl', __( 'Cache TTL (seconds)', 'system-markdown-alternate' ), array( $this, 'field_cache_ttl' ), self::PAGE, 'sysmda_general' );
@@ -457,7 +457,7 @@ class AdminSettings {
 		// ── Integrations (informational only) ──────────────────────────────────────
 		add_settings_section( 'sysmda_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
 
-		// ── Avanzate ─────────────────────────────────────────────────────────────
+		// ── Advanced ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sysmda_advanced' );
 		add_settings_field( 'sysmda_litespeed_htaccess', __( 'LiteSpeed cache compatibility', 'system-markdown-alternate' ), array( $this, 'field_litespeed_htaccess' ), self::PAGE, 'sysmda_advanced' );
@@ -478,7 +478,7 @@ class AdminSettings {
 		return class_exists( 'GenerateBlocks_Register_Dynamic_Tag' );
 	}
 
-	// ─── Sanitizzazione ─────────────────────────────────────────────────────────
+	// ─── Sanitization ─────────────────────────────────────────────────────────
 
 	/**
 	 * Post type allowlist: registered public types (excluding Media), plus any
@@ -790,7 +790,7 @@ class AdminSettings {
 	}
 
 	/**
-	 * Quick info nell'aside: stato dell'endpoint /llms.txt, URL e conflitti.
+	 * Quick info in the aside: /llms.txt endpoint status, URL and conflicts.
 	 * Presentation only: uses the same data already calculated by the plugin.
 	 */
 	public function render_llmstxt_aside(): void {

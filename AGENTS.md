@@ -60,7 +60,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.26.x)
+## Current state (v0.35.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -318,16 +318,11 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **`.wordpress-org/` is missing its screenshot files**: the four stale
-  `screenshot-*.jpg` (pre-0.17.0 UI, before the tabs/cards restyle) were deleted
-  and the `== Screenshots ==` captions in `readme.txt` were rewritten for a new
-  set of **five**, one per settings tab in panel order (General, Markdown output,
-  `/llms.txt`, Integrations, Advanced). The images themselves still have to be
-  saved into `.wordpress-org/` as `screenshot-1.png` … `screenshot-5.png`: an
-  agent that is shown a screenshot in chat cannot write it to disk, so this step
-  is the maintainer's. Until they land, the listing would show captions with no
-  images — add them before the first asset sync. No version bump needed: they
-  live in the SVN `/assets` folder, independent of `/trunk`.
+- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`): the
+  only implementation plan still open. Greenlit, **not started**, and gated on
+  the WPML/Polylang staging reconnaissance described inside — the current
+  plan's central query assumption is not reliable and must be verified against
+  real plugin behaviour before any code is written.
 
 ### To check next time (not urgent, parked here)
 
@@ -927,8 +922,8 @@ running code at the WP level.
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
-├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
-├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
+├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (live: secrets configured; validates the tag before staging)
+├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
 ├── DIST/                         ← distributable zip (versioned)
@@ -1142,15 +1137,25 @@ WordPress.org Plugin Check.
 
 - Manual flow: `bash bin/build.sh`, then copy the content into `svn/trunk` and
   tag it under `svn/tags/x.y.z`.
-- **Automated flow** (ready, not yet active): `.github/workflows/deploy-wordpress-org.yml`
-  runs `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
-  Release** (not on a bare tag push, to avoid a run without SVN credentials).
-  Since `BUILD_DIR` ignores `.distignore`, the workflow stages a clean copy of
-  `system-markdown-alternate/` itself (same exclusions as `.distignore`) before
-  handing it to the action. `VERSION` is derived from the tag name (`v0.18.0` →
-  `0.18.0`). **Activation, once accepted on wordpress.org**: add the
-  `SVN_USERNAME` / `SVN_PASSWORD` repository secrets, then publish a GitHub
-  Release on the version tag.
+- **Automated flow** (**live**: the `SVN_USERNAME` / `SVN_PASSWORD` secrets are
+  configured and versions have already been published this way):
+  `.github/workflows/deploy-wordpress-org.yml` runs
+  `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
+  Release** (not on a bare tag push, to avoid a run without SVN credentials) or
+  by hand from the Actions tab. Since `BUILD_DIR` ignores `.distignore`, the
+  workflow stages a clean copy of `system-markdown-alternate/` itself (same
+  exclusions as `.distignore`) before handing it to the action. `VERSION` is
+  derived from the tag name (`v0.18.0` → `0.18.0`).
+  **The job refuses to deploy anything that is not an existing `vX.Y.Z` tag**
+  whose plugin header, `SYSMDA_VERSION`, `readme.txt` stable tag and
+  `CHANGELOG.md` entry all agree, and checks out `refs/tags/…` explicitly so a
+  branch cannot stand in for a tag. An SVN version number cannot be withdrawn
+  once published, which is why the guard runs before anything is staged — do
+  not relax it. Every `uses:` in this repository is **pinned to a full commit
+  SHA** (`# vX.Y.Z` comment alongside), not to a moving `@v5`/`@stable` ref:
+  this workflow hands SVN credentials to a third-party action, so what runs
+  must not be able to change underneath it. Bump them through the pinned SHA,
+  never back to a tag.
 - **Git tags**: annotated, `vX.Y.Z` on the squashed release commit on `main`
   (e.g. `v0.18.0`); retroactively added from `v0.17.1` onward. Created and
   pushed **automatically** by the `Release tag` workflow when a push to `main`
@@ -1185,11 +1190,10 @@ WordPress.org Plugin Check.
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
   Note: a Release published by the workflow does **not** start the SVN deploy —
   GitHub raises no workflow-starting event from the default `GITHUB_TOKEN`. That
-  workflow is inactive anyway and has its own manual trigger; to chain the two
-  once wordpress.org is live, add a `RELEASE_TOKEN` secret (a PAT with
-  `contents: write`), which `Publish release` already prefers when present. A
-  Release published by hand from the Mac does trigger it, and fails harmlessly
-  until the SVN secrets are configured (see above).
+  workflow has its own manual trigger, so the usual flow is to run it from the
+  Actions tab with the tag; to chain the two, add a `RELEASE_TOKEN` secret (a
+  PAT with `contents: write`), which `Publish release` already prefers when
+  present. A Release published by hand from the Mac does trigger it directly.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.

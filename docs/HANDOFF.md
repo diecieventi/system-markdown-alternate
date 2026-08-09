@@ -8,9 +8,15 @@
 
 ## Where things stand
 
-`main` is **0.24.0**. The repository is **English-only** (the Italian
-`AGENTS.it.md` / `README.it.md` were removed in #5): do not create or expect any
-`.it.md` files.
+> **This file does not track the current version, and must not be used to.**
+> It is a July 2026 snapshot written around `0.24.0`, kept for the map of the
+> `docs/` folder below and for the durable constraints at the end. `AGENTS.md`
+> *Current state* is the only place that states where the plugin is; when the
+> two disagree, `AGENTS.md` wins and this file is the one to fix. Repeating the
+> version here is what made it drift eleven releases behind — do not put it back.
+
+The repository is **English-only** (the Italian `AGENTS.it.md` / `README.it.md`
+were removed in #5): do not create or expect any `.it.md` files.
 
 The July 2026 strategy review produced an ordered plan that is now **fully
 shipped** — sanitize fix (`0.23.2`), doc corrections, the documented output
@@ -48,11 +54,10 @@ variants are in `docs/f3-2-taxonomy-selection-plan.md`.
 3. Everything else in *Future thoughts* stays parked until the decisive signal:
    **real, recurring `.md` requests from important clients in the logs**. Do not
    promote any of it to a plan without that.
-4. Housekeeping tracked in `AGENTS.md` *Open / to do*: the wordpress.org
-   screenshot files are missing (the stale pre-0.17.0 ones were deleted, the
-   captions now describe five new shots that still have to be saved into
-   `.wordpress-org/`), and Italian translation happens on
-   translate.wordpress.org once the plugin is live — never in this repo.
+4. Housekeeping is tracked in `AGENTS.md` *Open / to do* — read it there rather
+   than here, for the reason stated at the top of this file. The one item worth
+   repeating because it is a standing rule and not a task: Italian translation
+   happens on translate.wordpress.org, **never in this repo**.
 
 ## The five durable constraints not to trip over
 

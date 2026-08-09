@@ -177,7 +177,7 @@ class MetadataBuilder {
 	 * Adds a YAML list of terms when it is not empty.
 	 *
 	 * @param string[] $lines Reference to the array of lines.
-	 * @param string   $key   Chiave YAML (es. "categories").
+	 * @param string   $key   YAML key (for example "categories").
 	 * @param string[] $terms Term names.
 	 */
 	private function append_terms( array &$lines, string $key, array $terms ): void {
