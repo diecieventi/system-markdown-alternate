@@ -103,10 +103,15 @@ get cached. No-op when the TTL is `0`.
 
 ## The conversion pipeline
 
-Listed in the order they run. The exclusion filters are consulted **inside**
-`ContentRenderer::render()`, between the source-content and rendered-HTML
-hooks — not after them. Attach a transformation to the stage that still has the
-shape you need.
+Listed in the order they run **for the post body**. The exclusion filters are
+consulted inside `ContentRenderer::render()`, between the source-content and
+rendered-HTML hooks — not, as a flat list might suggest, after the final
+output. Attach a transformation to the stage that still has the shape you need.
+
+This is the order for the body only. A preamble that renders HTML of its own
+fires the exclusion filters **again, after `sysmda_markdown_rendered_html`** —
+see [the preamble hook](#the-preamble-re-entry) below. Never assume an
+exclusion filter runs once per request.
 
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
@@ -118,7 +123,8 @@ appends its fields.
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 ```
 Shortcodes stripped from the raw source, block content included. Runs first,
-so an excluded shortcode never reaches the renderer.
+so an excluded shortcode never reaches the renderer. Fires again for any
+rendered preamble fragment.
 
 ```php
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
@@ -129,10 +135,13 @@ Gutenberg blocks dropped while the block tree is cleaned, before
 ```php
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
 ```
-CSS classes whose elements are dropped. **Consulted twice**, and it must return
-the same list both times: once against each block's `className` attribute
-during block cleaning, and once during the DOM pass over the rendered HTML,
-which is what catches nested elements a block attribute cannot describe.
+CSS classes whose elements are dropped. **Consulted more than once per request,
+and it must return the same list every time**: once against each block's
+`className` attribute during block cleaning, once during the DOM pass over the
+rendered HTML — which is what catches nested elements a block attribute cannot
+describe — and once more per rendered preamble fragment. A filter that returns
+a different list depending on when it is called produces inconsistent output
+between the passes.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
@@ -145,6 +154,19 @@ apply_filters( 'sysmda_markdown_preamble', '', $post );
 ```
 Markdown inserted between the `# Title` heading and the body. This is what the
 ACF integration uses for subtitle and TL;DR.
+
+<a id="the-preamble-re-entry"></a>
+**The preamble re-enters the pipeline.** A callback that turns HTML into
+Markdown here has to clean that HTML too, and the plugin exposes
+`ContentRenderer::render_fragment()` for exactly that. It strips shortcodes and
+runs the DOM pass, so `sysmda_markdown_excluded_shortcodes` and
+`sysmda_markdown_excluded_classes` fire **a second time, after
+`sysmda_markdown_rendered_html` has already run**. It does not parse blocks, so
+`sysmda_markdown_excluded_block_names` is not consulted again.
+
+In the bundled ACF integration this happens only on the TL;DR path (a WYSIWYG
+field, so it carries markup), and only when the field is configured and
+non-empty. The subtitle goes through `wp_strip_all_tags()` and never re-enters.
 
 ```php
 apply_filters( 'sysmda_markdown_output', $markdown, $post );
