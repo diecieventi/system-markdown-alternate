@@ -9,6 +9,26 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.35.4
+
+* **Moved the filter reference out of `AGENTS.md` into a dedicated
+  `docs/filters.md`.** The full list previously lived inside the agent guide,
+  which opens with the git workflow and release process — a developer looking
+  up a filter had to read through all of it. The new page is grouped by area
+  (content selection, HTTP headers, caching, the conversion pipeline, front
+  matter, ACF, `/llms.txt`, hit counter), carries the default-exclusion tables
+  and runnable examples, and states which filters run on every request
+  (including `304` responses) so a slow callback is never attached to a
+  bodiless response by mistake.
+* The `readme.txt` `== Description ==` section no longer duplicates the full
+  filter list (it enumerated ~30 filters in a block the FAQ entry right below
+  already summarized with a link); one feature bullet now states the plugin is
+  filter-extensible, and both the FAQ and `README.md` link to the new page.
+* Corrected the documented execution order of the conversion-pipeline filters,
+  including the preamble's second cleaning pass and the exact set of filters
+  reached on cache hits and conditional `304` responses. Documentation only —
+  no plugin behaviour changed.
+
 ## 0.35.3
 
 * **Refreshed the wordpress.org listing assets.** The four screenshots still

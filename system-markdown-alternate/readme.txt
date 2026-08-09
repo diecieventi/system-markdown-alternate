@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.35.3
+Stable tag: 0.35.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -302,6 +302,12 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.35.4 =
+
+* Moved the developer filter reference into a dedicated, better organized page
+  (linked from the FAQ below and from the GitHub repository), out of the
+  contributor guide it used to share. No behaviour changed.
+
 = 0.35.3 =
 
 * **New screenshots for this listing.** The previous four still showed the admin
@@ -321,17 +327,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
   never will, so it has no business suggesting one either: the readme states that
   the link carries a single `sysmda-md-download` class and that styling is the
   theme's job, and stops there.
-
-= 0.35.1 =
-
-* **Fixed: the settings panel never mentioned `[sysmda_md_download]`.** The
-  Integrations tab listed only `[sysmda_md_url]`, so the shortcode added in
-  0.35.0 was documented everywhere except the one place you look while actually
-  using the plugin. The card now covers both, with the `text=""` and `id=""`
-  variants.
-* Fixed: the same card claimed a shortcode returns empty for a post that is
-  "type not enabled, draft, or password-protected", omitting **non-standard post
-  formats**, which have been a reason for exclusion since 0.26.x.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
