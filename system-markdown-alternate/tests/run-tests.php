@@ -44,6 +44,10 @@ $GLOBALS['sysmda_test_taxonomies']  = array(); // post type => taxonomy slug => 
 $GLOBALS['sysmda_test_filters']     = array(); // filter tag => forced return value
 $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_header()
 $GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
+$GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is authenticated
+$GLOBALS['sysmda_test_post_types']  = array(); // post type => registered object (overrides the public default)
+$GLOBALS['sysmda_test_query_posts'] = array(); // post type => WP_Post list served by the get_posts() stub
+$GLOBALS['sysmda_test_query_pages'] = array(); // pages the get_posts() stub was asked for
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -73,6 +77,29 @@ function update_option( $name, $value ) {
 	$GLOBALS['sysmda_test_options'][ $name ] = $value;
 
 	return true;
+}
+
+/**
+ * Stub: the registered post type. Types are public unless a test registers them
+ * otherwise, which is what an inactive-then-changed provider looks like.
+ */
+function get_post_type_object( $type ) {
+	if ( array_key_exists( $type, $GLOBALS['sysmda_test_post_types'] ) ) {
+		return $GLOBALS['sysmda_test_post_types'][ $type ];
+	}
+
+	return (object) array(
+		'name'   => $type,
+		'public' => true,
+	);
+}
+
+/**
+ * Stub: whether a visitor is authenticated. Drives the split between the shared
+ * public representation and a request that may render in a visitor's context.
+ */
+function is_user_logged_in() {
+	return ! empty( $GLOBALS['sysmda_test_logged_in'] );
 }
 
 /** Stub: user objects, read when a display-name change invalidates the cache. */
@@ -260,6 +287,22 @@ function post_password_required( $post ) {
 /** Stub: site identity, part of the /llms.txt cache validity hash. */
 function get_bloginfo( $show = '', $filter = 'raw' ) {
 	return isset( $GLOBALS['sysmda_test_bloginfo'][ $show ] ) ? $GLOBALS['sysmda_test_bloginfo'][ $show ] : '';
+}
+
+/**
+ * Stub: paged post query. Serves slices of a per-type fixture list so the
+ * /llms.txt paging can be exercised, and records the pages actually requested.
+ */
+function get_posts( $args ) {
+	$type = isset( $args['post_type'] ) ? $args['post_type'] : '';
+	$all  = isset( $GLOBALS['sysmda_test_query_posts'][ $type ] ) ? $GLOBALS['sysmda_test_query_posts'][ $type ] : array();
+
+	$per_page = isset( $args['posts_per_page'] ) ? (int) $args['posts_per_page'] : 10;
+	$paged    = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
+
+	$GLOBALS['sysmda_test_query_pages'][] = $paged;
+
+	return array_slice( $all, ( $paged - 1 ) * $per_page, $per_page );
 }
 
 /** Stub: post format, driven by a test-only property (false = standard format). */
@@ -831,6 +874,17 @@ check( 'scalar: entities decoded', 'title: "Tom & Jerry"', $sysmda_title_line( '
 check( 'scalar: entity quote decoded then escaped', 'title: "AT&T \\"deal\\""', $sysmda_title_line( 'AT&amp;T &quot;deal&quot;' ) );
 check( 'scalar: embedded tags stripped', 'title: "Bold move"', $sysmda_title_line( '<strong>Bold</strong> move' ) );
 check( 'scalar: whitespace collapsed and trimmed', 'title: "Line one Line two"', $sysmda_title_line( "  Line one\n\n\tLine   two  " ) );
+// Control characters may not appear raw inside a YAML double-quoted scalar. Not
+// reachable from wp-admin, but a title can arrive from an import, a REST write
+// or one of this plugin's own filters, and the contract here is that the result
+// parses whatever the source was.
+check( 'scalar: NUL and BEL dropped', 'title: "ab"', $sysmda_title_line( "a\x00\x07b" ) );
+check( 'scalar: ESC dropped', 'title: "ab"', $sysmda_title_line( "a\x1Bb" ) );
+check( 'scalar: DEL dropped', 'title: "ab"', $sysmda_title_line( "a\x7Fb" ) );
+check( 'scalar: C1 controls dropped', 'title: "ab"', $sysmda_title_line( "a\xC2\x85b" ) );
+// …while multibyte characters, whose bytes are all >= 0x80, are untouched.
+check( 'scalar: accented text preserved', 'title: "città è così"', $sysmda_title_line( 'città è così' ) );
+check( 'scalar: emoji preserved', 'title: "ok 🎉"', $sysmda_title_line( 'ok 🎉' ) );
 
 // ─── MetadataBuilder: custom taxonomies (F3.1) ───────────────────────
 //
@@ -1220,12 +1274,25 @@ $GLOBALS['sysmda_test_posts'][77] = new WP_Post(
 );
 $GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'Before';
 
+$GLOBALS['sysmda_test_meta'][77]['_wp_attached_file']        = '2026/06/before.jpg';
+
 $sysmda_img_before = $sysmda_cv( $sysmda_img_post );
 $GLOBALS['sysmda_test_meta'][77]['_wp_attachment_image_alt'] = 'After';
 check(
 	'cache_version: featured-image alt change moves the ETag',
 	true,
 	$sysmda_img_before !== $sysmda_cv( $sysmda_img_post )
+);
+
+// What the front matter prints is the resolved URL, not the attachment ID, so a
+// plugin swapping the file behind an existing attachment rewrites
+// `featured_image` while leaving the attachment row and its alt text alone.
+$sysmda_img_file_before                               = $sysmda_cv( $sysmda_img_post );
+$GLOBALS['sysmda_test_meta'][77]['_wp_attached_file'] = '2026/06/after.jpg';
+check(
+	'cache_version: replacing the attached file moves the ETag',
+	true,
+	$sysmda_img_file_before !== $sysmda_cv( $sysmda_img_post )
 );
 
 // The description comes from post meta, which update_post_meta() writes without
@@ -1270,6 +1337,36 @@ $sysmda_406 = function ( $accept ) use ( $sysmda_406_method, $sysmda_controller 
 check( '406: unparseable Accept is not rejected', false, $sysmda_406( 'text/html;q=abc' ) );
 check( '406: Accept refusing both is still rejected', true, $sysmda_406( 'application/json' ) );
 check( '406: normal browser Accept is not rejected', false, $sysmda_406( 'text/html,*/*;q=0.8' ) );
+
+// The `format` override switches the 406 off only for the value that actually
+// names a representation. Testing for the parameter's mere PRESENCE meant
+// `?format=banana` — or any stray parameter of that name — silently disabled it.
+$_GET['format'] = 'markdown';
+check( '406: ?format=markdown suppresses the rejection', false, $sysmda_406( 'application/json' ) );
+$_GET['format'] = 'banana';
+check( '406: an unrecognized format does not suppress it', true, $sysmda_406( 'application/json' ) );
+$_GET['format'] = array( 'markdown' );
+check( '406: an array format does not suppress it', true, $sysmda_406( 'application/json' ) );
+unset( $_GET['format'] );
+
+// ─── vary_covers_accept: field names, not substrings ─────────────────
+//
+// `Vary: Accept` is what stops a cache from handing the HTML of a permalink to
+// a Markdown-preferring request (and the reverse). The check that decides
+// whether it still has to be sent used to look for the substring "accept"
+// anywhere in an existing Vary header, so `Accept-Encoding` — which practically
+// every compressing stack emits — read as "already covered" and the header was
+// never added at all.
+check( 'vary: nothing sent yet', false, MarkdownController::vary_covers_accept( array() ) );
+check( 'vary: Accept-Encoding does not cover Accept', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding' ) ) );
+check( 'vary: Accept-Language does not cover Accept', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Language' ) ) );
+check( 'vary: a comma list of neighbours does not cover it', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding, Accept-Language' ) ) );
+check( 'vary: exact Accept covers it', true, MarkdownController::vary_covers_accept( array( 'Vary: Accept' ) ) );
+check( 'vary: Accept inside a comma list covers it', true, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding, Accept' ) ) );
+check( 'vary: matching is case-insensitive', true, MarkdownController::vary_covers_accept( array( 'vary: accept' ) ) );
+check( 'vary: a second Vary header is inspected too', true, MarkdownController::vary_covers_accept( array( 'Vary: User-Agent', 'Vary: Accept' ) ) );
+check( 'vary: the * wildcard covers everything', true, MarkdownController::vary_covers_accept( array( 'Vary: *' ) ) );
+check( 'vary: other headers are ignored', false, MarkdownController::vary_covers_accept( array( 'X-Accept: yes', 'Content-Type: text/html' ) ) );
 
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //
@@ -1340,11 +1437,72 @@ check(
 	$sysmda_ims( $sysmda_cv_post, $sysmda_dep_since )
 );
 
+// The third input the two fingerprints cannot describe: the salt. It moves for
+// reasons that belong to no post — a settings save, the permalink structure,
+// the home URL, the site timezone, an author rename, a category or tag rename —
+// and each of those rewrites the output of posts whose post_modified_gmt has
+// not moved. A client sending only If-Modified-Since presents no ETag, so
+// without this the date answered 304 with a body the salt had already
+// invalidated, for every post older than the change.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS ignored once the salt is newer than the post',
+	false,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+check( 'conditional: no stale 304 after a salt bump', array(), $GLOBALS['sysmda_test_status'] );
+
+// Equality is ambiguous at one-second resolution: a post save and a site-wide
+// invalidation landing in the same second are indistinguishable, and if the
+// salt came second the date is already lying. Ambiguity resolves against the
+// date.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-01 08:30:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS ignored when salt and post share a second',
+	false,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+
+// A salt older than the post's own modification date says nothing about it: the
+// post has been rebuilt since, so the date is trustworthy again. This is what
+// keeps a single settings save from disabling the IMS path for good.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-06-01 00:00:00 GMT' ) . '-a1b2c3d4' );
+check(
+	'conditional: IMS honoured again once the post is newer than the salt',
+	true,
+	$sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since )
+);
+
+// An authenticated request is rebuilt rather than served from the shared cache,
+// so it must not be answered 304 on a validator that describes that shared
+// body: the browser would reuse a copy built for everyone, off an If-None-Match
+// kept from an earlier anonymous fetch.
+$GLOBALS['sysmda_test_status'] = array();
+$GLOBALS['sysmda_test_logged_in'] = true;
+$_SERVER['HTTP_IF_NONE_MATCH']    = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check(
+	'conditional: an authenticated request is never answered 304',
+	false,
+	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+);
+check( 'conditional: no 304 sent to an authenticated visitor', array(), $GLOBALS['sysmda_test_status'] );
+// The very same request, anonymous, still revalidates — the split is the only
+// thing deciding it.
+$GLOBALS['sysmda_test_logged_in'] = false;
+check(
+	'conditional: the same request anonymous still yields 304',
+	true,
+	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+);
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+$GLOBALS['sysmda_test_status'] = array();
+
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
 $GLOBALS['sysmda_test_taxonomies'] = array();
 $GLOBALS['sysmda_test_status'] = array();
 unset( $GLOBALS['sysmda_test_terms'][60], $GLOBALS['sysmda_test_terms'][61] );
+unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] );
 
 // ─── LlmsTxtController: line escaping ─────────────────────────────────
 
@@ -1360,6 +1518,86 @@ check( 'llms: whitespace collapsed and trimmed', 'X Y', LlmsTxtController::escap
 // normalize_inline: single line only, no bracket escaping (description).
 check( 'llms: multiline description => single line', 'One two three', LlmsTxtController::normalize_inline( "One\ntwo\r\nthree" ) );
 check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtController::normalize_inline( 'see [1] and (2)' ) );
+
+// ─── LlmsTxtController::servable_posts (the limit counts ELIGIBLE posts) ──────
+//
+// Entries are filtered through is_servable() after the query, so asking for
+// exactly $limit rows and filtering afterwards returns fewer than $limit as
+// soon as the newest batch holds an ineligible post — and the older eligible
+// posts behind it are never reached. In the extreme a whole section vanishes
+// while the site still has servable content of that type.
+
+$sysmda_sp_method = new ReflectionMethod( LlmsTxtController::class, 'servable_posts' );
+$sysmda_sp_method->setAccessible( true );
+$sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner() ) );
+
+/** Builds a fixture list: $formats entries, '' meaning a standard (servable) format. */
+$sysmda_sp_fixture = static function ( array $formats ) {
+	$posts = array();
+	foreach ( $formats as $i => $format ) {
+		$args = array(
+			'ID'          => 900 + $i,
+			'post_type'   => 'post',
+			'post_status' => 'publish',
+		);
+		if ( '' !== $format ) {
+			$args['post_format'] = $format;
+		}
+		$posts[] = new WP_Post( $args );
+	}
+	return $posts;
+};
+
+$sysmda_sp_run = static function ( array $formats, $limit ) use ( $sysmda_sp_method, $sysmda_sp_ctrl, $sysmda_sp_fixture ) {
+	$GLOBALS['sysmda_test_query_posts']['post'] = $sysmda_sp_fixture( $formats );
+	$GLOBALS['sysmda_test_query_pages']         = array();
+	return $sysmda_sp_method->invoke( $sysmda_sp_ctrl, 'post', $limit, false );
+};
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
+
+// Three of the newest four are asides: a single-page query would have returned
+// one entry out of the three requested, and stopped there.
+check(
+	'llms: the limit counts servable posts, not rows',
+	3,
+	count( $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
+);
+check( 'llms: it paged to find them', array( 1, 2 ), $GLOBALS['sysmda_test_query_pages'] );
+
+// The oldest eligible posts are reached, in date order, and none is duplicated.
+check(
+	'llms: the entries are the eligible ones in order',
+	array( 902, 904, 905 ),
+	array_map( static function ( $p ) {
+		return $p->ID;
+	}, $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
+);
+
+// A type with fewer eligible posts than requested stops at the last page rather
+// than paging to the cap: no later page can add anything.
+$sysmda_sp_short = $sysmda_sp_run( array( '', 'aside' ), 5 );
+check( 'llms: a short type yields what it has', 1, count( $sysmda_sp_short ) );
+check( 'llms: and stops after one page', array( 1 ), $GLOBALS['sysmda_test_query_pages'] );
+
+// Enough ineligible content to exhaust the page cap: shorter than requested,
+// which is the pre-existing outcome, but bounded rather than unbounded.
+check(
+	'llms: the page cap bounds the work',
+	LlmsTxtController::MAX_QUERY_PAGES,
+	count( ( static function () use ( $sysmda_sp_run ) {
+		$sysmda_sp_run( array_fill( 0, 60, 'aside' ), 2 );
+		return $GLOBALS['sysmda_test_query_pages'];
+	} )() )
+);
+
+check( 'llms: a zero limit queries nothing', array(), $sysmda_sp_run( array( '', '' ), 0 ) );
+
+unset(
+	$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'],
+	$GLOBALS['sysmda_test_query_posts']['post']
+);
+$GLOBALS['sysmda_test_query_pages'] = array();
 
 // ─── LlmsTxtController: the cached index follows the site identity ────
 //
@@ -1454,6 +1692,36 @@ check( 'cache-control: header injection stripped', true, false === strpos( Markd
 
 $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = array( 'not', 'a', 'string' );
 check( 'cache-control: a non-string filter value sends nothing', '', MarkdownController::cache_control_value() );
+
+// A request that is not the shared public representation is never publicly
+// cacheable, and the site filter must not be able to make it so — the body may
+// have been rendered in that visitor's context by a dynamic block or shortcode.
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = 'public, s-maxage=600';
+check(
+	'cache-control: an authenticated request is private and unstorable',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( false )
+);
+$GLOBALS['sysmda_test_filters']['sysmda_cache_control'] = '';
+check(
+	'cache-control: the filter cannot publish a personalized response',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( false )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] );
+
+// The split itself: anonymous traffic — the audience this endpoint exists for —
+// keeps the full shared-cache behaviour, and only an authenticated request
+// leaves it.
+check( 'shared: an anonymous request is the public representation', true, MarkdownController::representation_is_shared() );
+$GLOBALS['sysmda_test_logged_in'] = true;
+check( 'shared: an authenticated request is not', false, MarkdownController::representation_is_shared() );
+check(
+	'cache-control: the default follows the visitor',
+	'private, no-store, must-revalidate',
+	MarkdownController::cache_control_value( MarkdownController::representation_is_shared() )
+);
+$GLOBALS['sysmda_test_logged_in'] = false;
 $GLOBALS['sysmda_test_filters'] = array();
 
 // lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
@@ -1714,41 +1982,90 @@ check(
 // nothing moves `post_modified_gmt` when they change: without a salt bump a
 // client holding the old ETag is told `304` for good — staleness no TTL bounds.
 //
-// Order matters here. bump_cache_salt() deliberately bumps at most once per
-// request, so every "must NOT bump" case has to run before the first real bump.
+// The bump is recorded by bump_cache_salt() and written by flush_cache_salt()
+// on `shutdown`, so "did it bump" is always asked after an explicit flush: a
+// settings save writes its options one at a time, and a salt written before the
+// last of them lets a concurrent front-end request cache half-old output under
+// the final salt, where nothing would ever invalidate it.
 
+$sysmda_now                                          = time();
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 $GLOBALS['sysmda_test_users'][7]                     = (object) array( 'display_name' => 'Jamie Rivers' );
 
 // A profile save that leaves the display name alone: the output cannot change,
 // and on a store with customer accounts this fires constantly.
 $sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: unchanged display name does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // Hooks that pass no user object at all (or an unknown user) must be inert too.
 $sysmda_admin->maybe_bump_for_author( 7, null );
 $sysmda_admin->maybe_bump_for_author( 999, (object) array( 'display_name' => 'Ghost' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: a profile update without usable data does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // Options that are not ours, and the two of ours that must never bump.
 $sysmda_admin->maybe_bump_cache_salt( 'blogname' );
 $sysmda_admin->maybe_bump_cache_salt( 'sysmda_cache_salt' );
 $sysmda_admin->maybe_bump_cache_salt( HitCounter::OPTION );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: unrelated and excluded options do not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Terms of a taxonomy that is NOT printed under its own front-matter key: the
+// optional custom taxonomies are hashed by name in taxonomies_fingerprint(), so
+// a rename already moves the validator and a salt bump would flush the whole
+// site for nothing.
+$sysmda_admin->maybe_bump_for_term( 11, 11, 'genre' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: a custom-taxonomy term edit does not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
 // The rename itself: the author line of every post by that user changes.
 $GLOBALS['sysmda_test_users'][7]->display_name = 'Jamie R.';
 $sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
+$sysmda_admin->flush_cache_salt();
 check( 'salt: a display-name change bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// `categories:`/`tags:` are always emitted and are the two taxonomies
+// taxonomies_fingerprint() leaves out, so a term rename or deletion reaches the
+// validator through the salt or not at all.
+foreach ( array( 'category', 'post_tag' ) as $sysmda_tax ) {
+	$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+	$sysmda_admin->maybe_bump_for_term( 5, 5, $sysmda_tax );
+	$sysmda_admin->flush_cache_salt();
+	check( "salt: a {$sysmda_tax} term edit bumps the salt", true, '0' !== get_option( 'sysmda_cache_salt' ) );
+}
 
 // One bump per request, whatever else fires afterwards (a settings save can
 // write a dozen options; each would otherwise reissue every ETag again).
+$sysmda_admin->flush_cache_salt();
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = 'already-bumped';
-$sysmda_admin->bump_cache_salt();
-$sysmda_admin->maybe_bump_cache_salt( AdminSettings::OPTION_TAXONOMIES );
-check( 'salt: only one bump per request', 'already-bumped', get_option( 'sysmda_cache_salt' ) );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: nothing is written without a pending bump', 'already-bumped', get_option( 'sysmda_cache_salt' ) );
 
-unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'], $GLOBALS['sysmda_test_users'][7] );
+// Two invalidations in the same second must still produce different salts. A
+// bare `time()` did not: update_option() short-circuits on an unchanged value,
+// so the second bump silently left stale bodies and ETags valid.
+$sysmda_admin->bump_cache_salt();
+$sysmda_admin->flush_cache_salt();
+$sysmda_salt_a = get_option( 'sysmda_cache_salt' );
+$sysmda_admin->bump_cache_salt();
+$sysmda_admin->flush_cache_salt();
+check( 'salt: two bumps in the same second differ', true, $sysmda_salt_a !== get_option( 'sysmda_cache_salt' ) );
+
+// The leading field stays a Unix timestamp: MarkdownController reads it to
+// decide whether `post_modified_gmt` is still a trustworthy validator.
+check(
+	'salt: the value starts with a Unix timestamp',
+	true,
+	(int) get_option( 'sysmda_cache_salt' ) >= $sysmda_now - 60
+);
+
+unset(
+	$GLOBALS['sysmda_test_options']['sysmda_cache_salt'],
+	$GLOBALS['sysmda_test_users'][7],
+	$sysmda_tax,
+	$sysmda_salt_a
+);
 
 // ─── ContentRenderer::process_dom (DOM pipeline) ──────────────────────────────
 
@@ -1816,6 +2133,33 @@ check(
 	'<pre><code class="language-js">let a = 1;</code></pre>',
 	$sysmda_dom( '<pre><code class="language-js">let <span>a</span> = 1;</code></pre>' )
 );
+// A class merely CONTAINING "line" is not a line wrapper. The substring test
+// this replaced accepted `inline-token`, `underline`, `baseline` and `outline`,
+// so adjacent token spans — which have no text node between them to bail out on
+// — were each treated as a rendered line and one source line was silently split
+// into several.
+foreach ( array( 'inline-token', 'underline', 'baseline', 'outline' ) as $sysmda_not_line ) {
+	check(
+		"dom: class \"{$sysmda_not_line}\" is not a code line",
+		'<pre><code class="language-js">let a = 1;</code></pre>',
+		$sysmda_dom(
+			'<pre><code class="language-js"><span class="' . $sysmda_not_line . '">let </span>'
+			. '<span class="' . $sysmda_not_line . '">a = 1;</span></code></pre>'
+		)
+	);
+}
+// …while the shapes highlighters actually use still are, whatever they prefix.
+foreach ( array( 'line', 'code-line', 'token-line', 'line-number highlighted' ) as $sysmda_is_line ) {
+	check(
+		"dom: class \"{$sysmda_is_line}\" is a code line",
+		"<pre><code class=\"language-js\">echo 1;\necho 2;</code></pre>",
+		$sysmda_dom(
+			'<pre><code class="language-js"><span class="' . $sysmda_is_line . '">echo 1;</span>'
+			. '<span class="' . $sysmda_is_line . '">echo 2;</span></code></pre>'
+		)
+	);
+}
+unset( $sysmda_not_line, $sysmda_is_line );
 
 // ─── ContentRenderer::absolutize (schemes and query-only references) ─────────
 
@@ -1894,6 +2238,67 @@ $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] = array
 check( 'servable: filter can shorten the list (aside)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
 check( 'servable: filter can shorten the list (status)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'status' ) ) ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_post_formats'] );
+
+// The public policy applies to the SAVED SELECTION, which AdminSettings filters
+// through here before feeding it to sysmda_markdown_supported_post_types.
+// sanitize_post_types() keeps a slug whose provider is temporarily inactive, so
+// an afternoon of deactivation does not turn the endpoint off — but a type
+// re-registered as public => false, or replaced by an internal one of the same
+// name, must not stay servable on the strength of a stale option.
+$GLOBALS['sysmda_test_post_types']['secret_records'] = (object) array(
+	'name'               => 'secret_records',
+	'public'             => false,
+	'publicly_queryable' => false,
+);
+check( 'public policy: a non-public type is rejected', false, PostSupport::type_is_public( 'secret_records' ) );
+
+$GLOBALS['sysmda_test_post_types']['gone'] = null;
+check( 'public policy: an unregistered type is rejected', false, PostSupport::type_is_public( 'gone' ) );
+check( 'public policy: a public type passes', true, PostSupport::type_is_public( 'post' ) );
+
+// …and it is NOT applied to the filter's result. Site code adding a non-public
+// CPT through sysmda_markdown_supported_post_types is making an explicit
+// request, and widening what is served is that filter's documented job;
+// enforcing the policy afterwards would silently overrule it. A stale saved
+// slug is not a request — that is the whole distinction.
+// Whatever reached supported_post_types() got there either from the saved
+// option — already filtered by the callback above — or from an explicit
+// site-code opt-in through the filter, and both have been decided by then.
+// Re-applying the policy here would silently overrule the second one, so a type
+// that is in the list is servable even when it is not public.
+$GLOBALS['sysmda_test_post_types']['post'] = (object) array(
+	'name'   => 'post',
+	'public' => false,
+);
+check(
+	'servable: the emission path does not re-apply the public policy',
+	true,
+	PostSupport::is_servable( $sysmda_mk_post() )
+);
+unset(
+	$GLOBALS['sysmda_test_post_types']['post'],
+	$GLOBALS['sysmda_test_post_types']['secret_records'],
+	$GLOBALS['sysmda_test_post_types']['gone']
+);
+
+// A membership or paywall plugin protects a PUBLISHED post from a later
+// template_redirect callback or a the_content filter, and neither reaches this
+// endpoint: it runs at template_redirect priority 0 and exits, and it renders
+// cleaned blocks instead of the_content by design. sysmda_post_is_servable is
+// how such a plugin denies one post, everywhere at once.
+$GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] = false;
+check( 'servable: a site filter can veto a single post', false, PostSupport::is_servable( $sysmda_mk_post() ) );
+
+// Veto ONLY. It is consulted just when the built-in rules already said yes, so
+// returning true can never publish a draft, protected content, or a type the
+// site has not enabled.
+$GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] = true;
+check( 'servable: the veto filter cannot publish a draft', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_status' => 'draft' ) ) ) );
+check( 'servable: the veto filter cannot publish protected content', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_password' => 'x' ) ) ) );
+check( 'servable: the veto filter cannot publish an unsupported type', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_type' => 'product' ) ) ) );
+check( 'servable: the veto filter cannot publish an excluded format', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
+check( 'servable: an allowed post is unaffected', true, PostSupport::is_servable( $sysmda_mk_post() ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] );
 
 // ─── Shortcodes::render_download ──────────────────────────────────────────────
 
@@ -2023,6 +2428,57 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_conv->convert( '<p>a</p><p></p><p></p><p>b</p>' )
 	);
 
+	// …and a fence is not always at the left margin. The converter emits
+	// `<blockquote><pre>` as "> ```", `<li><pre>` as "- ```" with a four-space
+	// body, and the two nest. Matching only `^ {0,3}` missed all of them, so
+	// exactly the code that had to survive byte-for-byte was normalized as
+	// prose: hard-break spaces trimmed, blank-line runs collapsed.
+	$sysmda_nested_code = "x = 1  \n\n\ny = 2  ";
+
+	check(
+		'convert: code inside a blockquote preserved',
+		"> ```php\n> x = 1  \n> \n> \n> y = 2  \n> ```\n",
+		$sysmda_conv->convert( "<blockquote><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></blockquote>" )
+	);
+	check(
+		'convert: code inside a list item preserved',
+		"- ```php\n    x = 1  \n    \n    \n    y = 2  \n    ```\n",
+		$sysmda_conv->convert( "<ul><li><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></li></ul>" )
+	);
+	// Nesting positions the delimiter without indenting it: a second-level list
+	// emits "    - ```php", where the four spaces belong to the nested list, not
+	// to the fence. Counting them as indentation pushed it past the three-space
+	// cap and the whole block fell through to the prose rules.
+	check(
+		'convert: code inside a nested list preserved',
+		"- Outer\n    - ```php\n        x = 1  \n        \n        \n        y = 2  \n        ```\n",
+		$sysmda_conv->convert( "<ul><li>Outer<ul><li><pre><code class=\"language-php\">{$sysmda_nested_code}</code></pre></li></ul></li></ul>" )
+	);
+
+	check(
+		'convert: code inside a nested blockquote preserved',
+		"> > ```\n> > x = 1  \n> > \n> > \n> > y = 2  \n> > ```\n",
+		$sysmda_conv->convert( "<blockquote><blockquote><pre><code>{$sysmda_nested_code}</code></pre></blockquote></blockquote>" )
+	);
+
+	// Accepting a container prefix must not turn ARBITRARY indentation into a
+	// delimiter. A sample that itself shows fenced code puts ``` four spaces in,
+	// and CommonMark caps a delimiter at three: reading that line as the close
+	// ends the fence early and hands the rest of the block to the prose rules.
+	check(
+		'convert: indented backticks inside a fence are content',
+		"```\nExample:  \n    ```\n    x  \n\n\n    ```\ndone  \n```\n",
+		$sysmda_conv->convert( "<pre><code>Example:  \n    ```\n    x  \n\n\n    ```\ndone  </code></pre>" )
+	);
+
+	// The fence must still CLOSE, or everything after it would be preserved
+	// verbatim and the rest of the document would stop being normalized.
+	check(
+		'convert: prose after a quoted fence is normalized again',
+		"> ```\n> x = 1  \n> ```\n\na\n\nb\n",
+		$sysmda_conv->convert( "<blockquote><pre><code>x = 1  </code></pre></blockquote><p>a</p><p></p><p></p><p>b</p>" )
+	);
+
 	// Ordinary conversions, pinned so the converter config cannot drift silently.
 	check( 'convert: atx heading', "## Title\n", $sysmda_conv->convert( '<h2>Title</h2>' ) );
 	check( 'convert: dash list items', "- a\n- b\n", $sysmda_conv->convert( '<ul><li>a</li><li>b</li></ul>' ) );
@@ -2106,6 +2562,8 @@ class Sysmda_Test_Stream {
 	public static $fail_writes = 0;
 	/** @var bool Whether the first failing call writes half the payload first. */
 	public static $partial = false;
+	/** @var int Reads to serve before failing; negative never fails. */
+	public static $fail_read_after = -1;
 
 	/** @var resource|null Set by PHP on the wrapper instance. */
 	public $context;
@@ -2122,6 +2580,13 @@ class Sysmda_Test_Stream {
 	}
 
 	public function stream_read( $count ) {
+		if ( self::$fail_read_after >= 0 && false === strpos( $this->path, '.sysmda-bak' ) ) {
+			if ( 0 === self::$fail_read_after ) {
+				return false;
+			}
+			--self::$fail_read_after;
+		}
+
 		$chunk      = substr( self::$data[ $this->path ], $this->pos, $count );
 		$this->pos += strlen( $chunk );
 		return $chunk;
@@ -2218,6 +2683,36 @@ Sysmda_Test_Stream::$partial     = true;
 
 check( 'update: short write on an empty file reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
 check( 'update: short write on an empty file leaves nothing behind', '', Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
+// A read that fails PART WAY THROUGH must abort the whole update. Breaking out
+// of the read loop and continuing treats the bytes gathered so far as the whole
+// file: the transform runs on a truncation, the backup snapshots it, and the
+// overwrite discards everything that was never read. The write-side rollback
+// cannot help — the lost remainder never reached the buffer. The payload is
+// deliberately larger than one 8 KiB fread() chunk, so the first read succeeds
+// and the file is genuinely half-consumed when the second one fails.
+$sysmda_big_htaccess              = $sysmda_wp_rules . str_repeat( "# padding\n", 1200 );
+Sysmda_Test_Stream::$data         = array( $sysmda_fake_htaccess => $sysmda_big_htaccess );
+Sysmda_Test_Stream::$fail_writes  = 0;
+Sysmda_Test_Stream::$fail_read_after = 1;
+
+check(
+	'update: a read failure reports failure',
+	false,
+	(bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) )
+);
+check(
+	'update: a read failure leaves the file untouched',
+	$sysmda_big_htaccess,
+	Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ]
+);
+check(
+	'update: a read failure writes no backup',
+	false,
+	isset( Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess . '.sysmda-bak' ] )
+);
+
+Sysmda_Test_Stream::$fail_read_after = -1;
 
 // The successful path must still work through the same wrapper: the rollback
 // must not fire when the write went through.

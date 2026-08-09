@@ -321,11 +321,19 @@ class LiteSpeedCompat {
 
 		flock( $handle, LOCK_EX ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Failure is non-fatal by design, see the docblock.
 
+		// A read error ABORTS the update. Breaking out of the loop and carrying
+		// on would treat the bytes gathered so far as the whole file: the
+		// transform would run on a truncated `.htaccess`, the backup would
+		// snapshot the truncation, and the overwrite would then discard
+		// everything that was never read — permalinks and any other plugin's
+		// rules with it. The write-side rollback cannot help, because the lost
+		// remainder never reached $contents in the first place.
 		$contents = '';
 		while ( ! feof( $handle ) ) {
 			$chunk = fread( $handle, 8192 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
 			if ( false === $chunk ) {
-				break;
+				self::release( $handle );
+				return false;
 			}
 			$contents .= $chunk;
 		}
@@ -395,6 +403,16 @@ class LiteSpeedCompat {
 	 * Keeps a one-time `.htaccess.sysmda-bak` snapshot of the contents as they were
 	 * before this plugin first touched them, so a bad state stays recoverable
 	 * without FTP access. Best effort: a failed backup never blocks the write.
+	 *
+	 * Lifecycle, stated because it used to be implicit: written once and never
+	 * rewritten (the point is the state before the FIRST change, not before the
+	 * last), created with owner-only permissions, and **deliberately kept on
+	 * uninstall**. Uninstall removes the plugin's own marker block from the live
+	 * file; the snapshot is the operator's fallback if that ever goes wrong, and
+	 * deleting the only copy of a working server configuration at the exact
+	 * moment something may have broken is the wrong trade. It is inert — nothing
+	 * reads it automatically — and safe to delete by hand once the site is known
+	 * good.
 	 */
 	private static function backup( string $path, string $contents ): void {
 		$backup = $path . '.sysmda-bak';
@@ -403,7 +421,18 @@ class LiteSpeedCompat {
 			return;
 		}
 
-		@file_put_contents( $backup, $contents ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort; see the method docblock.
+		if ( false === @file_put_contents( $backup, $contents ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort; see the method docblock.
+			return;
+		}
+
+		// The snapshot holds the whole previous .htaccess — other plugins' rules,
+		// IP allow/deny lists, internal paths. Apache and LiteSpeed deny `.ht*`
+		// by convention, but that is a convention, not a guarantee: a reverse
+		// proxy, a static-file layer or a migrated vhost may serve
+		// `.htaccess.sysmda-bak` happily, and the name does not match the usual
+		// `.htaccess` deny rule anyway. Owner-only is the honest permission for
+		// a file whose entire content is server configuration.
+		@chmod( $backup, 0600 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod, WordPress.PHP.NoSilencedErrors.Discouraged -- Best effort: a host that refuses it is no worse off than before.
 	}
 
 	/**

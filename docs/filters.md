@@ -37,6 +37,32 @@ empty array to serve every format. The rule lives in `is_servable()`, so it
 applies to the `.md` route, negotiation, `rel="alternate"`, `/llms.txt`, the
 shortcodes and the dynamic tag at once.
 
+```php
+apply_filters( 'sysmda_post_is_servable', true, $post );
+```
+Final **veto** on a single post. The built-in rules understand WordPress's own
+notion of access — post status and the core password field — and nothing else.
+A membership, paywall or editorial plugin usually protects an otherwise
+published post from a `template_redirect` callback or a `the_content` filter,
+and **neither reaches this endpoint**: it runs at `template_redirect` priority
+`0` and exits, so later callbacks never run, and it renders cleaned blocks
+instead of `the_content` by design. Return `false` here to deny a post
+everywhere at once (the `.md` route, negotiation, `rel="alternate"`,
+`/llms.txt`, both shortcodes and the dynamic tag).
+
+Veto only: it is consulted **just when the built-in rules already said yes**,
+so returning `true` can never publish a draft, a password-protected post or a
+type the site has not enabled — use `sysmda_markdown_supported_post_types` and
+`sysmda_markdown_excluded_post_formats` to widen what is served. On the
+every-request path (see [Filters on the every-request path](#filters-on-the-every-request-path)).
+
+```php
+// Deny anything the membership plugin considers restricted.
+add_filter( 'sysmda_post_is_servable', function ( $servable, $post ) {
+    return $servable && ! my_membership_plugin_is_restricted( $post->ID );
+}, 10, 2 );
+```
+
 ## HTTP headers
 
 ```php
@@ -210,6 +236,7 @@ body at all. The filters they read are reached with them:
 |--------|-----------------|
 | `sysmda_markdown_supported_post_types` | route eligibility, on every candidate request |
 | `sysmda_markdown_excluded_post_formats` | `PostSupport::is_servable()`, same |
+| `sysmda_post_is_servable` | same, once the built-in rules have said yes |
 | `sysmda_front_matter_taxonomy_slugs` | `cache_version()` → `taxonomies_fingerprint()` |
 | `sysmda_front_matter_taxonomies` | same |
 | `sysmda_markdown_cache_dependencies` | `cache_version()` → `dependencies_fingerprint()` |

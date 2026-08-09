@@ -1,0 +1,4 @@
+plugin_version: 0.36.0
+git_commit: 23e18ac7e419ef42ef0e1d99a6aafe727480a747
+git_describe: 23e18ac-dirty
+built_at: 2026-08-09T15:50:32Z

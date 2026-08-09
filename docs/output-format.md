@@ -200,6 +200,10 @@ theme/plugin-injected related-posts and CTA blocks are not reintroduced:
    lines are collapsed to one, **outside fenced code blocks only**. Inside a fence
    the content is preserved byte-for-byte: trailing spaces and blank-line runs are
    meaningful there (Markdown hard breaks, REPL transcripts, diffs).
+   This holds for a fence **wherever it sits**, not only at the left margin
+   (since `0.36.0`): code inside a blockquote is emitted as ``> ```…``, inside a
+   list item as ``- ```…`` with a four-space body, and the two nest — all of
+   them are recognized and left alone.
 
 If conversion throws, the response falls back to a plain-text extraction rather
 than breaking.

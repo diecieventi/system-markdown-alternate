@@ -60,7 +60,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.26.x)
+## Current state (v0.35.x)
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -76,9 +76,13 @@ The v1 scope is done and widely exceeded. Implemented:
   feeds, oEmbed views, trackbacks, paged comments (`cpage`) and `<!--nextpage-->`
   sub-pages (`page > 1`) are excluded — `is_singular()` stays true for all of
   them, so `Accept: text/markdown` on `/my-post/feed/` used to return the article
-  body instead of the feed. The guard deliberately mirrors the one in
-  `print_alternate_link()`: what declares `Vary: Accept` and what advertises a
-  Markdown alternate must stay in step. The `.md` suffix route sets up the loop
+  body instead of the feed. `print_alternate_link()` **calls that same
+  predicate** (since `0.36.0`): what declares `Vary: Accept` and what advertises
+  a Markdown alternate must stay in step, and two guards written to mirror each
+  other did not — the link guard checked only the enabled type and
+  servability, so on an embed view (the one excluded variant that still runs
+  `wp_head`) the link was advertised for a URL that does not negotiate. One
+  predicate, not two; do not fork it again. The `.md` suffix route sets up the loop
   (`setup_postdata` + global `$post`) before converting, because on that route the
   main query 404s and dynamic blocks/shortcodes would otherwise render against no
   post — and the two routes would disagree.
@@ -318,16 +322,11 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **`.wordpress-org/` is missing its screenshot files**: the four stale
-  `screenshot-*.jpg` (pre-0.17.0 UI, before the tabs/cards restyle) were deleted
-  and the `== Screenshots ==` captions in `readme.txt` were rewritten for a new
-  set of **five**, one per settings tab in panel order (General, Markdown output,
-  `/llms.txt`, Integrations, Advanced). The images themselves still have to be
-  saved into `.wordpress-org/` as `screenshot-1.png` … `screenshot-5.png`: an
-  agent that is shown a screenshot in chat cannot write it to disk, so this step
-  is the maintainer's. Until they land, the listing would show captions with no
-  images — add them before the first asset sync. No version bump needed: they
-  live in the SVN `/assets` folder, independent of `/trunk`.
+- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`): the
+  only implementation plan still open. Greenlit, **not started**, and gated on
+  the WPML/Polylang staging reconnaissance described inside — the current
+  plan's central query assumption is not reliable and must be verified against
+  real plugin behaviour before any code is written.
 
 ### To check next time (not urgent, parked here)
 
@@ -428,6 +427,20 @@ The v1 scope is done and widely exceeded. Implemented:
   "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
   enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
   `/llms.txt` stays silent as well (see below).
+  **The public policy is applied to the SAVED SELECTION and nowhere else**
+  (decided August 2026, `0.36.0`): the AdminSettings callback that feeds the
+  option into this filter at priority 20 drops any slug whose type is not
+  currently registered `public` (`PostSupport::type_is_public()`). Two sources,
+  two treatments, and the seam between them is the point — `sanitize_post_types()`
+  deliberately KEEPS a saved slug whose provider is temporarily inactive, so an
+  afternoon of deactivation does not turn the endpoint off for its content, but
+  a type re-registered as `public => false` (or replaced by an internal one of
+  the same name) must not stay servable on the strength of a stale option; the
+  slug survives and comes back by itself. Site code adding a non-public CPT
+  **through the filter**, by contrast, is an explicit request, and widening what
+  is served is this filter's documented job. So do NOT re-apply the check in
+  `is_servable()` — a first attempt did, which silently overruled the filter and
+  contradicted its own docblock (caught in review).
 - **Password-protected content has NO Markdown representation, ever** (decided
   July 2026, closes M1 of the 0.26.3 review): the test is
   `'' === $post->post_password`, deliberately NOT `post_password_required()`.
@@ -593,15 +606,64 @@ The v1 scope is done and widely exceeded. Implemented:
   This matters more than it looks, because **no page cache purges a `.md`**:
   cache plugins purge the permalink on save and have no idea `permalink.md`
   exists, so correctness cannot rest on purging and has to come from
-  revalidation. `public` states what is true by construction — the
-  representation never varies by visitor (protected content has no `.md`,
-  drafts 404, and the body comes from cleaned blocks rather than `the_content`,
-  so personalisation filters never run). Freshness is still not imposed, but it
+  revalidation. `public` states what the `.md` **is defined to be** — the
+  anonymous representation of the post — and not something that holds by
+  construction: see the decision below, which corrects the claim this paragraph
+  used to make. It is enforced by only sending `public` to anonymous requests.
+  Freshness is still not imposed, but it
   is now reachable: `sysmda_cache_control` may return an `s-maxage`, and whoever
   does that accepts the staleness the missing purge implies. Returning `''`
   removes the header entirely (WordPress's included).
   Do not go back to sending nothing, and do not "restore" `no-store` here: both
   were measured and both are worse.
+- **The `.md` is the ANONYMOUS representation, and that is a definition the
+  plugin enforces — not a property it gets for free** (decided August 2026,
+  `0.36.0`, correcting a claim this guide made until then). The old wording
+  said the representation "never varies by visitor" because the body is built
+  from cleaned blocks rather than `the_content`. That is only true of
+  `the_content` filters. The body is assembled with `render_block()` and
+  `do_shortcode()`, and every stage passes through site filters, so a dynamic
+  block or shortcode reading the current user, a cookie, a cart or a
+  membership state renders **in the caller's context**. Two consequences
+  followed, and both were real: an authenticated visitor could be the first to
+  populate the per-post body cache — keyed by post ID alone, shared by
+  everyone, for up to a day — and the `.md` route additionally invited shared
+  intermediaries to store it. Enforced now in two places:
+  - `MarkdownController::representation_is_shared()` (= `! is_user_logged_in()`)
+    gates **three** things, and all three have to move together or the rule
+    contradicts itself. An authenticated request (a) neither reads nor writes
+    the shared body cache; (b) is answered `private, no-store, must-revalidate`
+    — **deliberately not filterable**, so `sysmda_cache_control` cannot make a
+    possibly personalized response publicly cacheable by accident; and (c) is
+    never answered `304` and carries **no `ETag` or `Last-Modified`**. That
+    third one was missed first time round and caught in review: rebuilding the
+    body for a visitor and then answering that same visitor `304` on a
+    validator describing the *shared* body hands them exactly what the rebuild
+    avoided — their browser reuses a copy built for everyone, off an
+    `If-None-Match` kept from an earlier anonymous fetch. The precondition
+    lives inside `handle_conditional()` rather than at its call site, so no
+    caller can forget it, and the validators are suppressed for the same reason
+    the ETag is weak: do not send a claim this plugin cannot back. Anonymous
+    traffic, which is the entire audience for this endpoint, is untouched and
+    keeps the full shared-cache behaviour.
+  - `sysmda_post_is_servable` is the per-post **veto**, honoured by every
+    consumer through `PostSupport::is_servable()`. It exists because the
+    built-in checks know WordPress's own notion of access (status, the core
+    password field) and nothing else: a membership or paywall plugin protects
+    a published post from a later `template_redirect` callback or a
+    `the_content` filter, and this plugin runs at `template_redirect` priority
+    `0` and exits, so neither ever gets a say. Veto only — consulted just when
+    the built-in rules already said yes, so it can never publish a draft or
+    protected content.
+  What this does **not** claim: `is_user_logged_in()` is the tractable half of
+  visitor variance, not all of it. Anonymous output can still vary by cookie
+  (cart, geolocation, A/B assignment), and no plugin can detect that. Such a
+  site declares it through `sysmda_markdown_cache_dependencies` or vetoes the
+  post. Equally, do **not** present that filter as an answer to personalization
+  in general: it contributes validator inputs, and a validator does not
+  partition a shared cache or authorize anybody. Leaving the hook at priority
+  `0` is deliberate (moving it would break the route on sites where something
+  else 404s first); the veto filter is how other plugins participate.
 - **Negotiated Markdown and `406` responses are always no-cache** (decided,
   binding — outcome of the July 2026 LiteSpeed/Vary diagnosis on two production
   hosts): they share their URL with the HTML page, and honouring `Vary: Accept`
@@ -927,11 +989,11 @@ running code at the WP level.
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
-├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (ready, not active: needs SVN secrets + a published Release)
-├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
+├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (live: secrets configured; validates the tag before staging)
+├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
-├── DIST/                         ← distributable zip (versioned)
+├── DIST/                         ← distributable zip + BUILD-INFO.txt (versioned; a RELEASE SNAPSHOT, not a build of HEAD)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1074,17 +1136,52 @@ not exist as far as the public API is concerned.
    exactly what a `304` exists to avoid. Keep new inputs to values already in
    memory or cheap to read, and never do I/O there; `docs/filters.md` states
    the same rule for filter authors.
-   **Not every input belongs in the hash, though** (0.28.0): three of them are
+   **Not every input belongs in the hash, though** (0.28.0): some are
    *site-wide* — the author's display name (`author:`), the permalink structure
-   and the home URL (`url:`, `markdown_url:`, every absolute link in the body).
+   and the home URL (`url:`, `markdown_url:`, every absolute link in the body),
+   the site timezone (`date_published`/`date_modified` are printed in **local**
+   time, so their offset and wall-clock reading move with it), and the terms of
+   `category`/`post_tag` (always emitted under their own keys, and therefore
+   the two taxonomies `taxonomies_fingerprint()` excludes — the *optional*
+   custom taxonomies need no hook, that fingerprint hashes their term names).
    Reading them per request would make both fingerprints non-empty for every
    post, which invalidates the whole site on upgrade **and** permanently
    disables the `If-Modified-Since` path. They are rare, one-off events, so
    `AdminSettings` bumps the global salt instead
-   (`update_option_permalink_structure`, `update_option_home`, `profile_update`
+   (`update_option_permalink_structure`, `update_option_home`,
+   `update_option_timezone_string`, `update_option_gmt_offset`, `profile_update`
    guarded on an actual display-name change, `deleted_user` for the silent
-   reassignment `wp_delete_user()` performs with a direct DB write). Prefer that
-   shape for anything else that is site-wide and rare.
+   reassignment `wp_delete_user()` performs with a direct DB write,
+   `edited_term`/`delete_term` guarded on the two taxonomies above). Prefer that
+   shape for anything else that is site-wide and rare. Deliberately **not**
+   hooked: `set_object_terms`, which fires on every post save — assigning terms
+   from the editor already moves `post_modified_gmt`, and the residue (a purely
+   programmatic `wp_set_object_terms()` touching no post row) is the same
+   bounded one already accepted for post formats.
+   **Two rules the salt carries, both load-bearing:**
+   - **It is written once, at `shutdown`** (`flush_cache_salt()`; the triggers
+     only mark it pending). A Settings API save writes the group's options one
+     at a time, and bumping on the first changed one let a concurrent front-end
+     request cache half-old output *under the new salt*, where nothing would
+     invalidate it again. Same argument that already keeps the triggers on
+     post-write hooks, one level up.
+   - **Its value is `<unix ts>-<random>`, never a bare `time()`.** Two genuine
+     invalidations in the same second produced the same string, and
+     `update_option()` short-circuits on an unchanged value, so the second
+     silently did nothing. The leading timestamp is read by
+     `MarkdownController::salt_changed_at()`, so keep the shape.
+   **Corollary in `date_is_strong_validator()`** (0.36.0): the date is refused
+   as a validator not only when either fingerprint is non-empty, but unless
+   **the salt is strictly older than `post_modified_gmt`**. Strictly, not
+   "not newer": both have one-second resolution, so an equal pair is ambiguous
+   — a save and a bump in the same second are indistinguishable, and if the
+   bump came second the date is already lying. Ambiguity resolves against the
+   date. A client sending only
+   `If-Modified-Since` presents no ETag, so every site-wide bump above would
+   otherwise keep answering `304` with a body the salt had already invalidated,
+   for every post older than the change. It becomes usable again for a post the
+   next time that post is saved — which is exactly when the date starts telling
+   the truth again.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)
@@ -1117,7 +1214,16 @@ new HtmlConverter([
 
 ```bash
 bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundled)
+                         #   + DIST/BUILD-INFO.txt (version, commit, git describe, date)
 ```
+
+`DIST/` holds a **committed release snapshot, not a build of `HEAD`** — that is
+the policy, and `DIST/BUILD-INFO.txt` is what makes it checkable: it records the
+plugin version, the commit, `git describe` and the build date. Post-release
+commits that change no version leave the zip correct while its `readme.txt`
+differs from `main`, which is expected; the manifest is how a reviewer tells
+that apart from a package that quietly fell behind. Do not "fix" such a
+difference by rebuilding outside a release.
 
 The zip includes the production Composer dependencies, so it installs without
 Composer on the server. Local build environment: PHP 8.4, Composer and `zip`
@@ -1142,15 +1248,25 @@ WordPress.org Plugin Check.
 
 - Manual flow: `bash bin/build.sh`, then copy the content into `svn/trunk` and
   tag it under `svn/tags/x.y.z`.
-- **Automated flow** (ready, not yet active): `.github/workflows/deploy-wordpress-org.yml`
-  runs `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
-  Release** (not on a bare tag push, to avoid a run without SVN credentials).
-  Since `BUILD_DIR` ignores `.distignore`, the workflow stages a clean copy of
-  `system-markdown-alternate/` itself (same exclusions as `.distignore`) before
-  handing it to the action. `VERSION` is derived from the tag name (`v0.18.0` →
-  `0.18.0`). **Activation, once accepted on wordpress.org**: add the
-  `SVN_USERNAME` / `SVN_PASSWORD` repository secrets, then publish a GitHub
-  Release on the version tag.
+- **Automated flow** (**live**: the `SVN_USERNAME` / `SVN_PASSWORD` secrets are
+  configured and versions have already been published this way):
+  `.github/workflows/deploy-wordpress-org.yml` runs
+  `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
+  Release** (not on a bare tag push, to avoid a run without SVN credentials) or
+  by hand from the Actions tab. Since `BUILD_DIR` ignores `.distignore`, the
+  workflow stages a clean copy of `system-markdown-alternate/` itself (same
+  exclusions as `.distignore`) before handing it to the action. `VERSION` is
+  derived from the tag name (`v0.18.0` → `0.18.0`).
+  **The job refuses to deploy anything that is not an existing `vX.Y.Z` tag**
+  whose plugin header, `SYSMDA_VERSION`, `readme.txt` stable tag and
+  `CHANGELOG.md` entry all agree, and checks out `refs/tags/…` explicitly so a
+  branch cannot stand in for a tag. An SVN version number cannot be withdrawn
+  once published, which is why the guard runs before anything is staged — do
+  not relax it. Every `uses:` in this repository is **pinned to a full commit
+  SHA** (`# vX.Y.Z` comment alongside), not to a moving `@v5`/`@stable` ref:
+  this workflow hands SVN credentials to a third-party action, so what runs
+  must not be able to change underneath it. Bump them through the pinned SHA,
+  never back to a tag.
 - **Git tags**: annotated, `vX.Y.Z` on the squashed release commit on `main`
   (e.g. `v0.18.0`); retroactively added from `v0.17.1` onward. Created and
   pushed **automatically** by the `Release tag` workflow when a push to `main`
@@ -1185,11 +1301,10 @@ WordPress.org Plugin Check.
   (asset forgotten? `gh release upload vX.Y.Z DIST/system-markdown-alternate.zip`).
   Note: a Release published by the workflow does **not** start the SVN deploy —
   GitHub raises no workflow-starting event from the default `GITHUB_TOKEN`. That
-  workflow is inactive anyway and has its own manual trigger; to chain the two
-  once wordpress.org is live, add a `RELEASE_TOKEN` secret (a PAT with
-  `contents: write`), which `Publish release` already prefers when present. A
-  Release published by hand from the Mac does trigger it, and fails harmlessly
-  until the SVN secrets are configured (see above).
+  workflow has its own manual trigger, so the usual flow is to run it from the
+  Actions tab with the tag; to chain the two, add a `RELEASE_TOKEN` secret (a
+  PAT with `contents: write`), which `Publish release` already prefers when
+  present. A Release published by hand from the Mac does trigger it directly.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.

@@ -45,6 +45,9 @@ class AdminSettings {
 	/** @var string Settings page hook (used to load assets only on that page). */
 	private $hook = '';
 
+	/** @var bool Whether this request still owes the cache salt a bump. */
+	private $salt_bump_pending = false;
+
 	public function boot(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -79,6 +82,38 @@ class AdminSettings {
 		add_action( 'profile_update', array( $this, 'maybe_bump_for_author' ), 10, 2 );
 		add_action( 'deleted_user', array( $this, 'bump_cache_salt' ) );
 
+		// The site timezone formats `date_published` and `date_modified`: both
+		// are printed with get_post_time()/get_post_modified_time() in LOCAL
+		// time, so their ISO offset — and the wall-clock reading itself —
+		// changes across the whole site the moment Settings => General is
+		// saved, with no post row touched.
+		add_action( 'update_option_timezone_string', array( $this, 'bump_cache_salt' ) );
+		add_action( 'update_option_gmt_offset', array( $this, 'bump_cache_salt' ) );
+
+		// `categories:` and `tags:` are ALWAYS emitted, and unlike the optional
+		// custom taxonomies they are excluded from taxonomies_fingerprint() —
+		// they have their own front-matter keys. Renaming or deleting a term
+		// therefore rewrote the front matter of every post carrying it while
+		// cache_version() stayed put, so a client holding the old ETag was told
+		// `304` for good. Term edits are rare, so the site-wide salt shape is
+		// the right one here: reading the terms of every post on every request
+		// would make dependencies_fingerprint() non-empty site-wide, which
+		// invalidates everything on upgrade AND permanently disables the
+		// `If-Modified-Since` path.
+		//
+		// Deliberately NOT hooked: `set_object_terms`, which fires on every
+		// single post save. Assigning terms from the editor already moves
+		// `post_modified_gmt`; the residue is a purely programmatic
+		// wp_set_object_terms() that touches no post row — the same bounded
+		// residue already accepted for post formats, and not worth a hook on
+		// the write path of every save.
+		add_action( 'edited_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
+		add_action( 'delete_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
+
+		// The write itself happens once, at the very end of the request: see
+		// flush_cache_salt().
+		add_action( 'shutdown', array( $this, 'flush_cache_salt' ) );
+
 		// After init, so taxonomies registered by themes/plugins are all visible.
 		add_action( 'wp_loaded', array( $this, 'maybe_migrate_legacy_taxonomies' ) );
 
@@ -106,20 +141,68 @@ class AdminSettings {
 	}
 
 	/**
-	 * Bumps the cache salt unconditionally: every cached Markdown body is
+	 * Marks the cache salt as needing a bump: every cached Markdown body is
 	 * rebuilt on the next request and every `ETag` changes once.
 	 *
 	 * Hooked directly to the site-wide changes listed in boot(); the option
-	 * handler above filters first and then calls this.
+	 * handler above filters first and then calls this. Recording the intent
+	 * rather than writing straight away is what makes a settings save safe —
+	 * see flush_cache_salt().
 	 */
 	public function bump_cache_salt(): void {
-		static $bumped = false;
-		if ( $bumped ) {
-			return; // Only one bump per request, even when several triggers fire.
-		}
-		$bumped = true;
+		$this->salt_bump_pending = true;
+	}
 
-		update_option( 'sysmda_cache_salt', (string) time() );
+	/**
+	 * Hook: shutdown. Performs the pending bump, once, after everything else
+	 * this request was going to write.
+	 *
+	 * Deferring is the point, and it is the same argument that already keeps
+	 * the triggers in boot() on post-write hooks, applied one level up. A
+	 * Settings API save writes the group's options one at a time, and the first
+	 * changed `sysmda_*` option used to bump the salt immediately: a front-end
+	 * request landing between that write and the last one would build its
+	 * Markdown from a half-old set of settings and cache it under the NEW salt,
+	 * where nothing would ever invalidate it again. Bumping at shutdown means
+	 * such a request caches under the old salt instead, and the bump that
+	 * follows throws it away.
+	 *
+	 * The value is a timestamp plus random bytes, not a bare `time()`. Two
+	 * genuine invalidations inside the same second used to produce the same
+	 * string, and `update_option()` short-circuits on an unchanged value: the
+	 * second one silently did nothing, leaving stale bodies and ETags valid.
+	 * The leading timestamp is not decoration either — MarkdownController reads
+	 * it to decide whether `post_modified_gmt` is still a trustworthy
+	 * validator, so keep the `<unix ts>-<random>` shape.
+	 */
+	public function flush_cache_salt(): void {
+		if ( ! $this->salt_bump_pending ) {
+			return;
+		}
+
+		$this->salt_bump_pending = false;
+
+		update_option( 'sysmda_cache_salt', time() . '-' . bin2hex( random_bytes( 4 ) ) );
+	}
+
+	/**
+	 * Hook: edited_term / delete_term. Bumps the salt when a term of a taxonomy
+	 * printed in the front matter changes name or disappears.
+	 *
+	 * Limited to `category` and `post_tag` on purpose: those two are always
+	 * emitted, under their own `categories:`/`tags:` keys, and are the ones
+	 * MetadataBuilder::taxonomies_fingerprint() explicitly leaves out. The
+	 * optional custom taxonomies need no hook — that fingerprint hashes their
+	 * term NAMES, so a rename already moves the validator by itself.
+	 *
+	 * @param int    $term_id  Term being edited or deleted (unused).
+	 * @param int    $tt_id    Term taxonomy ID (unused).
+	 * @param string $taxonomy Taxonomy the term belongs to.
+	 */
+	public function maybe_bump_for_term( $term_id, $tt_id, $taxonomy ): void {
+		if ( in_array( $taxonomy, array( 'category', 'post_tag' ), true ) ) {
+			$this->bump_cache_salt();
+		}
 	}
 
 	/**
@@ -291,7 +374,7 @@ class AdminSettings {
 	}
 
 	public function register_settings(): void {
-		// ── Opzioni sempre registrate ──────────────────────────────────────────
+		// ── Always-registered options ──────────────────────────────────────────
 		register_setting(
 			self::OPTION_GROUP,
 			'sysmda_cache_ttl',
@@ -427,7 +510,7 @@ class AdminSettings {
 			);
 		}
 
-		// ── Generale ───────────────────────────────────────────────────────────
+		// ── General ───────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_general', __( 'General', 'system-markdown-alternate' ), array( $this, 'render_general_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_supported_post_types', __( 'Enabled content types', 'system-markdown-alternate' ), array( $this, 'field_post_types' ), self::PAGE, 'sysmda_general' );
 		add_settings_field( 'sysmda_cache_ttl', __( 'Cache TTL (seconds)', 'system-markdown-alternate' ), array( $this, 'field_cache_ttl' ), self::PAGE, 'sysmda_general' );
@@ -457,7 +540,7 @@ class AdminSettings {
 		// ── Integrations (informational only) ──────────────────────────────────────
 		add_settings_section( 'sysmda_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
 
-		// ── Avanzate ─────────────────────────────────────────────────────────────
+		// ── Advanced ─────────────────────────────────────────────────────────────
 		add_settings_section( 'sysmda_advanced', __( 'Advanced', 'system-markdown-alternate' ), array( $this, 'render_advanced_intro' ), self::PAGE );
 		add_settings_field( 'sysmda_robots_header', 'X-Robots-Tag', array( $this, 'field_robots_header' ), self::PAGE, 'sysmda_advanced' );
 		add_settings_field( 'sysmda_litespeed_htaccess', __( 'LiteSpeed cache compatibility', 'system-markdown-alternate' ), array( $this, 'field_litespeed_htaccess' ), self::PAGE, 'sysmda_advanced' );
@@ -478,7 +561,7 @@ class AdminSettings {
 		return class_exists( 'GenerateBlocks_Register_Dynamic_Tag' );
 	}
 
-	// ─── Sanitizzazione ─────────────────────────────────────────────────────────
+	// ─── Sanitization ─────────────────────────────────────────────────────────
 
 	/**
 	 * Post type allowlist: registered public types (excluding Media), plus any
@@ -487,8 +570,10 @@ class AdminSettings {
 	 * The survival rule matters: a saved type whose plugin is temporarily
 	 * inactive would otherwise be dropped by the next save of this page, silently
 	 * turning the `.md` endpoint off for it when the plugin comes back. Same
-	 * reasoning as sanitize_taxonomy_slugs(); the emission path validates the
-	 * type again, so an unknown one is inert.
+	 * reasoning as sanitize_taxonomy_slugs(). The slug survives here and is
+	 * inert at runtime until the type is registered publicly again:
+	 * PostSupport::type_is_public() enforces that, and until 0.36.0 nothing
+	 * did — this comment claimed a validation that was not happening.
 	 *
 	 * @param mixed $value
 	 * @return string[]
@@ -715,7 +800,24 @@ class AdminSettings {
 				if ( false === $v ) {
 					return $defaults;
 				}
-				$list = (array) $v;
+
+				// The saved slugs are the ONLY place the public policy is
+				// enforced, and deliberately so. sanitize_post_types() keeps a
+				// slug whose provider is temporarily inactive, so an afternoon
+				// of deactivation does not turn the endpoint off for its
+				// content — but a type re-registered as `public => false`, or
+				// replaced by an internal one of the same name, must not stay
+				// servable on the strength of a stale option. The slug survives
+				// in the settings and comes back by itself when the type is
+				// public again.
+				//
+				// Applying the same rule to the filter's RESULT would be a
+				// different thing entirely: site code adding a non-public CPT
+				// here is an explicit request, and this filter's documented job
+				// is to widen what is served. It runs at 20, so anything hooked
+				// later passes through untouched.
+				$list = array_values( array_filter( (array) $v, array( PostSupport::class, 'type_is_public' ) ) );
+
 				return ! empty( $list ) ? $list : $defaults;
 			},
 			20
@@ -790,21 +892,39 @@ class AdminSettings {
 	}
 
 	/**
-	 * Quick info nell'aside: stato dell'endpoint /llms.txt, URL e conflitti.
+	 * Quick info in the aside: /llms.txt endpoint status, URL and conflicts.
 	 * Presentation only: uses the same data already calculated by the plugin.
 	 */
 	public function render_llmstxt_aside(): void {
 		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
 		$url     = home_url( '/llms.txt' );
 
+		// The option being on is not the same as the endpoint answering. With no
+		// content type selected LlmsTxtController deliberately stays silent —
+		// there is nothing to index, and it must not take the URL over from
+		// whatever else may be handling it while the rest of the plugin is
+		// inactive. Reporting that as a flat "Enabled" sent the reader to a URL
+		// that does not respond, with nothing on the page explaining why.
+		$waiting = $enabled && empty( PostSupport::supported_post_types() );
+
 		echo '<section class="sysmda-card sysmda-aside-card">';
 		echo '<header class="sysmda-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
 		echo '<div class="sysmda-card__body">';
 
-		echo '<p class="sysmda-endpoint-state ' . ( $enabled ? 'is-on' : 'is-off' ) . '">';
+		echo '<p class="sysmda-endpoint-state ' . ( $enabled && ! $waiting ? 'is-on' : 'is-off' ) . '">';
 		echo '<span class="sysmda-dot" aria-hidden="true"></span>';
-		echo esc_html( $enabled ? __( 'Enabled', 'system-markdown-alternate' ) : __( 'Disabled', 'system-markdown-alternate' ) );
+		if ( ! $enabled ) {
+			echo esc_html__( 'Disabled', 'system-markdown-alternate' );
+		} elseif ( $waiting ) {
+			echo esc_html__( 'Enabled, waiting for a content type', 'system-markdown-alternate' );
+		} else {
+			echo esc_html__( 'Enabled', 'system-markdown-alternate' );
+		}
 		echo '</p>';
+
+		if ( $waiting ) {
+			echo '<p class="description">' . esc_html__( 'Nothing is indexed yet, so the endpoint does not respond. Select at least one content type under General.', 'system-markdown-alternate' ) . '</p>';
+		}
 
 		echo '<p class="sysmda-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
 

@@ -124,7 +124,11 @@ class MarkdownController {
 			return false;
 		}
 
-		if ( ! is_singular( PostSupport::supported_post_types() ) ) {
+		$types = PostSupport::supported_post_types();
+
+		// Explicit guard: is_singular([]) in WP is true for ANY singular content.
+		// With no selected types the plugin is inactive and nothing negotiates.
+		if ( empty( $types ) || ! is_singular( $types ) ) {
 			return false;
 		}
 
@@ -143,17 +147,19 @@ class MarkdownController {
 	 * Hook: wp_head. Prints the alternate link only on supported public posts/CPTs.
 	 */
 	public function print_alternate_link(): void {
-		$types = PostSupport::supported_post_types();
-
-		// Explicit guard: is_singular([]) in WP is true for ANY singular content.
-		// With no selected types, the plugin is inactive and must not print the link.
-		if ( empty( $types ) || ! is_singular( $types ) ) {
+		// The same predicate that decides whether this URL negotiates, and not
+		// a parallel one: what advertises a Markdown alternate and what declares
+		// `Vary: Accept` have to stay in step. They did not — this guard checked
+		// only the enabled type and servability, so on an embed view (the one
+		// excluded variant that still runs `wp_head`) the link was printed for a
+		// URL that does not negotiate and sends no `Vary`.
+		if ( ! $this->is_negotiable_request() ) {
 			return;
 		}
 
 		$post = get_queried_object();
 
-		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
+		if ( ! $post instanceof \WP_Post ) {
 			return;
 		}
 
@@ -338,7 +344,7 @@ class MarkdownController {
 	 * send a wildcard Accept (curl and many HTTP libraries) therefore receive HTML.
 	 */
 	private function prefers_markdown(): bool {
-		if ( isset( $_GET['format'] ) && 'markdown' === $_GET['format'] ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( self::has_markdown_format_override() ) {
 			return true;
 		}
 
@@ -371,7 +377,11 @@ class MarkdownController {
 			return false;
 		}
 
-		if ( isset( $_GET['format'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		// An explicit `?format=markdown` settles the representation, so the
+		// Accept header cannot make the request unacceptable. Only the
+		// recognized value counts: `?format=banana` names no representation
+		// this plugin serves, so it must not be able to switch the 406 off.
+		if ( self::has_markdown_format_override() ) {
 			return false;
 		}
 
@@ -393,6 +403,19 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether the request carries the `?format=markdown` application override.
+	 *
+	 * The one recognized value, shared by every caller so they cannot drift:
+	 * anything else in `format` names no representation this plugin serves and
+	 * must behave exactly as if the parameter were absent. The strict
+	 * comparison against a string also disposes of `?format[]=markdown`, which
+	 * makes the value an array.
+	 */
+	private static function has_markdown_format_override(): bool {
+		return isset( $_GET['format'] ) && 'markdown' === $_GET['format']; // phpcs:ignore WordPress.Security.NonceVerification
+	}
+
+	/**
 	 * Normalized request `Accept` header (empty string when absent).
 	 */
 	private function accept_header(): string {
@@ -401,19 +424,55 @@ class MarkdownController {
 
 	/**
 	 * Adds `Vary: Accept` without duplicating an existing Vary header that includes it.
+	 *
+	 * The comparison is over comma-separated **field names**, not substrings.
+	 * `Vary: Accept-Encoding` and `Vary: Accept-Language` are both extremely
+	 * common — the first is sent by practically every compressing stack — and a
+	 * substring test read either as "already covered", so the header was never
+	 * added and nothing partitioned the cache by media type. On the HTML branch
+	 * that lets a cache store the HTML and later hand it to a Markdown-preferring
+	 * request before PHP runs. They are different fields and cover nothing here.
+	 *
+	 * `Vary: *` is the one non-exact value that genuinely covers everything: it
+	 * makes the response uncacheable by shared caches altogether.
 	 */
 	private function send_vary_header(): void {
 		if ( headers_sent() ) {
 			return;
 		}
 
-		foreach ( headers_list() as $sent ) {
-			if ( 0 === stripos( $sent, 'vary:' ) && false !== stripos( $sent, 'accept' ) ) {
-				return; // Already covered.
-			}
+		if ( self::vary_covers_accept( headers_list() ) ) {
+			return;
 		}
 
 		header( 'Vary: Accept', false );
+	}
+
+	/**
+	 * Whether the headers already sent declare a `Vary` that covers `Accept`.
+	 *
+	 * Split out of send_vary_header() so the field-name comparison is testable
+	 * without a live SAPI: `headers_list()` is empty under CLI, which is where
+	 * the substring bug this replaced could hide indefinitely.
+	 *
+	 * @param string[] $sent Headers as returned by headers_list().
+	 */
+	public static function vary_covers_accept( array $sent ): bool {
+		foreach ( $sent as $header ) {
+			if ( 0 !== stripos( $header, 'vary:' ) ) {
+				continue;
+			}
+
+			foreach ( explode( ',', substr( $header, strlen( 'vary:' ) ) ) as $field ) {
+				$field = trim( $field );
+
+				if ( '*' === $field || 0 === strcasecmp( 'accept', $field ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -486,7 +545,7 @@ class MarkdownController {
 		// reads Expires first, and it contradicts the header sent below.
 		header_remove( 'Expires' );
 
-		$value = self::cache_control_value();
+		$value = self::cache_control_value( self::representation_is_shared() );
 
 		if ( '' === $value ) {
 			// Explicit opt-out: no policy from the plugin, and none inherited
@@ -500,12 +559,51 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether the representation being produced is the shared, public one.
+	 *
+	 * The `.md` is defined as the **anonymous** representation of a post, and
+	 * `public, max-age=0, must-revalidate` states exactly that. The premise is
+	 * not free, though: the body is assembled with `render_block()` and
+	 * `do_shortcode()`, and every stage passes through site filters, so a
+	 * dynamic block or shortcode reading the current user, a cookie or a cart
+	 * renders in the CALLER's context — "built from cleaned blocks rather than
+	 * `the_content`" keeps `the_content` filters out, and nothing more.
+	 *
+	 * So an authenticated request may produce output that is not the public
+	 * representation. Such a response must not be stored in the per-post body
+	 * cache (shared by every visitor, keyed by post ID alone) and must not be
+	 * storable by any cache in front of PHP. Anonymous traffic — which is what
+	 * the audience for this endpoint is made of — is unaffected and keeps the
+	 * full shared-cache behaviour.
+	 *
+	 * `is_user_logged_in()` is the tractable half of the question, not the
+	 * whole of it: anonymous output can vary by cookie too (a cart, a
+	 * geolocation, an A/B assignment). A site whose blocks do that should
+	 * declare it through `sysmda_markdown_cache_dependencies` or veto the post
+	 * with `sysmda_post_is_servable`; there is no way for the plugin to detect
+	 * it.
+	 */
+	public static function representation_is_shared(): bool {
+		return ! is_user_logged_in();
+	}
+
+	/**
 	 * The `Cache-Control` value for the plugin's own URLs.
 	 *
 	 * Public and separate from the header call so the policy is testable
 	 * without a live response.
+	 *
+	 * @param bool $shared Whether this response is the public representation.
 	 */
-	public static function cache_control_value(): string {
+	public static function cache_control_value( bool $shared = true ): string {
+		if ( ! $shared ) {
+			// Deliberately NOT filterable. `sysmda_cache_control` exists to let a
+			// site grant a freshness lifetime to the public representation; it
+			// must not be able to make a possibly personalized response
+			// publicly cacheable, least of all by accident.
+			return 'private, no-store, must-revalidate';
+		}
+
 		/**
 		 * Filter: `Cache-Control` for the URLs the plugin owns (`.md` and
 		 * `/llms.txt`). The default grants storage but forbids reuse without
@@ -637,6 +735,20 @@ class MarkdownController {
 	 * validator for this representation (see date_is_strong_validator()).
 	 */
 	private function handle_conditional( \WP_Post $post, string $version ): bool {
+		// Conditional handling belongs to the shared representation, and the
+		// precondition lives here rather than at the call site so no caller can
+		// forget it. The two halves of the anonymous-representation rule have to
+		// agree: get_markdown() rebuilds for an authenticated visitor precisely
+		// because the shared body may not be theirs, so answering that same
+		// visitor `304` on a validator describing the shared body hands them
+		// exactly what the rebuild was meant to avoid — their browser reuses a
+		// copy built for everyone, off an `If-None-Match` kept from an earlier
+		// anonymous fetch. Such a request is always answered in full, and
+		// send_headers() leaves the validators off it for the same reason.
+		if ( ! self::representation_is_shared() ) {
+			return false;
+		}
+
 		$etag        = self::etag( $version );
 		$modified_ts = $this->last_modified_timestamp( $post );
 
@@ -687,10 +799,47 @@ class MarkdownController {
 	 * dependencies into the ETag alone would still answer `304` with a stale
 	 * body after a synced pattern, featured image, description or ACF change.
 	 * Every input added to cache_version() must be reflected here too.
+	 *
+	 * The salt is the third input, and the one the two fingerprints cannot
+	 * describe: it moves for site-wide reasons that belong to no post at all —
+	 * a settings save, the permalink structure, the home URL, the site
+	 * timezone, an author rename, a category or tag rename. Each of those
+	 * rewrites the output of posts whose `post_modified_gmt` has not moved, so
+	 * once the salt is newer than the post, the date has stopped knowing about
+	 * every input and may not answer `304` on its own. It becomes usable again
+	 * for that post the next time the post itself is saved, which is exactly
+	 * when the date starts telling the truth again.
 	 */
 	private function date_is_strong_validator( \WP_Post $post ): bool {
-		return '' === MetadataBuilder::taxonomies_fingerprint( $post )
-			&& '' === MetadataBuilder::dependencies_fingerprint( $post );
+		if ( '' !== MetadataBuilder::taxonomies_fingerprint( $post )
+			|| '' !== MetadataBuilder::dependencies_fingerprint( $post ) ) {
+			return false;
+		}
+
+		$modified = $this->last_modified_timestamp( $post );
+
+		// Strictly older, not "not newer". Both values have one-second
+		// resolution, so an equal pair is ambiguous — a post saved and a
+		// site-wide invalidation raised in the same second are
+		// indistinguishable from each other, and if the salt came second the
+		// date is already lying. Ambiguity resolves against the date: the cost
+		// is that a post saved in the very second of a bump loses the
+		// `If-Modified-Since` path until its next save, which is nothing next
+		// to answering `304` with an invalidated body indefinitely.
+		return $modified > 0 && self::salt_changed_at() < $modified;
+	}
+
+	/**
+	 * When the cache salt last changed, as a Unix timestamp (0 when never).
+	 *
+	 * AdminSettings writes the salt as `<unix ts>-<random>`; the cast reads the
+	 * leading integer and returns 0 for the `'0'` default, so a site that has
+	 * never invalidated anything keeps the `If-Modified-Since` path fully
+	 * available. Salts written before that shape existed were a bare `time()`
+	 * and parse identically.
+	 */
+	private static function salt_changed_at(): int {
+		return (int) get_option( 'sysmda_cache_salt', '0' );
 	}
 
 	/**
@@ -817,6 +966,16 @@ class MarkdownController {
 		/** Filter: cache TTL in seconds. 0 disables the cache. */
 		$ttl       = (int) apply_filters( 'sysmda_markdown_cache_ttl', DAY_IN_SECONDS, $post );
 		$cache_key = 'sysmda_md_' . $post->ID;
+
+		// The entry is keyed by post ID alone and shared by every visitor, so an
+		// authenticated request neither reads nor writes it: a dynamic block or
+		// shortcode rendering in that visitor's context would otherwise be
+		// served to everyone else for the rest of the TTL, and conversely the
+		// visitor would be handed a copy built for someone else. See
+		// representation_is_shared().
+		if ( ! self::representation_is_shared() ) {
+			return $this->build_markdown( $post );
+		}
 
 		if ( $ttl > 0 ) {
 			$cached = Cache::get( $cache_key );
@@ -953,11 +1112,20 @@ class MarkdownController {
 
 		status_header( 200 );
 		header( 'Content-Type: text/markdown; charset=utf-8' );
-		header( 'ETag: ' . self::etag( $version ) );
 
-		$modified_ts = $this->last_modified_timestamp( $post );
-		if ( $modified_ts > 0 ) {
-			header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+		// Both validators describe the SHARED representation — the version hashes
+		// the post, the plugin version, the salt and the two fingerprints, and
+		// none of them knows who is asking. On a response rebuilt for an
+		// authenticated visitor they would be a claim this plugin cannot back,
+		// which is the same rule that made the ETag weak in 0.28.0. The response
+		// is `no-store` anyway, so there is nothing for them to validate later.
+		if ( self::representation_is_shared() ) {
+			header( 'ETag: ' . self::etag( $version ) );
+
+			$modified_ts = $this->last_modified_timestamp( $post );
+			if ( $modified_ts > 0 ) {
+				header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
+			}
 		}
 
 		/** Filter: X-Robots-Tag header. Empty string means the header is not sent. */

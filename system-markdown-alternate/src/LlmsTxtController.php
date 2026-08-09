@@ -260,28 +260,7 @@ class LlmsTxtController {
 			 */
 			$main_limit = $enriched ? (int) apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type ) : $limit;
 
-			$posts = get_posts(
-				array(
-					'post_type'              => $post_type,
-					'post_status'            => 'publish',
-					'has_password'           => false, // Excludes protected content (like the .md endpoint).
-					'posts_per_page'         => $limit,
-					'orderby'                => 'date',
-					'order'                  => 'DESC',
-					'no_found_rows'          => true,
-					'update_post_meta_cache' => $enriched, // Enriched descriptions read post meta.
-					// Primed in one query for the whole batch: the servability
-					// filter below reads each post's format, which would otherwise
-					// be a term lookup per post.
-					'update_post_term_cache' => true,
-				)
-			);
-
-			// Every listed entry must actually resolve: the index links to `.md`
-			// URLs, so a post the endpoint would 404 (an excluded post format)
-			// has no business being advertised here. Filtering the result keeps
-			// this in step with PostSupport automatically.
-			$posts = array_filter( $posts, array( PostSupport::class, 'is_servable' ) );
+			$posts = $this->servable_posts( $post_type, $limit, $enriched );
 
 			if ( empty( $posts ) ) {
 				continue;
@@ -326,6 +305,78 @@ class LlmsTxtController {
 		}
 
 		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * How many batches servable_posts() will read before giving up.
+	 *
+	 * Bounds the work on a site whose newest content is overwhelmingly
+	 * ineligible; the index is simply shorter than requested there, which is
+	 * the same outcome as before and no worse.
+	 */
+	const MAX_QUERY_PAGES = 5;
+
+	/**
+	 * The most recent posts of a type that actually have a `.md`, up to $limit.
+	 *
+	 * Every listed entry must resolve: the index links to `.md` URLs, so a post
+	 * the endpoint would 404 — a non-standard post format, a type that is no
+	 * longer public, one a site filter vetoes — has no business being
+	 * advertised here. Filtering through PostSupport keeps that in step
+	 * automatically.
+	 *
+	 * The filtering is why this pages. Asking for exactly $limit rows and
+	 * filtering afterwards yields FEWER than $limit entries as soon as the
+	 * newest batch contains an ineligible post, and the older eligible posts
+	 * behind it are never reached at all — in the extreme, a whole section
+	 * disappears while the site still has servable content of that type.
+	 *
+	 * @return \WP_Post[]
+	 */
+	private function servable_posts( string $post_type, int $limit, bool $enriched ): array {
+		if ( $limit < 1 ) {
+			return array();
+		}
+
+		$collected = array();
+
+		for ( $paged = 1; $paged <= self::MAX_QUERY_PAGES; $paged++ ) {
+			$batch = get_posts(
+				array(
+					'post_type'              => $post_type,
+					'post_status'            => 'publish',
+					'has_password'           => false, // Excludes protected content (like the .md endpoint).
+					'posts_per_page'         => $limit,
+					'paged'                  => $paged,
+					'orderby'                => 'date',
+					'order'                  => 'DESC',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => $enriched, // Enriched descriptions read post meta.
+					// Primed in one query for the whole batch: the servability
+					// check reads each post's format, which would otherwise be a
+					// term lookup per post.
+					'update_post_term_cache' => true,
+				)
+			);
+
+			foreach ( $batch as $post ) {
+				if ( ! PostSupport::is_servable( $post ) ) {
+					continue;
+				}
+
+				$collected[] = $post;
+
+				if ( count( $collected ) >= $limit ) {
+					return $collected;
+				}
+			}
+
+			if ( count( $batch ) < $limit ) {
+				break; // The type is exhausted: no later page can add anything.
+			}
+		}
+
+		return $collected;
 	}
 
 	/**

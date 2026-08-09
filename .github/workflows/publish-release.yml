@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build the zip and publish the Release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Tags are needed both to resolve the default and for
           # `gh release create --notes-from-tag`, which reads the annotated
@@ -106,7 +106,7 @@ jobs:
 
       - name: Set up PHP
         if: steps.pending.outputs.tags != ''
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.4'
           coverage: none
