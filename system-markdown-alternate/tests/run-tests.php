@@ -2778,6 +2778,185 @@ check(
 );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] );
 
+// ─── Filter API: stability contract ──────────────────────────────────
+
+/*
+ * These do not exercise behaviour: they guard the *promises* docs/filters.md
+ * makes, which nothing else in this suite can catch. The apply_filters() stub
+ * above returns the default for any tag, so a hook that was renamed or deleted
+ * changes no assertion anywhere — the suite stays green while the documented
+ * API breaks. Two properties, checked against the source itself:
+ *
+ * 1. every Stable hook is still applied, with at least its documented arity;
+ * 2. every hook applied in src/ is listed with a level in docs/filters.md.
+ *
+ * (2) is the AGENTS.md rule "update docs/filters.md in the same commit", made
+ * mechanical: a new filter that nobody classified fails here rather than
+ * silently joining the public surface at an undeclared level.
+ */
+
+/**
+ * Hook => documented minimum `accepted_args`, i.e. how many arguments reach a
+ * callback: the filtered value plus any context after it, NOT counting the tag.
+ */
+$sysmda_stable_hooks = array(
+	'sysmda_markdown_supported_post_types'  => 1,
+	'sysmda_markdown_excluded_post_formats' => 2,
+	'sysmda_post_is_servable'               => 2,
+	'sysmda_markdown_robots_header'         => 2,
+	'sysmda_markdown_strict_406'            => 1,
+	'sysmda_markdown_canonical_url'         => 2,
+	'sysmda_cache_control'                  => 1,
+	'sysmda_markdown_cache_ttl'             => 2,
+	'sysmda_markdown_cache_dependencies'    => 2,
+	'sysmda_markdown_output'                => 2,
+	'sysmda_markdown_excluded_shortcodes'   => 1,
+	'sysmda_markdown_excluded_block_names'  => 1,
+	'sysmda_markdown_excluded_classes'      => 1,
+	'sysmda_front_matter_enabled'           => 2,
+	'sysmda_front_matter_taxonomy_slugs'    => 2,
+	'sysmda_acf_subtitle_key'               => 2,
+	'sysmda_acf_tldr_key'                   => 2,
+	'sysmda_llms_txt_cache_ttl'             => 1,
+	'sysmda_llms_txt_enriched'              => 1,
+	'sysmda_llms_txt_lastmod'               => 1,
+	'sysmda_llms_txt_summary'               => 1,
+	'sysmda_llms_txt_key_content'           => 1,
+);
+
+/**
+ * Every apply_filters() call in src/, as hook => list of per-call-site
+ * `accepted_args`.
+ *
+ * Every call site is kept, not the highest: five hooks are applied from two
+ * places, and a callback registered once fires at all of them. Collapsing them
+ * to the maximum would let a complete call site mask one that dropped `$post`,
+ * which is precisely the regression these checks exist to catch.
+ *
+ * Counted as the depth-0 commas following the tag, so each number is what a
+ * callback receives — the tag itself is not one of them. Nested calls and array
+ * literals in an argument do not inflate it. Good enough for a source guard,
+ * and it never has to parse PHP it did not write.
+ *
+ * @return array<string,int[]>
+ */
+function sysmda_applied_filters(): array {
+	$found = array();
+
+	foreach ( glob( __DIR__ . '/../src/*.php' ) as $file ) {
+		$source = (string) file_get_contents( $file );
+
+		if ( ! preg_match_all( "/apply_filters(?:_deprecated)?\s*\(\s*'([a-z0-9_]+)'/", $source, $matches, PREG_OFFSET_CAPTURE ) ) {
+			continue;
+		}
+
+		foreach ( $matches[1] as $i => $match ) {
+			$hook = $match[0];
+			// Walk from the hook name to the closing parenthesis, counting the
+			// commas that sit at depth 0 of this call.
+			$pos   = $matches[0][ $i ][1] + strlen( $matches[0][ $i ][0] );
+			$depth = 0;
+			$args  = 0;
+			$len   = strlen( $source );
+
+			for ( ; $pos < $len; $pos++ ) {
+				$char = $source[ $pos ];
+
+				if ( '(' === $char || '[' === $char ) {
+					++$depth;
+				} elseif ( ')' === $char || ']' === $char ) {
+					if ( ')' === $char && 0 === $depth ) {
+						break;
+					}
+					--$depth;
+				} elseif ( ',' === $char && 0 === $depth ) {
+					++$args;
+				}
+			}
+
+			$found[ $hook ][] = $args;
+		}
+	}
+
+	return $found;
+}
+
+$sysmda_applied = sysmda_applied_filters();
+
+check( 'filter contract: the source scan finds the filters at all', true, count( $sysmda_applied ) > 25 );
+
+foreach ( $sysmda_stable_hooks as $sysmda_hook => $sysmda_arity ) {
+	// Renaming or removing a Stable hook is a breaking change (AGENTS.md):
+	// it has to go through apply_filters_deprecated(), not just disappear.
+	check( "filter contract: Stable hook {$sysmda_hook} is still applied", true, isset( $sysmda_applied[ $sysmda_hook ] ) );
+
+	if ( isset( $sysmda_applied[ $sysmda_hook ] ) ) {
+		// Dropping a documented parameter is breaking too: callbacks registered
+		// with the documented accepted_args would start receiving null. Checked
+		// against the WEAKEST call site, since one callback serves them all —
+		// the documented arity has to hold everywhere, not on average.
+		check(
+			"filter contract: every call site of {$sysmda_hook} passes {$sysmda_arity} argument(s)",
+			true,
+			min( $sysmda_applied[ $sysmda_hook ] ) >= $sysmda_arity
+		);
+	}
+}
+
+/*
+ * The docs live at the repository root, outside the plugin folder, and are
+ * excluded from the distributed package. Skipped with a notice when absent, so
+ * the suite still runs from a bare package; CI checks out the whole repo.
+ */
+$sysmda_filters_doc = __DIR__ . '/../../docs/filters.md';
+
+if ( ! is_readable( $sysmda_filters_doc ) ) {
+	echo "NOTICE: docs/filters.md not readable, skipping the documentation-sync checks.\n";
+} else {
+	$sysmda_doc = (string) file_get_contents( $sysmda_filters_doc );
+
+	// The stability table is the canonical index: `| `hook` | Level |`.
+	preg_match_all( '/^\|\s*`(sysmda_[a-z0-9_]+)`\s*\|\s*(Stable|Advanced)\s*\|/m', $sysmda_doc, $sysmda_rows );
+	$sysmda_classified = array_combine( $sysmda_rows[1], $sysmda_rows[2] );
+
+	check( 'filter contract: the stability table parses', true, count( $sysmda_classified ) > 25 );
+
+	foreach ( array_keys( $sysmda_applied ) as $sysmda_hook ) {
+		check( "filter contract: {$sysmda_hook} has a documented stability level", true, isset( $sysmda_classified[ $sysmda_hook ] ) );
+	}
+
+	// The other direction: a hook removed from the code but left in the table
+	// would keep promising something that no longer exists.
+	foreach ( array_keys( $sysmda_classified ) as $sysmda_hook ) {
+		check( "filter contract: documented hook {$sysmda_hook} still exists in src/", true, isset( $sysmda_applied[ $sysmda_hook ] ) );
+	}
+
+	// And the two views of "Stable" must agree **in both directions**, or this
+	// file and the docs drift apart while each stays internally consistent.
+	foreach ( $sysmda_stable_hooks as $sysmda_hook => $sysmda_unused ) {
+		check(
+			"filter contract: {$sysmda_hook} is documented as Stable",
+			'Stable',
+			isset( $sysmda_classified[ $sysmda_hook ] ) ? $sysmda_classified[ $sysmda_hook ] : 'MISSING'
+		);
+	}
+
+	// The reverse leg is the one that bites in practice: promoting a hook to
+	// Stable in the canonical table alone would leave it with none of the arity
+	// checks above, while the suite reported agreement it had never tested.
+	foreach ( $sysmda_classified as $sysmda_hook => $sysmda_level ) {
+		if ( 'Stable' !== $sysmda_level ) {
+			continue;
+		}
+
+		check(
+			"filter contract: documented-Stable {$sysmda_hook} is covered by the arity checks",
+			true,
+			isset( $sysmda_stable_hooks[ $sysmda_hook ] )
+		);
+	}
+}
+
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 echo "\n{$GLOBALS['sysmda_asserts']} assertions, {$GLOBALS['sysmda_failures']} failed.\n";

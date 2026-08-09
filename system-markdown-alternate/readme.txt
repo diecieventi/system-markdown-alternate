@@ -206,8 +206,12 @@ site plugin. A few examples:
 
 `add_filter( 'sysmda_llms_txt_enriched', '__return_true' );`
 
-Every filter, with its default value and what changing it does, is documented
-here: [Filters (public contract)](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/filters.md).
+Every filter, with its default value, what changing it does and how much
+compatibility it promises, is documented here:
+[Developer extension API](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/filters.md).
+Hooks are labelled Stable or Advanced: the Advanced ones are supported and
+documented, but may still evolve while the plugin is pre-1.0. The Markdown
+output format itself is a separate, stronger contract.
 
 = Content negotiation misbehaves behind LiteSpeed cache. What can I do? =
 

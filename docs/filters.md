@@ -1,12 +1,13 @@
-# Filters (public contract)
+# Developer extension API
 
-Every filter System Markdown Alternate exposes, with its default value and what
-changing it does. This is the **canonical list**: `readme.txt` and `README.md`
-carry examples and link here, and this page is what a version bump is measured
-against.
+Every filter System Markdown Alternate exposes, with its default value, what
+changing it does and **how much compatibility it promises**. This is the
+**canonical list**: `readme.txt` and `README.md` carry examples and link here,
+and this page is what a version bump is measured against.
 
 Add these from a theme's `functions.php` or, better, a small site plugin.
 
+- [Stability levels](#stability-levels)
 - [Which content is served](#which-content-is-served)
 - [HTTP headers](#http-headers)
 - [Caching](#caching)
@@ -17,6 +18,93 @@ Add these from a theme's `functions.php` or, better, a small site plugin.
 - [Hit counter](#hit-counter)
 - [Default exclusions](#default-exclusions)
 - [Examples](#examples)
+
+## Stability levels
+
+Not every hook carries the same promise, and the difference is not how useful it
+is — it is **what the hook is anchored to**, because that decides what the plugin
+can still change underneath it.
+
+### Stable
+
+Anchored to something that is not moving: a setting in the panel, or a concept
+this plugin *is about* — what may be served, what the final document is, what the
+response says about caching. Renaming one, removing it, dropping a parameter or
+changing its meaning is a breaking change, and goes through deprecation
+(`apply_filters_deprecated()` where practical), the changelog and this page.
+
+Most of these are stable for free rather than by sacrifice: fourteen of them are
+the mechanism by which a saved setting reaches the code — `AdminSettings` feeds
+the stored option in as the filter's own value — so they last exactly as long as
+the checkbox does, and keeping them costs no design freedom at all.
+
+### Advanced
+
+Anchored to a **stage of the current implementation**: where the conversion
+pipeline happens to cut, how ACF fields are read, how the hit counter classifies
+a request, how `/llms.txt` is laid out. Supported, documented and not changed
+without reason — but they may evolve while the plugin is pre-1.0, and a future
+conversion engine (a block-native pipeline, a different converter) is allowed to
+move them. Changes stay deliberate and documented; they are simply not treated
+as breaking.
+
+Use them freely. Just do not build a product on their exact shape without
+pinning a plugin version.
+
+### What this is not
+
+The Markdown **output** is a different and stronger contract, versioned
+separately in [`output-format.md`](output-format.md) and enforced by golden
+tests. Consuming the `.md` format is not the same as hooking the PHP API, and
+the two do not need the same guarantee — the format is read by crawlers and
+agents that cannot be asked to pin a version, the hooks are read by code that
+can.
+
+Anything not listed on this page is internal implementation, with no
+compatibility promise of any kind.
+
+### The full list
+
+| Filter | Level |
+|--------|-------|
+| `sysmda_markdown_supported_post_types` | Stable |
+| `sysmda_markdown_excluded_post_formats` | Stable |
+| `sysmda_post_is_servable` | Stable |
+| `sysmda_markdown_robots_header` | Stable |
+| `sysmda_markdown_strict_406` | Stable |
+| `sysmda_markdown_canonical_url` | Stable |
+| `sysmda_cache_control` | Stable |
+| `sysmda_markdown_cache_ttl` | Stable |
+| `sysmda_markdown_cache_dependencies` | Stable |
+| `sysmda_markdown_prewarm` | Advanced |
+| `sysmda_markdown_source_content` | Advanced |
+| `sysmda_markdown_rendered_html` | Advanced |
+| `sysmda_markdown_preamble` | Advanced |
+| `sysmda_markdown_output` | Stable |
+| `sysmda_markdown_excluded_shortcodes` | Stable |
+| `sysmda_markdown_excluded_block_names` | Stable |
+| `sysmda_markdown_excluded_classes` | Stable |
+| `sysmda_front_matter_enabled` | Stable |
+| `sysmda_front_matter_taxonomy_slugs` | Stable |
+| `sysmda_front_matter_taxonomies` | Advanced |
+| `sysmda_acf_field_keys` | Advanced |
+| `sysmda_acf_subtitle_key` | Stable |
+| `sysmda_acf_tldr_key` | Stable |
+| `sysmda_llms_txt_cache_ttl` | Stable |
+| `sysmda_llms_txt_enriched` | Stable |
+| `sysmda_llms_txt_lastmod` | Stable |
+| `sysmda_llms_txt_summary` | Stable |
+| `sysmda_llms_txt_key_content` | Stable |
+| `sysmda_llms_txt_max_posts` | Advanced |
+| `sysmda_llms_txt_main_posts` | Advanced |
+| `sysmda_llms_txt_footer` | Advanced |
+| `sysmda_md_hits_bot_patterns` | Advanced |
+| `sysmda_md_hits_retention_days` | Advanced |
+
+The Advanced ones are marked again where they are documented below. The three
+pipeline hooks are the load-bearing ones in that list: they are where a new
+conversion engine would cut differently, and classifying them honestly is most
+of the reason this page distinguishes levels at all.
 
 ## Which content is served
 
@@ -131,6 +219,9 @@ responses that send no body. See
 ```php
 apply_filters( 'sysmda_markdown_prewarm', false, $post_id );
 ```
+**[Advanced](#advanced)** — tied to the WP-Cron rebuild strategy, which a
+different caching design would replace.
+
 `true` rebuilds a post's Markdown cache on WP-Cron about 30 seconds after each
 save, instead of on the first request. Off by default because cron has no
 request context: a dynamic block or shortcode inspecting `is_singular()` or the
@@ -147,24 +238,29 @@ content is cleaned, an unbounded number of times.
 
 These four run **once per document build**, in this order.
 
+The first three are **[Advanced](#advanced)**: they exist at the points where
+*this* pipeline cuts — raw source, rendered HTML, preamble — and a block-native
+engine would not have the same seams. `sysmda_markdown_output` is Stable
+precisely because it does not depend on how the document was produced.
+
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 ```
-Raw source content, before any rendering. This is where the ACF integration
-appends its fields.
+**[Advanced](#advanced)** — raw source content, before any rendering. This is
+where the ACF integration appends its fields.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 ```
-Cleaned HTML — after shortcode stripping, block cleaning, block rendering,
-code-block normalization and URL absolutization. The last point before the
-Markdown conversion.
+**[Advanced](#advanced)** — cleaned HTML, after shortcode stripping, block
+cleaning, block rendering, code-block normalization and URL absolutization. The
+last point before the Markdown conversion.
 
 ```php
 apply_filters( 'sysmda_markdown_preamble', '', $post );
 ```
-Markdown inserted between the `# Title` heading and the body. This is what the
-ACF integration uses for subtitle and TL;DR.
+**[Advanced](#advanced)** — Markdown inserted between the `# Title` heading and
+the body. This is what the ACF integration uses for subtitle and TL;DR.
 
 <a id="the-preamble-re-entry"></a>
 **A preamble that renders HTML re-enters the cleaning path.** A callback here
@@ -181,7 +277,9 @@ subtitle goes through `wp_strip_all_tags()` and never re-enters.
 ```php
 apply_filters( 'sysmda_markdown_output', $markdown, $post );
 ```
-The final Markdown document, front matter included. Last hook of the build.
+The final Markdown document, front matter included. Last hook of the build, and
+the one extension point that survives any change of engine: it receives a
+finished document and returns one.
 
 ### The cleaning filters, which are not points in that sequence
 
@@ -278,8 +376,14 @@ YAML front matter as build-time noise — **not** a change of default: `url`,
 ```php
 apply_filters( 'sysmda_front_matter_taxonomies', ! empty( $slugs ) );
 ```
-Kill switch for the nested `taxonomies:` block. Defaults to on as soon as one
-taxonomy is selected in the panel; `false` never emits it.
+**[Advanced](#advanced)** — kill switch for the nested `taxonomies:` block.
+Defaults to on as soon as one taxonomy is selected in the panel; `false` never
+emits it.
+
+It is a survivor of the 0.24.x auto-detection design and is redundant by
+construction: returning `[]` from `sysmda_front_matter_taxonomy_slugs` below
+suppresses the block just as well. Kept because it works and costs nothing, but
+it is the one hook here that a later cleanup could consolidate.
 
 ```php
 apply_filters( 'sysmda_front_matter_taxonomy_slugs', $slugs, $post );
@@ -296,7 +400,9 @@ break the YAML.
 ```php
 apply_filters( 'sysmda_acf_field_keys', array(), $post );
 ```
-ACF fields appended to the source content.
+**[Advanced](#advanced)** — ACF fields appended to the source content. Tied to
+how the bundled integration reads ACF (flat field names, appended as HTML), which
+is the part most likely to change if structured field extraction is ever added.
 
 ```php
 apply_filters( 'sysmda_acf_subtitle_key', '', $post );
@@ -322,6 +428,8 @@ apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );
 apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
 ```
 Maximum posts listed per type, and the cache TTL in seconds (`0` = off).
+`sysmda_llms_txt_max_posts` is **[Advanced](#advanced)**: it describes how the
+index is assembled, and the llms.txt layout follows a spec that is still moving.
 
 ```php
 apply_filters( 'sysmda_llms_txt_enriched', false );
@@ -341,14 +449,21 @@ or URLs), how many posts per type appear in the main section before the
 overflow moves under `## Optional`, and a free-form trailing block — the hook
 for policy or LLM signals.
 
+`sysmda_llms_txt_main_posts` and `sysmda_llms_txt_footer` are
+**[Advanced](#advanced)**: both describe the *shape* of the generated file (the
+main/`## Optional` split, and a trailing block whose eventual content depends on
+an LLM-signals spec that has not settled). The two toggles and the summary above
+them are Stable — they are panel settings.
+
 ## Hit counter
 
 ```php
 apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );
 apply_filters( 'sysmda_md_hits_retention_days', 90 );
 ```
-Case-insensitive user-agent substrings classified as bot, and how many days of
-daily buckets are kept.
+Both **[Advanced](#advanced)** — case-insensitive user-agent substrings
+classified as bot, and how many days of daily buckets are kept. They describe the
+counter's current storage and classification strategy, not a domain concept.
 
 The counter stores **only** aggregate daily totals split bot/human. It never
 stores IP addresses, raw user-agent strings, timestamps finer than the day, or

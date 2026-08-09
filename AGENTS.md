@@ -225,9 +225,11 @@ The v1 scope is done and widely exceeded. Implemented:
   the output). Both options removed on uninstall.
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
-  all pointing to the full "Filters (public contract)" list in `docs/filters.md`
+  all pointing to the full "Developer extension API" list in `docs/filters.md`
   (moved out of this file: the filter API is developer-facing documentation and
-  does not belong inside the agent guide).
+  does not belong inside the agent guide). Every hook there carries a
+  **stability level** (Stable / Advanced) and the table is enforced by contract
+  tests — see "Filters (developer extension API)" below.
 - **Custom taxonomies in the front matter** (per-taxonomy selection in the panel,
   option `sysmda_front_matter_taxonomy_slugs`, **nothing selected by default**;
   empty = front matter and cache validator byte-identical to 0.23.x): appends a
@@ -1070,12 +1072,13 @@ running code at the WP level.
   `phpcs:ignore` with the reason — use that mechanism, with a justification,
   rather than widening the ruleset.
 
-## Filters (public contract)
+## Filters (developer extension API)
 
-The full list — every filter, its default and what changing it does — lives in
-**[`docs/filters.md`](docs/filters.md)**, grouped by area (content selection,
-headers, caching, pipeline, front matter, ACF, `/llms.txt`, hit counter) with
-the default exclusion tables and runnable examples.
+The full list — every filter, its default, what changing it does and its
+**stability level** — lives in **[`docs/filters.md`](docs/filters.md)**, grouped
+by area (content selection, headers, caching, pipeline, front matter, ACF,
+`/llms.txt`, hit counter) with the default exclusion tables and runnable
+examples.
 
 It is deliberately **not** duplicated here: a developer looking for the filter
 API should not have to read the agent guide to find it, and two copies of a
@@ -1085,6 +1088,50 @@ filters") carry short examples and link to the same page.
 **When adding or changing a filter, update `docs/filters.md` in the same
 commit** — it is the contract, and a filter that is not documented there does
 not exist as far as the public API is concerned.
+
+- **Two levels, and the axis is what the hook is anchored to, not how useful it
+  is** (decided August 2026): **Stable** = anchored to a panel setting
+  or to a concept the plugin is about (what may be served, what the final
+  document is, what the response says about caching) — breaking one goes through
+  deprecation, changelog and docs. **Advanced** = anchored to a stage of the
+  *current implementation* (where the pipeline cuts, how ACF is read, how the hit
+  counter classifies, how `/llms.txt` is laid out) — supported and documented,
+  free to evolve pre-1.0. 22 Stable, 11 Advanced.
+  The classification is deliberate on three points, all of which a naive reading
+  gets backwards:
+  - **The settings-transport hooks are Stable, and they are stable for free.**
+    Fourteen of the 33 are how `AdminSettings::hook_filters()` feeds a saved
+    option into the code (priority 20; 5 for the taxonomy slugs). They cannot be
+    removed without breaking the panel, so calling them "internal, no promises"
+    would buy no refactoring freedom while making them look unreliable. They last
+    exactly as long as the checkbox.
+  - **`sysmda_markdown_source_content`, `..._rendered_html` and
+    `..._preamble` are Advanced** even though they are the most-used hooks and
+    two of them carry the bundled ACF integration (`Plugin.php`). They mark where
+    *this* pipeline cuts; a block-native engine would not have the same seams.
+    These three are the actual reason the level split exists — classifying them
+    Stable is what would mortgage the conversion engine.
+    `sysmda_markdown_output` is Stable by contrast: it takes a finished document
+    and returns one, so no change of engine can invalidate it.
+  - **`sysmda_markdown_cache_dependencies` is Stable**, not Advanced. It is the
+    documented answer to "my output changes and the `.md` does not" and the
+    escape hatch that justifies the weak ETag (see "Technical notes" 6);
+    declaring it free to move would undercut a durable decision already taken.
+- **NO third "internal" tier** (decided with the above): anything not on that
+  page is internal by definition, and a tier whose members cannot actually be
+  removed is a label, not a freedom. If a hook ever needs retiring, the path is
+  `apply_filters_deprecated()` → changelog → removal, not a pre-emptive
+  disclaimer.
+- **Before adding a filter, ask what it is anchored to.** A hook tied to a
+  setting or a domain concept is cheap to keep forever; one tied to a pipeline
+  stage is a promise about the pipeline. Prefer few high-level extension points
+  over many hooks on internal phases, and mark a new pipeline-stage hook
+  Advanced from the start. Do not add a filter merely because something *could*
+  be configurable.
+- **The `.md` output contract is separate and stronger**
+  (`docs/output-format.md`): it is read by crawlers and agents that cannot pin a
+  version, while the PHP hooks are read by code that can. Do not merge the two
+  policies.
 
 ## Technical notes
 
