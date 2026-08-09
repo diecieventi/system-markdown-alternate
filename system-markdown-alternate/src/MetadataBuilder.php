@@ -658,6 +658,20 @@ class MetadataBuilder {
 		$value = html_entity_decode( $value, ENT_QUOTES, 'UTF-8' );
 		$value = wp_strip_all_tags( $value );
 		$value = preg_replace( '/\s+/', ' ', $value );
+
+		// Whatever control characters are left are dropped. `\s` above has
+		// already turned tab, newline and friends into spaces; what remains is
+		// the rest of C0, DEL and the C1 block (`\xC2\x80`-`\xC2\x9F` in UTF-8),
+		// none of which may appear raw inside a YAML double-quoted scalar. They
+		// are not reachable from the WordPress admin, but a title or description
+		// can also arrive from an import, a REST write or one of this plugin's
+		// own filters — and this function's contract is that the result parses
+		// as YAML whatever the source string was. Byte classes, deliberately
+		// without the `u` modifier: preg_replace() returns null on invalid UTF-8
+		// with it, and the bytes of a multibyte character are all >= 0x80 and so
+		// are never matched here anyway.
+		$value = (string) preg_replace( '/[\x00-\x1F\x7F]|\xC2[\x80-\x9F]/', '', (string) $value );
+
 		$value = trim( $value );
 		$value = str_replace( '\\', '\\\\', $value );
 		$value = str_replace( '"', '\\"', $value );

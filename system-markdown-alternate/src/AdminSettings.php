@@ -882,14 +882,32 @@ class AdminSettings {
 		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
 		$url     = home_url( '/llms.txt' );
 
+		// The option being on is not the same as the endpoint answering. With no
+		// content type selected LlmsTxtController deliberately stays silent —
+		// there is nothing to index, and it must not take the URL over from
+		// whatever else may be handling it while the rest of the plugin is
+		// inactive. Reporting that as a flat "Enabled" sent the reader to a URL
+		// that does not respond, with nothing on the page explaining why.
+		$waiting = $enabled && empty( PostSupport::supported_post_types() );
+
 		echo '<section class="sysmda-card sysmda-aside-card">';
 		echo '<header class="sysmda-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
 		echo '<div class="sysmda-card__body">';
 
-		echo '<p class="sysmda-endpoint-state ' . ( $enabled ? 'is-on' : 'is-off' ) . '">';
+		echo '<p class="sysmda-endpoint-state ' . ( $enabled && ! $waiting ? 'is-on' : 'is-off' ) . '">';
 		echo '<span class="sysmda-dot" aria-hidden="true"></span>';
-		echo esc_html( $enabled ? __( 'Enabled', 'system-markdown-alternate' ) : __( 'Disabled', 'system-markdown-alternate' ) );
+		if ( ! $enabled ) {
+			echo esc_html__( 'Disabled', 'system-markdown-alternate' );
+		} elseif ( $waiting ) {
+			echo esc_html__( 'Enabled, waiting for a content type', 'system-markdown-alternate' );
+		} else {
+			echo esc_html__( 'Enabled', 'system-markdown-alternate' );
+		}
 		echo '</p>';
+
+		if ( $waiting ) {
+			echo '<p class="description">' . esc_html__( 'Nothing is indexed yet, so the endpoint does not respond. Select at least one content type under General.', 'system-markdown-alternate' ) . '</p>';
+		}
 
 		echo '<p class="sysmda-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
 

@@ -9,6 +9,46 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.36.0
+
+* **Renaming a category or tag now refreshes the Markdown.** `categories:` and
+  `tags:` are always part of the front matter, but nothing told the caching
+  layer they had changed, so a client that had already fetched a post kept being
+  told "not modified" — indefinitely, with the cache on or off. Changing the
+  site timezone had the same effect on the dates, and replacing the file behind a
+  featured image on its URL.
+* **Fenced code inside a quote or a list item is preserved again.** Only code at
+  the left margin was recognised as code, so anything indented inside a
+  blockquote or a list had its trailing spaces trimmed and its blank lines
+  collapsed — silently rewriting samples, transcripts and diffs.
+* **`Vary: Accept` is no longer skipped by mistake.** A site already sending
+  `Vary: Accept-Encoding` (most of them, once compression is on) looked to the
+  plugin as if the header were covered, and it was never added — leaving caches
+  free to hand the HTML page to a client asking for Markdown.
+* **The `.md` is now explicitly the anonymous version of a post.** A logged-in
+  visitor's request is never stored in the shared cache and is never publicly
+  cacheable, so a block or shortcode that renders differently for that visitor
+  cannot end up being served to everyone else.
+* **New `sysmda_post_is_servable` filter** so a membership or paywall plugin can
+  deny the Markdown of a single post. The built-in checks only understand
+  WordPress's own post status and password field.
+* A post type that is no longer registered as public stops being served, instead
+  of remaining servable because its name was still saved in the settings.
+* `?format=banana` no longer disables the `406` response that `?format=markdown`
+  is allowed to skip.
+* A read error while updating `.htaccess` now aborts the update instead of
+  rewriting the file from the part that had been read.
+* `/llms.txt` counts eligible posts against its per-type limit, so a batch of
+  excluded ones no longer shortens the index — or empties a section that still
+  has content behind it.
+* The panel now distinguishes "`/llms.txt` enabled" from "enabled but waiting for
+  a content type", which is when the endpoint deliberately stays silent.
+* Control characters arriving from an import or a REST write can no longer break
+  the YAML front matter.
+* Hardened the wordpress.org release workflow: every GitHub Action is pinned to
+  an exact revision, and a deploy is refused unless the tag exists and the
+  version agrees across the plugin header, the readme and the changelog.
+
 ## 0.35.4
 
 * **Moved the filter reference out of `AGENTS.md` into a dedicated

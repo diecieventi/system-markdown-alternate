@@ -76,9 +76,13 @@ The v1 scope is done and widely exceeded. Implemented:
   feeds, oEmbed views, trackbacks, paged comments (`cpage`) and `<!--nextpage-->`
   sub-pages (`page > 1`) are excluded — `is_singular()` stays true for all of
   them, so `Accept: text/markdown` on `/my-post/feed/` used to return the article
-  body instead of the feed. The guard deliberately mirrors the one in
-  `print_alternate_link()`: what declares `Vary: Accept` and what advertises a
-  Markdown alternate must stay in step. The `.md` suffix route sets up the loop
+  body instead of the feed. `print_alternate_link()` **calls that same
+  predicate** (since `0.36.0`): what declares `Vary: Accept` and what advertises
+  a Markdown alternate must stay in step, and two guards written to mirror each
+  other did not — the link guard checked only the enabled type and
+  servability, so on an embed view (the one excluded variant that still runs
+  `wp_head`) the link was advertised for a URL that does not negotiate. One
+  predicate, not two; do not fork it again. The `.md` suffix route sets up the loop
   (`setup_postdata` + global `$post`) before converting, because on that route the
   main query 404s and dynamic blocks/shortcodes would otherwise render against no
   post — and the two routes would disagree.
@@ -965,7 +969,7 @@ running code at the WP level.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
-├── DIST/                         ← distributable zip (versioned)
+├── DIST/                         ← distributable zip + BUILD-INFO.txt (versioned; a RELEASE SNAPSHOT, not a build of HEAD)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1182,7 +1186,16 @@ new HtmlConverter([
 
 ```bash
 bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundled)
+                         #   + DIST/BUILD-INFO.txt (version, commit, git describe, date)
 ```
+
+`DIST/` holds a **committed release snapshot, not a build of `HEAD`** — that is
+the policy, and `DIST/BUILD-INFO.txt` is what makes it checkable: it records the
+plugin version, the commit, `git describe` and the build date. Post-release
+commits that change no version leave the zip correct while its `readme.txt`
+differs from `main`, which is expected; the manifest is how a reviewer tells
+that apart from a package that quietly fell behind. Do not "fix" such a
+difference by rebuilding outside a release.
 
 The zip includes the production Composer dependencies, so it installs without
 Composer on the server. Local build environment: PHP 8.4, Composer and `zip`

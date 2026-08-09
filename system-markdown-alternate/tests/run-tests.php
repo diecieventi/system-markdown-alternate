@@ -46,6 +46,8 @@ $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_he
 $GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
 $GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is authenticated
 $GLOBALS['sysmda_test_post_types']  = array(); // post type => registered object (overrides the public default)
+$GLOBALS['sysmda_test_query_posts'] = array(); // post type => WP_Post list served by the get_posts() stub
+$GLOBALS['sysmda_test_query_pages'] = array(); // pages the get_posts() stub was asked for
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -285,6 +287,22 @@ function post_password_required( $post ) {
 /** Stub: site identity, part of the /llms.txt cache validity hash. */
 function get_bloginfo( $show = '', $filter = 'raw' ) {
 	return isset( $GLOBALS['sysmda_test_bloginfo'][ $show ] ) ? $GLOBALS['sysmda_test_bloginfo'][ $show ] : '';
+}
+
+/**
+ * Stub: paged post query. Serves slices of a per-type fixture list so the
+ * /llms.txt paging can be exercised, and records the pages actually requested.
+ */
+function get_posts( $args ) {
+	$type = isset( $args['post_type'] ) ? $args['post_type'] : '';
+	$all  = isset( $GLOBALS['sysmda_test_query_posts'][ $type ] ) ? $GLOBALS['sysmda_test_query_posts'][ $type ] : array();
+
+	$per_page = isset( $args['posts_per_page'] ) ? (int) $args['posts_per_page'] : 10;
+	$paged    = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
+
+	$GLOBALS['sysmda_test_query_pages'][] = $paged;
+
+	return array_slice( $all, ( $paged - 1 ) * $per_page, $per_page );
 }
 
 /** Stub: post format, driven by a test-only property (false = standard format). */
@@ -856,6 +874,17 @@ check( 'scalar: entities decoded', 'title: "Tom & Jerry"', $sysmda_title_line( '
 check( 'scalar: entity quote decoded then escaped', 'title: "AT&T \\"deal\\""', $sysmda_title_line( 'AT&amp;T &quot;deal&quot;' ) );
 check( 'scalar: embedded tags stripped', 'title: "Bold move"', $sysmda_title_line( '<strong>Bold</strong> move' ) );
 check( 'scalar: whitespace collapsed and trimmed', 'title: "Line one Line two"', $sysmda_title_line( "  Line one\n\n\tLine   two  " ) );
+// Control characters may not appear raw inside a YAML double-quoted scalar. Not
+// reachable from wp-admin, but a title can arrive from an import, a REST write
+// or one of this plugin's own filters, and the contract here is that the result
+// parses whatever the source was.
+check( 'scalar: NUL and BEL dropped', 'title: "ab"', $sysmda_title_line( "a\x00\x07b" ) );
+check( 'scalar: ESC dropped', 'title: "ab"', $sysmda_title_line( "a\x1Bb" ) );
+check( 'scalar: DEL dropped', 'title: "ab"', $sysmda_title_line( "a\x7Fb" ) );
+check( 'scalar: C1 controls dropped', 'title: "ab"', $sysmda_title_line( "a\xC2\x85b" ) );
+// …while multibyte characters, whose bytes are all >= 0x80, are untouched.
+check( 'scalar: accented text preserved', 'title: "città è così"', $sysmda_title_line( 'città è così' ) );
+check( 'scalar: emoji preserved', 'title: "ok 🎉"', $sysmda_title_line( 'ok 🎉' ) );
 
 // ─── MetadataBuilder: custom taxonomies (F3.1) ───────────────────────
 //
@@ -1454,6 +1483,86 @@ check( 'llms: whitespace collapsed and trimmed', 'X Y', LlmsTxtController::escap
 // normalize_inline: single line only, no bracket escaping (description).
 check( 'llms: multiline description => single line', 'One two three', LlmsTxtController::normalize_inline( "One\ntwo\r\nthree" ) );
 check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtController::normalize_inline( 'see [1] and (2)' ) );
+
+// ─── LlmsTxtController::servable_posts (the limit counts ELIGIBLE posts) ──────
+//
+// Entries are filtered through is_servable() after the query, so asking for
+// exactly $limit rows and filtering afterwards returns fewer than $limit as
+// soon as the newest batch holds an ineligible post — and the older eligible
+// posts behind it are never reached. In the extreme a whole section vanishes
+// while the site still has servable content of that type.
+
+$sysmda_sp_method = new ReflectionMethod( LlmsTxtController::class, 'servable_posts' );
+$sysmda_sp_method->setAccessible( true );
+$sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner() ) );
+
+/** Builds a fixture list: $formats entries, '' meaning a standard (servable) format. */
+$sysmda_sp_fixture = static function ( array $formats ) {
+	$posts = array();
+	foreach ( $formats as $i => $format ) {
+		$args = array(
+			'ID'          => 900 + $i,
+			'post_type'   => 'post',
+			'post_status' => 'publish',
+		);
+		if ( '' !== $format ) {
+			$args['post_format'] = $format;
+		}
+		$posts[] = new WP_Post( $args );
+	}
+	return $posts;
+};
+
+$sysmda_sp_run = static function ( array $formats, $limit ) use ( $sysmda_sp_method, $sysmda_sp_ctrl, $sysmda_sp_fixture ) {
+	$GLOBALS['sysmda_test_query_posts']['post'] = $sysmda_sp_fixture( $formats );
+	$GLOBALS['sysmda_test_query_pages']         = array();
+	return $sysmda_sp_method->invoke( $sysmda_sp_ctrl, 'post', $limit, false );
+};
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
+
+// Three of the newest four are asides: a single-page query would have returned
+// one entry out of the three requested, and stopped there.
+check(
+	'llms: the limit counts servable posts, not rows',
+	3,
+	count( $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
+);
+check( 'llms: it paged to find them', array( 1, 2 ), $GLOBALS['sysmda_test_query_pages'] );
+
+// The oldest eligible posts are reached, in date order, and none is duplicated.
+check(
+	'llms: the entries are the eligible ones in order',
+	array( 902, 904, 905 ),
+	array_map( static function ( $p ) {
+		return $p->ID;
+	}, $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
+);
+
+// A type with fewer eligible posts than requested stops at the last page rather
+// than paging to the cap: no later page can add anything.
+$sysmda_sp_short = $sysmda_sp_run( array( '', 'aside' ), 5 );
+check( 'llms: a short type yields what it has', 1, count( $sysmda_sp_short ) );
+check( 'llms: and stops after one page', array( 1 ), $GLOBALS['sysmda_test_query_pages'] );
+
+// Enough ineligible content to exhaust the page cap: shorter than requested,
+// which is the pre-existing outcome, but bounded rather than unbounded.
+check(
+	'llms: the page cap bounds the work',
+	LlmsTxtController::MAX_QUERY_PAGES,
+	count( ( static function () use ( $sysmda_sp_run ) {
+		$sysmda_sp_run( array_fill( 0, 60, 'aside' ), 2 );
+		return $GLOBALS['sysmda_test_query_pages'];
+	} )() )
+);
+
+check( 'llms: a zero limit queries nothing', array(), $sysmda_sp_run( array( '', '' ), 0 ) );
+
+unset(
+	$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'],
+	$GLOBALS['sysmda_test_query_posts']['post']
+);
+$GLOBALS['sysmda_test_query_pages'] = array();
 
 // ─── LlmsTxtController: the cached index follows the site identity ────
 //

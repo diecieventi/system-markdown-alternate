@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.35.4
+Stable tag: 0.36.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -302,6 +302,46 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 
 == Changelog ==
 
+= 0.36.0 =
+
+* **Renaming a category or tag now refreshes the Markdown.** `categories:` and
+  `tags:` are always part of the front matter, but nothing told the caching
+  layer they had changed, so a client that had already fetched a post kept being
+  told "not modified" — indefinitely, with the cache on or off. Changing the
+  site timezone had the same effect on the dates, and replacing the file behind a
+  featured image on its URL.
+* **Fenced code inside a quote or a list item is preserved again.** Only code at
+  the left margin was recognised as code, so anything indented inside a
+  blockquote or a list had its trailing spaces trimmed and its blank lines
+  collapsed — silently rewriting samples, transcripts and diffs.
+* **`Vary: Accept` is no longer skipped by mistake.** A site already sending
+  `Vary: Accept-Encoding` (most of them, once compression is on) looked to the
+  plugin as if the header were covered, and it was never added — leaving caches
+  free to hand the HTML page to a client asking for Markdown.
+* **The `.md` is now explicitly the anonymous version of a post.** A logged-in
+  visitor's request is never stored in the shared cache and is never publicly
+  cacheable, so a block or shortcode that renders differently for that visitor
+  cannot end up being served to everyone else.
+* **New `sysmda_post_is_servable` filter** so a membership or paywall plugin can
+  deny the Markdown of a single post. The built-in checks only understand
+  WordPress's own post status and password field.
+* A post type that is no longer registered as public stops being served, instead
+  of remaining servable because its name was still saved in the settings.
+* `?format=banana` no longer disables the `406` response that `?format=markdown`
+  is allowed to skip.
+* A read error while updating `.htaccess` now aborts the update instead of
+  rewriting the file from the part that had been read.
+* `/llms.txt` counts eligible posts against its per-type limit, so a batch of
+  excluded ones no longer shortens the index — or empties a section that still
+  has content behind it.
+* The panel now distinguishes "`/llms.txt` enabled" from "enabled but waiting for
+  a content type", which is when the endpoint deliberately stays silent.
+* Control characters arriving from an import or a REST write can no longer break
+  the YAML front matter.
+* Hardened the wordpress.org release workflow: every GitHub Action is pinned to
+  an exact revision, and a deploy is refused unless the tag exists and the
+  version agrees across the plugin header, the readme and the changelog.
+
 = 0.35.4 =
 
 * Moved the developer filter reference into a dedicated, better organized page
@@ -319,14 +359,6 @@ user agents outright, and a block page is easy to mistake for a plugin bug.
 * Updated a development dependency (the coding-standards tooling) to pick up a
   security fix. It has never been part of the distributed plugin, so nothing
   changes in what runs on your site.
-
-= 0.35.2 =
-
-* Removed the CSS snippet the `[sysmda_md_download]` FAQ offered as an example of
-  styling the link as a button. The plugin ships no stylesheet for that link and
-  never will, so it has no business suggesting one either: the readme states that
-  the link carries a single `sysmda-md-download` class and that styling is the
-  theme's job, and stops there.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

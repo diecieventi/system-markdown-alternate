@@ -43,4 +43,25 @@ zip -r -q "${ZIP_PATH}" "${PLUGIN_SLUG}" \
 	-x "*/.github/" \
 	-x "*/.DS_Store"
 
+# Provenance, so a reviewer can tell an intended release snapshot from a package
+# that quietly fell behind. DIST/ holds a committed artifact, NOT a build of
+# HEAD: post-release commits that change no version leave the zip correct and
+# its readme.txt different from main, and without this there was no way to see
+# which of the two situations you were looking at.
+INFO_PATH="${DIST_DIR}/BUILD-INFO.txt"
+
+PLUGIN_VERSION="$(sed -nE "s/.*'SYSMDA_VERSION',[[:space:]]*'([^']+)'.*/\1/p" "${PLUGIN_DIR}/${PLUGIN_SLUG}.php")"
+PLUGIN_VERSION="${PLUGIN_VERSION%%$'\n'*}"
+
+GIT_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+GIT_DESCRIBE="$(git -C "${ROOT_DIR}" describe --tags --always --dirty 2>/dev/null || echo 'unknown')"
+
+{
+	echo "plugin_version: ${PLUGIN_VERSION}"
+	echo "git_commit: ${GIT_COMMIT}"
+	echo "git_describe: ${GIT_DESCRIBE}"
+	echo "built_at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+} > "${INFO_PATH}"
+
 echo "==> Done: ${ZIP_PATH}"
+echo "    ${INFO_PATH} (${PLUGIN_VERSION}, ${GIT_DESCRIBE})"

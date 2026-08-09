@@ -124,7 +124,11 @@ class MarkdownController {
 			return false;
 		}
 
-		if ( ! is_singular( PostSupport::supported_post_types() ) ) {
+		$types = PostSupport::supported_post_types();
+
+		// Explicit guard: is_singular([]) in WP is true for ANY singular content.
+		// With no selected types the plugin is inactive and nothing negotiates.
+		if ( empty( $types ) || ! is_singular( $types ) ) {
 			return false;
 		}
 
@@ -143,17 +147,19 @@ class MarkdownController {
 	 * Hook: wp_head. Prints the alternate link only on supported public posts/CPTs.
 	 */
 	public function print_alternate_link(): void {
-		$types = PostSupport::supported_post_types();
-
-		// Explicit guard: is_singular([]) in WP is true for ANY singular content.
-		// With no selected types, the plugin is inactive and must not print the link.
-		if ( empty( $types ) || ! is_singular( $types ) ) {
+		// The same predicate that decides whether this URL negotiates, and not
+		// a parallel one: what advertises a Markdown alternate and what declares
+		// `Vary: Accept` have to stay in step. They did not — this guard checked
+		// only the enabled type and servability, so on an embed view (the one
+		// excluded variant that still runs `wp_head`) the link was printed for a
+		// URL that does not negotiate and sends no `Vary`.
+		if ( ! $this->is_negotiable_request() ) {
 			return;
 		}
 
 		$post = get_queried_object();
 
-		if ( ! $post instanceof \WP_Post || ! $this->is_servable( $post ) ) {
+		if ( ! $post instanceof \WP_Post ) {
 			return;
 		}
 
