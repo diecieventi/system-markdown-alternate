@@ -1,5 +1,20 @@
 # Complete local code review — `main` / v0.35.3 (9 August 2026)
 
+> **Historical review — triaged after `0.36.0` and `0.37.0`.** This report
+> describes commit `5203bf2`, not the current tree. Release `0.36.0` closed every
+> finding except M7, the deferred real-WordPress integration suite; `0.37.0`
+> subsequently extended the shared canonical-request predicate to the typed HTTP
+> alternate header. The original findings remain below as the audit record and
+> must not be read as the current backlog.
+>
+> | Findings | Outcome |
+> |---|---|
+> | H1–H2 | Fixed in `0.36.0` |
+> | M1–M6, M8–M9 | Fixed or resolved by decision in `0.36.0` |
+> | M7 | **Deferred by decision** — the pure harness remains; a real WordPress integration suite is still a residual coverage gap |
+> | L1–L8 | Fixed or resolved by decision in `0.36.0` |
+> | HTTP alternate-header follow-up | Shipped in `0.37.0`, using the same canonical-request predicate as negotiation and HTML discovery |
+
 ## Review target and constraints
 
 - Repository: `diecieventi/system-markdown-alternate`
@@ -174,7 +189,7 @@ This needs a product-level contract before a local patch:
 - `src/MarkdownController.php:659-693`
 - `src/MarkdownController.php:816-871`
 - `src/AdminSettings.php:56-80`
-- `docs/etag-cache-review-2026-07.md:370-386`
+- `docs/cache-infrastructure-notes.md` (current operational summary)
 
 The cache version is also the weak ETag. The code correctly recognizes that every
 input changing the body without changing `post_modified_gmt` must affect both
@@ -416,7 +431,7 @@ workflows use mutable `@v2`, `@v5`, and `@stable` tags.
 
 ### M9 — The source-of-truth documents are stale and contradictory
 
-**Where:** `AGENTS.md:63`, `AGENTS.md:293-330`, `docs/HANDOFF.md:1-55`,
+**Where:** `AGENTS.md:63`, `AGENTS.md:293-330`, `docs/HANDOFF.md:1-55` (historical file, since removed),
 `CHANGELOG.md:12-32`, `.wordpress-org/`.
 
 This is a conceptual/process defect because agents are explicitly instructed to
@@ -425,15 +440,15 @@ treat these documents as operational authority.
 - `AGENTS.md` labels the current state as `v0.26.x`; the plugin is `0.35.3`.
 - `AGENTS.md` says five screenshot PNGs are still missing. All five exist, are
   tracked, are valid PNGs, and the `0.35.3` changelog says the refresh shipped.
-- `docs/HANDOFF.md` says `main` is `0.24.0` and repeats that screenshots are
+- the former `docs/HANDOFF.md` said `main` is `0.24.0` and repeats that screenshots are
   missing.
-- `docs/HANDOFF.md` identifies multilingual `/llms.txt` as the only queued plan,
+- the former `docs/HANDOFF.md` identified multilingual `/llms.txt` as the only queued plan,
   while the main “Open / to do” section does not surface it and instead retains
   already-completed screenshot work.
 
 An agent following the documented hierarchy can waste effort, reopen completed
 work, or miss the only approved plan. Update `AGENTS.md` and either refresh,
-archive, or clearly mark `docs/HANDOFF.md` historical. Add a lightweight
+archive, or remove the historical handoff once its useful constraints are consolidated. Add a lightweight
 documentation-state check for version and required WordPress.org assets.
 
 ## Low-priority findings

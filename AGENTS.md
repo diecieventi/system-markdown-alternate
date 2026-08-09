@@ -578,7 +578,7 @@ The v1 scope is done and widely exceeded. Implemented:
   → trimmed text (~200 chars). Front matter includes `featured_image`
   (+ `featured_image_alt`).
 - **The `ETag` is weak (`W/"…"`) and stays weak** (decided July 2026, `0.28.0`,
-  outcome of the ETag/cache review — see `docs/etag-cache-review-2026-07.md`):
+  outcome of the ETag/cache review — see `docs/cache-infrastructure-notes.md`):
   the validator is computed from metadata (modification date, plugin version,
   settings salt, the two fingerprints), never from the bytes — computing it from
   the bytes would mean generating the body before deciding whether to send it,
