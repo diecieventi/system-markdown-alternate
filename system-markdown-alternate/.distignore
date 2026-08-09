@@ -31,3 +31,41 @@ vendor/wp-coding-standards
 # distributed package while still shipping the rest of vendor/.
 vendor/bin
 vendor/league/html-to-markdown/bin
+
+# Development metadata carried INSIDE a Composer package.
+#
+# Composer installs a dependency from `dist` (a zipball, stripped of whatever
+# the upstream .gitattributes marks `export-ignore`) or from `source` (a full
+# git clone, which keeps everything), and it falls back to source silently
+# whenever the dist download fails — a slow network or a proxy is enough. The
+# contents of our package must not depend on which transport Composer happened
+# to pick, so the exclusions live here instead.
+#
+# Two groups, and the second is the reason this cannot simply defer to
+# upstream: everything league/html-to-markdown marks `export-ignore`, PLUS the
+# tooling config it forgot to mark. Its .gitattributes predates the phpstan and
+# psalm configs, so those ship even in a dist install.
+#
+# Deliberately NOT excluded: LICENSE (GPL compliance), composer.json (required
+# by the wordpress.org Plugin Check for dependency review), and the upstream
+# README/CHANGELOG/CONDUCT documentation, which a dist install ships too. The
+# rule is "no tooling or CI configuration", not "no documentation".
+#
+# The names are unanchored, so they match at any depth: they cover this plugin
+# and anything vendored under it alike.
+.editorconfig
+.gitattributes
+.scrutinizer.yml
+.styleci.yml
+.travis.yml
+circle.yml
+.php-cs-fixer.dist.php
+.php_cs.dist
+phpunit.xml
+phpunit.xml.dist
+phpstan.neon
+phpstan.neon.dist
+psalm.xml
+psalm.xml.dist
+CONTRIBUTING.md
+Makefile
