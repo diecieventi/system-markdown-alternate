@@ -71,6 +71,58 @@ class CodeFence {
 	}
 
 	/**
+	 * Whether the text is already exactly one fenced block that nothing inside
+	 * it can break out of.
+	 *
+	 * This is the test for "has a converter already fenced this?", and it has to
+	 * be structural. Asking whether the element still has a `<code>` child does
+	 * not work — by the time a `<pre>` is converted its children have been
+	 * replaced by their own Markdown (`setFinalMarkdown()`) — and asking whether
+	 * the string merely starts and ends with a backtick, which is what the
+	 * library does and what this replaced, accepts two very different things it
+	 * should not: preformatted text that merely happens to begin and end with a
+	 * backtick, and a `<pre>` holding several `<code>` children whose fences sit
+	 * side by side. Both were then emitted with no fence of their own, so an
+	 * interior ``` line opened an unterminated fence and swallowed the rest of
+	 * the document — the exact defect this class exists to prevent.
+	 *
+	 * Safe means all three: the first line opens a fence, the last line closes
+	 * it with at least as long a run, and no line in between could close it.
+	 */
+	public static function is_safely_fenced( string $text ): bool {
+		$lines = explode( "\n", trim( $text ) );
+
+		if ( count( $lines ) < 2 ) {
+			return false;
+		}
+
+		$first = array_shift( $lines );
+		$last  = array_pop( $lines );
+
+		// An info string may not contain a backtick (CommonMark §4.5), so a
+		// first line that has one later is not a fence opener at all.
+		if ( 1 !== preg_match( '/^(`{' . self::MIN_LENGTH . ',})[^`]*$/', $first, $open ) ) {
+			return false;
+		}
+
+		$length = strlen( $open[1] );
+
+		// A closing fence carries no info string.
+		if ( 1 !== preg_match( '/^(`{' . self::MIN_LENGTH . ',})[ \t]*$/', $last, $close )
+			|| strlen( $close[1] ) < $length ) {
+			return false;
+		}
+
+		foreach ( $lines as $line ) {
+			if ( 1 === preg_match( '/^[ \t]{0,3}`{' . $length . ',}[ \t]*$/', $line ) ) {
+				return false; // An interior line would end the block early.
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Length of the longest unbroken run of backticks in the text.
 	 */
 	public static function longest_run( string $text ): int {

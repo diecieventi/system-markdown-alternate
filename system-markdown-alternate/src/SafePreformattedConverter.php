@@ -30,9 +30,11 @@ class SafePreformattedConverter implements ConverterInterface {
 		$content = str_replace( '</pre>', '', $content );
 
 		// A nested <code> has already been converted, delimiters included, so
-		// there is nothing left to wrap.
-		$trimmed = trim( $content );
-		if ( '' !== $trimmed && 0 === strpos( $trimmed, '`' ) && '`' === substr( $trimmed, -1 ) ) {
+		// there is nothing left to wrap — but only if what came back really is
+		// one self-contained fenced block. Anything else gets a fence of its
+		// own below. See CodeFence::is_safely_fenced() for why the library's
+		// first-and-last-character test is not good enough.
+		if ( CodeFence::is_safely_fenced( $content ) ) {
 			return $content . "\n\n";
 		}
 

@@ -459,6 +459,7 @@ require __DIR__ . '/../src/Shortcodes.php';
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\CodeFence;
 use Diecieventi\SystemMarkdownAlternate\ContentRenderer;
 use Diecieventi\SystemMarkdownAlternate\PostSupport;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
@@ -2460,6 +2461,46 @@ unset( $GLOBALS['sysmda_test_posts'][901], $GLOBALS['sysmda_test_posts'][ $sysmd
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
 unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
 
+// ─── CodeFence (pure logic, no library needed) ───────────────────────────────
+
+check( 'fence: plain code gets the minimum', '```', CodeFence::block_delimiter( "a\nb" ) );
+check( 'fence: widens past an inner fence', '````', CodeFence::block_delimiter( "a\n```\nb" ) );
+check( 'fence: widens past the longest run', '`````', CodeFence::block_delimiter( "a\n````\nb" ) );
+check( 'fence: a mid-line run counts too', '````', CodeFence::block_delimiter( 'x ``` y' ) );
+check( 'fence: inline delimiter is one by default', '`', CodeFence::inline_delimiter( 'x' ) );
+check( 'fence: inline delimiter clears a backtick', '``', CodeFence::inline_delimiter( 'a ` b' ) );
+check( 'fence: padding only when it touches a backtick', true, CodeFence::needs_padding( '`x' ) );
+check( 'fence: no padding otherwise', false, CodeFence::needs_padding( 'x`y' ) );
+check( 'fence: info string strips a backtick', 'php', CodeFence::info_string( 'p`hp' ) );
+
+// is_safely_fenced() decides whether an already-converted block may be passed
+// through untouched. Getting it wrong in either direction is a real defect:
+// too strict double-fences ordinary code, too loose lets an interior fence
+// escape and swallow the rest of the document.
+check( 'safely fenced: a well-formed block', true, CodeFence::is_safely_fenced( "```\na\n```" ) );
+check( 'safely fenced: with an info string', true, CodeFence::is_safely_fenced( "```php\na\n```" ) );
+check( 'safely fenced: empty block', true, CodeFence::is_safely_fenced( "```\n```" ) );
+check( 'safely fenced: wide fence over an inner one', true, CodeFence::is_safely_fenced( "````\na\n```\nb\n````" ) );
+check( 'safely fenced: closing run may be longer', true, CodeFence::is_safely_fenced( "```\na\n````" ) );
+// The case the library's heuristic accepted and should not have: text that
+// merely begins and ends with a backtick, with a bare fence in the middle.
+check( 'safely fenced: NOT bare text bounded by backticks', false, CodeFence::is_safely_fenced( "`a\n```\nb`" ) );
+check( 'safely fenced: NOT an interior line that closes it', false, CodeFence::is_safely_fenced( "```\na\n```\nb\n```" ) );
+// A backtick run with text after it is content, not a delimiter: a closing
+// fence carries nothing but whitespace. So this really is one safe block, and
+// treating it as unsafe would double-fence ordinary code.
+check( 'safely fenced: a run followed by text is content', true, CodeFence::is_safely_fenced( "```\na\n``` and ```\nb\n```" ) );
+// Two genuine blocks in a row, though: the third line closes the first.
+check( 'safely fenced: NOT two separate blocks', false, CodeFence::is_safely_fenced( "```\na\n```\n```\nb\n```" ) );
+// …and a closing run shorter than the opening one never closes it. This is the
+// shape a <pre> with two <code> children actually produces.
+check( 'safely fenced: NOT a short closing run', false, CodeFence::is_safely_fenced( "````\na\n```\nb\n```` and ```\nc\n```" ) );
+check( 'safely fenced: NOT an unclosed block', false, CodeFence::is_safely_fenced( "```\na\nb" ) );
+check( 'safely fenced: NOT a single line', false, CodeFence::is_safely_fenced( '```' ) );
+check( 'safely fenced: NOT plain text', false, CodeFence::is_safely_fenced( "hello\nworld" ) );
+// An info string may not contain a backtick, so this never opened a fence.
+check( 'safely fenced: NOT a first line with a later backtick', false, CodeFence::is_safely_fenced( "```a`b\nx\n```" ) );
+
 // ─── MarkdownConverter (needs league/html-to-markdown) ───────────────────────
 
 if ( ! $GLOBALS['sysmda_has_vendor'] ) {
@@ -2668,6 +2709,44 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'e2e: a code sample showing a fence does not swallow the article',
 		"````\nSee:\n```\nx\n```\n````\n\nThe article continues here.\n",
 		$sysmda_e2e( "<pre><code>See:\n```\nx\n```</code></pre><p>The article continues here.</p>" )
+	);
+
+	// ── Unnormalized <pre> reaching the converter ───────────────────────────
+	//
+	// process_dom() gives every <pre> a <code> child, so SafeCodeConverter
+	// normally builds the fence and SafePreformattedConverter only passes it
+	// through. A bare <pre> still gets here two ways: the documented
+	// `sysmda_markdown_rendered_html` filter runs after process_dom(), and
+	// process_dom() returns its input unchanged on a parse failure. These use
+	// convert() directly, which is exactly that situation.
+
+	// Reported on PR #65. Text that merely begins and ends with a backtick is
+	// not an already-converted block, and passing it through unfenced let its
+	// interior ``` swallow the rest of the document.
+	check(
+		'convert: bare <pre> bounded by backticks is fenced, not passed through',
+		"````\n`a\n```\nb`\n````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre>`a\n```\nb`</pre><p>After.</p>" )
+	);
+
+	// A <pre> holding two <code> children has a code child but is still not one
+	// self-contained block, so the child-presence test would not have caught it.
+	check(
+		'convert: <pre> with two code children is fenced as a whole',
+		"`````\n````\na\n```\nb\n```` and ```\nc\n```\n`````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre><code>a\n```\nb</code> and <code>c</code></pre><p>After.</p>" )
+	);
+
+	// …and the ordinary shape must NOT pick up a second fence.
+	check(
+		'convert: an already-fenced block is not double-fenced',
+		"```php\necho 1;\n```\n",
+		$sysmda_conv->convert( '<pre><code class="language-php">echo 1;</code></pre>' )
+	);
+	check(
+		'convert: a widened fence passes through untouched',
+		"````\na\n```\nb\n````\n",
+		$sysmda_conv->convert( "<pre><code>a\n```\nb</code></pre>" )
 	);
 }
 
