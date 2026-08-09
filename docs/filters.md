@@ -171,7 +171,7 @@ and one on a different endpoint entirely. Known call sites:
 
 | Filter | Called from |
 |--------|-------------|
-| `sysmda_markdown_excluded_shortcodes` | the post body; each rendered preamble fragment; each expanded synced pattern (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt` in enriched mode, **once per listed post** |
+| `sysmda_markdown_excluded_shortcodes` | the post body; rendered preamble fragments; expanded synced patterns (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt`, for entries that carry a description |
 | `sysmda_markdown_excluded_block_names` | block cleaning — only when the post has blocks |
 | `sysmda_markdown_excluded_classes` | block cleaning (blocks only); every DOM pass, body and fragments alike, unless the HTML is empty or fails to parse |
 
@@ -182,9 +182,8 @@ count. A new call site can appear in any release without notice.
 What is guaranteed instead is the shape of the callback. Write these filters as
 **pure, cheap functions of their input**: same list every time, no accumulated
 state, no counting of invocations, no side effects, no expensive work. A
-callback that assumes it runs once per request will be wrong on a post with
-synced patterns, and a callback that is slow will be multiplied by every entry
-in an enriched `/llms.txt`.
+callback that assumes a single invocation will be wrong on a post with synced
+patterns, and a slow one is paid again for every entry `/llms.txt` describes.
 
 ### None of them run on a cache hit
 
@@ -193,35 +192,40 @@ in an enriched `/llms.txt`.
 the hooks in this section — document hooks and cleaning filters alike. With the
 default TTL that is the common case.
 
-**Do not read that as "filters only run when the document is rebuilt."** Six
-others run on the opposite schedule — see below.
+**Do not read that as "filters only run when the document is rebuilt."** Others
+run on the opposite schedule — see below.
 
 ## Filters on the every-request path
 
-`cache_version()` produces the `ETag`, so it runs **before** the cache lookup
-and before any header is sent: on cache hits, and on `304 Not Modified`
-responses that return no body at all. Everything it reads runs with it.
+Eligibility is decided before anything else, and `cache_version()` produces the
+`ETag`, so it runs **before** the cache lookup and before any header is sent.
+Both are reached on cache hits and on `304 Not Modified` responses that send no
+body at all. The filters they read are reached with them:
 
 | Filter | Reached through |
 |--------|-----------------|
-| `sysmda_front_matter_taxonomy_slugs` | `taxonomies_fingerprint()` → `taxonomy_terms()` |
+| `sysmda_markdown_supported_post_types` | route eligibility, on every candidate request |
+| `sysmda_markdown_excluded_post_formats` | `PostSupport::is_servable()`, same |
+| `sysmda_front_matter_taxonomy_slugs` | `cache_version()` → `taxonomies_fingerprint()` |
 | `sysmda_front_matter_taxonomies` | same |
-| `sysmda_acf_field_keys` | `dependencies_fingerprint()` → `acf_dependencies()` |
+| `sysmda_markdown_cache_dependencies` | `cache_version()` → `dependencies_fingerprint()` |
+| `sysmda_acf_field_keys` | same, and only while ACF is active |
 | `sysmda_acf_subtitle_key` | same |
 | `sysmda_acf_tldr_key` | same |
-| `sysmda_markdown_cache_dependencies` | `dependencies_fingerprint()` |
 
-`sysmda_markdown_cache_ttl` is also applied more than once per request
-(`cache_enabled()` and `get_markdown()`), and the header filters —
-`sysmda_markdown_robots_header`, `sysmda_markdown_canonical_url`,
-`sysmda_cache_control` — run on every response they apply to.
+The header filters — `sysmda_markdown_robots_header`,
+`sysmda_markdown_canonical_url`, `sysmda_cache_control` — are reached on the
+responses they apply to, `304`s included.
 
-**Keep these cheap, and never do I/O in them.** A `304` exists to cost almost
-nothing; an HTTP call or a heavy query in one of these filters is paid on every
-request, including the ones that send no body. This matters most for
-`sysmda_markdown_cache_dependencies`, whose whole purpose is to describe
-out-of-post data: declare a value you already have, or a cheap one — do not
-fetch it here.
+As with the cleaning filters, **this is membership, not a schedule**: which of
+these a given request reaches depends on the route, on whether the body is
+rebuilt, and on which integrations are active. Do not derive a count from it.
+
+**Keep them cheap, and never do I/O in them.** A `304` exists to cost almost
+nothing, and work attached here is paid even by responses that send no body.
+This matters most for `sysmda_markdown_cache_dependencies`, whose whole purpose
+is to describe out-of-post data: declare a value you already have, or a cheap
+one — do not fetch it here.
 
 ## Front matter
 
@@ -263,10 +267,14 @@ apply_filters( 'sysmda_acf_tldr_key', '', $post );
 ACF field names for the subtitle and the TL;DR. `''` disables each one. Both are
 also configurable from the settings panel when ACF is active.
 
-All three are applied twice for different reasons: once where they are used,
-and once inside the cache validator, so a change to an ACF field moves the
-`ETag`. The second one is on the
-[every-request path](#filters-on-the-every-request-path) — return a field name,
+All three are read from two places, for different reasons: where the value is
+used, and inside the cache validator, so that editing an ACF field moves the
+`ETag`. Both are skipped entirely while ACF is inactive — `acf_dependencies()`
+and the bundled callbacks return before applying them if `get_field()` does not
+exist.
+
+The validator read is on the
+[every-request path](#filters-on-the-every-request-path). Return a field name,
 not the result of looking one up.
 
 ## `/llms.txt`

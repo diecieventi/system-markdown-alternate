@@ -1065,8 +1065,11 @@ not exist as far as the public API is concerned.
    **Everything in the hash is on the every-request path, `304`s included**:
    `cache_version()` produces the ETag, so it runs before the cache lookup and
    before any header, and the filters it reads run with it —
-   `sysmda_front_matter_taxonomy_slugs`, `sysmda_front_matter_taxonomies`, the
-   three `sysmda_acf_*` keys and `sysmda_markdown_cache_dependencies`. Adding
+   `sysmda_front_matter_taxonomy_slugs`, `sysmda_front_matter_taxonomies`,
+   `sysmda_markdown_cache_dependencies` and — while ACF is active — the three
+   `sysmda_acf_*` keys. Route eligibility gets there first, so
+   `sysmda_markdown_supported_post_types` and
+   `sysmda_markdown_excluded_post_formats` are on that path too. Adding
    an input therefore adds cost to responses that send no body at all, which is
    exactly what a `304` exists to avoid. Keep new inputs to values already in
    memory or cheap to read, and never do I/O there; `docs/filters.md` states
