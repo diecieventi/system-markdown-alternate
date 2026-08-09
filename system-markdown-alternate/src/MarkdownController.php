@@ -338,7 +338,7 @@ class MarkdownController {
 	 * send a wildcard Accept (curl and many HTTP libraries) therefore receive HTML.
 	 */
 	private function prefers_markdown(): bool {
-		if ( isset( $_GET['format'] ) && 'markdown' === $_GET['format'] ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( self::has_markdown_format_override() ) {
 			return true;
 		}
 
@@ -371,7 +371,11 @@ class MarkdownController {
 			return false;
 		}
 
-		if ( isset( $_GET['format'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		// An explicit `?format=markdown` settles the representation, so the
+		// Accept header cannot make the request unacceptable. Only the
+		// recognized value counts: `?format=banana` names no representation
+		// this plugin serves, so it must not be able to switch the 406 off.
+		if ( self::has_markdown_format_override() ) {
 			return false;
 		}
 
@@ -393,6 +397,19 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether the request carries the `?format=markdown` application override.
+	 *
+	 * The one recognized value, shared by every caller so they cannot drift:
+	 * anything else in `format` names no representation this plugin serves and
+	 * must behave exactly as if the parameter were absent. The strict
+	 * comparison against a string also disposes of `?format[]=markdown`, which
+	 * makes the value an array.
+	 */
+	private static function has_markdown_format_override(): bool {
+		return isset( $_GET['format'] ) && 'markdown' === $_GET['format']; // phpcs:ignore WordPress.Security.NonceVerification
+	}
+
+	/**
 	 * Normalized request `Accept` header (empty string when absent).
 	 */
 	private function accept_header(): string {
@@ -401,19 +418,55 @@ class MarkdownController {
 
 	/**
 	 * Adds `Vary: Accept` without duplicating an existing Vary header that includes it.
+	 *
+	 * The comparison is over comma-separated **field names**, not substrings.
+	 * `Vary: Accept-Encoding` and `Vary: Accept-Language` are both extremely
+	 * common — the first is sent by practically every compressing stack — and a
+	 * substring test read either as "already covered", so the header was never
+	 * added and nothing partitioned the cache by media type. On the HTML branch
+	 * that lets a cache store the HTML and later hand it to a Markdown-preferring
+	 * request before PHP runs. They are different fields and cover nothing here.
+	 *
+	 * `Vary: *` is the one non-exact value that genuinely covers everything: it
+	 * makes the response uncacheable by shared caches altogether.
 	 */
 	private function send_vary_header(): void {
 		if ( headers_sent() ) {
 			return;
 		}
 
-		foreach ( headers_list() as $sent ) {
-			if ( 0 === stripos( $sent, 'vary:' ) && false !== stripos( $sent, 'accept' ) ) {
-				return; // Already covered.
-			}
+		if ( self::vary_covers_accept( headers_list() ) ) {
+			return;
 		}
 
 		header( 'Vary: Accept', false );
+	}
+
+	/**
+	 * Whether the headers already sent declare a `Vary` that covers `Accept`.
+	 *
+	 * Split out of send_vary_header() so the field-name comparison is testable
+	 * without a live SAPI: `headers_list()` is empty under CLI, which is where
+	 * the substring bug this replaced could hide indefinitely.
+	 *
+	 * @param string[] $sent Headers as returned by headers_list().
+	 */
+	public static function vary_covers_accept( array $sent ): bool {
+		foreach ( $sent as $header ) {
+			if ( 0 !== stripos( $header, 'vary:' ) ) {
+				continue;
+			}
+
+			foreach ( explode( ',', substr( $header, strlen( 'vary:' ) ) ) as $field ) {
+				$field = trim( $field );
+
+				if ( '*' === $field || 0 === strcasecmp( 'accept', $field ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**

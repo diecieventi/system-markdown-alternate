@@ -1284,6 +1284,36 @@ check( '406: unparseable Accept is not rejected', false, $sysmda_406( 'text/html
 check( '406: Accept refusing both is still rejected', true, $sysmda_406( 'application/json' ) );
 check( '406: normal browser Accept is not rejected', false, $sysmda_406( 'text/html,*/*;q=0.8' ) );
 
+// The `format` override switches the 406 off only for the value that actually
+// names a representation. Testing for the parameter's mere PRESENCE meant
+// `?format=banana` — or any stray parameter of that name — silently disabled it.
+$_GET['format'] = 'markdown';
+check( '406: ?format=markdown suppresses the rejection', false, $sysmda_406( 'application/json' ) );
+$_GET['format'] = 'banana';
+check( '406: an unrecognized format does not suppress it', true, $sysmda_406( 'application/json' ) );
+$_GET['format'] = array( 'markdown' );
+check( '406: an array format does not suppress it', true, $sysmda_406( 'application/json' ) );
+unset( $_GET['format'] );
+
+// ─── vary_covers_accept: field names, not substrings ─────────────────
+//
+// `Vary: Accept` is what stops a cache from handing the HTML of a permalink to
+// a Markdown-preferring request (and the reverse). The check that decides
+// whether it still has to be sent used to look for the substring "accept"
+// anywhere in an existing Vary header, so `Accept-Encoding` — which practically
+// every compressing stack emits — read as "already covered" and the header was
+// never added at all.
+check( 'vary: nothing sent yet', false, MarkdownController::vary_covers_accept( array() ) );
+check( 'vary: Accept-Encoding does not cover Accept', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding' ) ) );
+check( 'vary: Accept-Language does not cover Accept', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Language' ) ) );
+check( 'vary: a comma list of neighbours does not cover it', false, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding, Accept-Language' ) ) );
+check( 'vary: exact Accept covers it', true, MarkdownController::vary_covers_accept( array( 'Vary: Accept' ) ) );
+check( 'vary: Accept inside a comma list covers it', true, MarkdownController::vary_covers_accept( array( 'Vary: Accept-Encoding, Accept' ) ) );
+check( 'vary: matching is case-insensitive', true, MarkdownController::vary_covers_accept( array( 'vary: accept' ) ) );
+check( 'vary: a second Vary header is inspected too', true, MarkdownController::vary_covers_accept( array( 'Vary: User-Agent', 'Vary: Accept' ) ) );
+check( 'vary: the * wildcard covers everything', true, MarkdownController::vary_covers_accept( array( 'Vary: *' ) ) );
+check( 'vary: other headers are ignored', false, MarkdownController::vary_covers_accept( array( 'X-Accept: yes', 'Content-Type: text/html' ) ) );
+
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //
 // The ETag carries the taxonomy fingerprint, but Last-Modified is derived from
@@ -1904,6 +1934,33 @@ check(
 	'<pre><code class="language-js">let a = 1;</code></pre>',
 	$sysmda_dom( '<pre><code class="language-js">let <span>a</span> = 1;</code></pre>' )
 );
+// A class merely CONTAINING "line" is not a line wrapper. The substring test
+// this replaced accepted `inline-token`, `underline`, `baseline` and `outline`,
+// so adjacent token spans — which have no text node between them to bail out on
+// — were each treated as a rendered line and one source line was silently split
+// into several.
+foreach ( array( 'inline-token', 'underline', 'baseline', 'outline' ) as $sysmda_not_line ) {
+	check(
+		"dom: class \"{$sysmda_not_line}\" is not a code line",
+		'<pre><code class="language-js">let a = 1;</code></pre>',
+		$sysmda_dom(
+			'<pre><code class="language-js"><span class="' . $sysmda_not_line . '">let </span>'
+			. '<span class="' . $sysmda_not_line . '">a = 1;</span></code></pre>'
+		)
+	);
+}
+// …while the shapes highlighters actually use still are, whatever they prefix.
+foreach ( array( 'line', 'code-line', 'token-line', 'line-number highlighted' ) as $sysmda_is_line ) {
+	check(
+		"dom: class \"{$sysmda_is_line}\" is a code line",
+		"<pre><code class=\"language-js\">echo 1;\necho 2;</code></pre>",
+		$sysmda_dom(
+			'<pre><code class="language-js"><span class="' . $sysmda_is_line . '">echo 1;</span>'
+			. '<span class="' . $sysmda_is_line . '">echo 2;</span></code></pre>'
+		)
+	);
+}
+unset( $sysmda_not_line, $sysmda_is_line );
 
 // ─── ContentRenderer::absolutize (schemes and query-only references) ─────────
 
@@ -2194,6 +2251,8 @@ class Sysmda_Test_Stream {
 	public static $fail_writes = 0;
 	/** @var bool Whether the first failing call writes half the payload first. */
 	public static $partial = false;
+	/** @var int Reads to serve before failing; negative never fails. */
+	public static $fail_read_after = -1;
 
 	/** @var resource|null Set by PHP on the wrapper instance. */
 	public $context;
@@ -2210,6 +2269,13 @@ class Sysmda_Test_Stream {
 	}
 
 	public function stream_read( $count ) {
+		if ( self::$fail_read_after >= 0 && false === strpos( $this->path, '.sysmda-bak' ) ) {
+			if ( 0 === self::$fail_read_after ) {
+				return false;
+			}
+			--self::$fail_read_after;
+		}
+
 		$chunk      = substr( self::$data[ $this->path ], $this->pos, $count );
 		$this->pos += strlen( $chunk );
 		return $chunk;
@@ -2306,6 +2372,36 @@ Sysmda_Test_Stream::$partial     = true;
 
 check( 'update: short write on an empty file reports failure', false, (bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) ) );
 check( 'update: short write on an empty file leaves nothing behind', '', Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ] );
+
+// A read that fails PART WAY THROUGH must abort the whole update. Breaking out
+// of the read loop and continuing treats the bytes gathered so far as the whole
+// file: the transform runs on a truncation, the backup snapshots it, and the
+// overwrite discards everything that was never read. The write-side rollback
+// cannot help — the lost remainder never reached the buffer. The payload is
+// deliberately larger than one 8 KiB fread() chunk, so the first read succeeds
+// and the file is genuinely half-consumed when the second one fails.
+$sysmda_big_htaccess              = $sysmda_wp_rules . str_repeat( "# padding\n", 1200 );
+Sysmda_Test_Stream::$data         = array( $sysmda_fake_htaccess => $sysmda_big_htaccess );
+Sysmda_Test_Stream::$fail_writes  = 0;
+Sysmda_Test_Stream::$fail_read_after = 1;
+
+check(
+	'update: a read failure reports failure',
+	false,
+	(bool) $sysmda_update->invoke( null, $sysmda_fake_htaccess, array( LiteSpeedCompat::class, 'prepend_rules' ) )
+);
+check(
+	'update: a read failure leaves the file untouched',
+	$sysmda_big_htaccess,
+	Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess ]
+);
+check(
+	'update: a read failure writes no backup',
+	false,
+	isset( Sysmda_Test_Stream::$data[ $sysmda_fake_htaccess . '.sysmda-bak' ] )
+);
+
+Sysmda_Test_Stream::$fail_read_after = -1;
 
 // The successful path must still work through the same wrapper: the rollback
 // must not fire when the write went through.

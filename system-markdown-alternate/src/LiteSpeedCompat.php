@@ -321,11 +321,19 @@ class LiteSpeedCompat {
 
 		flock( $handle, LOCK_EX ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Failure is non-fatal by design, see the docblock.
 
+		// A read error ABORTS the update. Breaking out of the loop and carrying
+		// on would treat the bytes gathered so far as the whole file: the
+		// transform would run on a truncated `.htaccess`, the backup would
+		// snapshot the truncation, and the overwrite would then discard
+		// everything that was never read — permalinks and any other plugin's
+		// rules with it. The write-side rollback cannot help, because the lost
+		// remainder never reached $contents in the first place.
 		$contents = '';
 		while ( ! feof( $handle ) ) {
 			$chunk = fread( $handle, 8192 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
 			if ( false === $chunk ) {
-				break;
+				self::release( $handle );
+				return false;
 			}
 			$contents .= $chunk;
 		}

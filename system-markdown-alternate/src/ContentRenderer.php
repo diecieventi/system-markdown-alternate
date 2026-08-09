@@ -350,7 +350,7 @@ class ContentRenderer {
 				continue;
 			}
 
-			$is_line = false !== stripos( $child->getAttribute( 'class' ), 'line' )
+			$is_line = self::has_line_class( $child )
 				|| in_array( strtolower( $child->nodeName ), array( 'div', 'p' ), true );
 
 			if ( ! $is_line ) {
@@ -361,6 +361,28 @@ class ContentRenderer {
 		}
 
 		return $lines;
+	}
+
+	/**
+	 * Whether an element carries a class that marks it as one rendered line.
+	 *
+	 * Matched per class token, with `line` as a whole hyphen/underscore-delimited
+	 * word: `line`, `code-line`, `token-line`, `line-number` all qualify, while
+	 * `inline-token`, `underline`, `baseline` and `outline` do not. A plain
+	 * substring test accepted all of those, and since this decides where
+	 * code_text() inserts newlines, an `inline-*` class on adjacent spans split
+	 * one source line into several — silently rewriting the code.
+	 */
+	private static function has_line_class( \DOMElement $element ): bool {
+		$classes = preg_split( '/\s+/', trim( $element->getAttribute( 'class' ) ), -1, PREG_SPLIT_NO_EMPTY );
+
+		foreach ( (array) $classes as $class ) {
+			if ( 1 === preg_match( '/(?:^|[-_])line(?:[-_]|$)/i', $class ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
