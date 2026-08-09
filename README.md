@@ -85,8 +85,13 @@ add_filter( 'sysmda_markdown_prewarm', '__return_true' );
 
 ```
 
-The full public contract — every filter, its default value and what changing it
-does — is documented in **[`docs/filters.md`](docs/filters.md)**.
+The complete developer extension API — every filter, its default value, what
+changing it does and **how much compatibility it promises** — is documented in
+**[`docs/filters.md`](docs/filters.md)**. Hooks are labelled *Stable* (anchored
+to a setting or to a domain concept; changes go through deprecation) or
+*Advanced* (anchored to a stage of the current implementation, and free to
+evolve while the plugin is pre-1.0). The `.md` output format is a separate and
+stronger contract — see below.
 
 ## Output format
 
@@ -102,7 +107,7 @@ conformance tests in `system-markdown-alternate/tests/run-tests.php`.
 ├── README.md                     ← this file (GitHub)
 ├── AGENTS.md                     ← operational guide (tool-agnostic; CLAUDE.md is a symlink)
 ├── CHANGELOG.md                  ← full release history (readme.txt links here)
-├── docs/filters.md               ← the filter API (public contract)
+├── docs/filters.md               ← the developer extension API (with stability levels)
 ├── docs/output-format.md         ← the .md output format (public contract)
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
