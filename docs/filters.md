@@ -103,18 +103,42 @@ get cached. No-op when the TTL is `0`.
 
 ## The conversion pipeline
 
-Listed in the order they run.
+Listed in the order they run. The exclusion filters are consulted **inside**
+`ContentRenderer::render()`, between the source-content and rendered-HTML
+hooks — not after them. Attach a transformation to the stage that still has the
+shape you need.
 
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 ```
-Raw source content, before any rendering.
+Raw source content, before any rendering. This is where the ACF integration
+appends its fields.
+
+```php
+apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
+```
+Shortcodes stripped from the raw source, block content included. Runs first,
+so an excluded shortcode never reaches the renderer.
+
+```php
+apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
+```
+Gutenberg blocks dropped while the block tree is cleaned, before
+`render_block()` is called on what remains.
+
+```php
+apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+```
+CSS classes whose elements are dropped. **Consulted twice**, and it must return
+the same list both times: once against each block's `className` attribute
+during block cleaning, and once during the DOM pass over the rendered HTML,
+which is what catches nested elements a block attribute cannot describe.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
 ```
-Cleaned HTML, after block rendering and exclusions, before the Markdown
-conversion.
+Cleaned HTML, after block rendering, exclusions, code-block normalization and
+URL absolutization — the last point before the Markdown conversion.
 
 ```php
 apply_filters( 'sysmda_markdown_preamble', '', $post );
@@ -125,15 +149,10 @@ ACF integration uses for subtitle and TL;DR.
 ```php
 apply_filters( 'sysmda_markdown_output', $markdown, $post );
 ```
-The final Markdown document, front matter included.
+The final Markdown document, front matter included. Last hook in the pipeline.
 
-```php
-apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
-apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
-apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
-```
-Gutenberg blocks, shortcodes and CSS classes whose elements are dropped from
-the conversion. See [Default exclusions](#default-exclusions).
+See [Default exclusions](#default-exclusions) for the values the three
+exclusion filters receive.
 
 ## Front matter
 
