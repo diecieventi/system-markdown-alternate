@@ -474,6 +474,22 @@ function check( $label, $expected, $actual ) {
 	echo "FAIL: {$label}\n  expected: " . var_export( $expected, true ) . "\n  actual:   " . var_export( $actual, true ) . "\n";
 }
 
+/**
+ * Creates an invokable reflection method across the supported PHP range.
+ *
+ * Private methods require setAccessible() through PHP 8.0. Since PHP 8.1 they
+ * are invokable without it, and PHP 8.5 deprecates the now-no-op call.
+ */
+function sysmda_reflection_method( $class, $method ) {
+	$reflection = new ReflectionMethod( $class, $method );
+
+	if ( PHP_VERSION_ID < 80100 ) {
+		$reflection->setAccessible( true );
+	}
+
+	return $reflection;
+}
+
 // ─── AcceptNegotiator ────────────────────────────────────────────────────────
 
 // parse: default q, clamping, duplicates at maximum q, malformed ranges ignored.
@@ -610,8 +626,7 @@ check( 'nested reusable: 2 placeholders', 2, count( $out[0]['innerContent'] ) );
 // exercised through reflection rather than widening the public API for tests.
 
 $sysmda_renderer   = new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner() );
-$sysmda_abs_method = new ReflectionMethod( ContentRenderer::class, 'absolutize' );
-$sysmda_abs_method->setAccessible( true );
+$sysmda_abs_method = sysmda_reflection_method( ContentRenderer::class, 'absolutize' );
 
 $sysmda_abs = function ( $url ) use ( $sysmda_abs_method, $sysmda_renderer ) {
 	return $sysmda_abs_method->invoke( $sysmda_renderer, $url, 'https://example.com/blog/my-post/' );
@@ -1114,18 +1129,17 @@ check(
 
 // ─── cache_version: the taxonomy fingerprint reaches the ETag ────────
 //
-// cache_version() is private and is both the cache-validity hash AND the strong
-// ETag, so it is checked through reflection: this is the one place where an
-// error would either invalidate every cached .md on upgrade (toggle off) or
-// keep serving 304 with stale terms (toggle on).
+// cache_version() is private and is both the cache-validity hash and the input
+// to the weak ETag, so it is checked through reflection: this is the one place
+// where an error would either invalidate every cached .md on upgrade (toggle
+// off) or keep serving 304 with stale terms (toggle on).
 
 $sysmda_controller  = new MarkdownController(
 	new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner() ),
 	new MarkdownConverter(),
 	$metadata
 );
-$sysmda_cv_method = new ReflectionMethod( MarkdownController::class, 'cache_version' );
-$sysmda_cv_method->setAccessible( true );
+$sysmda_cv_method = sysmda_reflection_method( MarkdownController::class, 'cache_version' );
 $sysmda_cv        = function ( $post ) use ( $sysmda_cv_method, $sysmda_controller ) {
 	return $sysmda_cv_method->invoke( $sysmda_controller, $post );
 };
@@ -1325,8 +1339,7 @@ $GLOBALS['sysmda_test_filters'] = array();
 // Dropping a malformed range can leave nothing parseable. That is a broken
 // client, not one refusing HTML, so it must keep getting the HTML page rather
 // than an error page.
-$sysmda_406_method = new ReflectionMethod( MarkdownController::class, 'should_reject_unacceptable' );
-$sysmda_406_method->setAccessible( true );
+$sysmda_406_method = sysmda_reflection_method( MarkdownController::class, 'should_reject_unacceptable' );
 $sysmda_406 = function ( $accept ) use ( $sysmda_406_method, $sysmda_controller ) {
 	$_SERVER['HTTP_ACCEPT'] = $accept;
 	$result                 = $sysmda_406_method->invoke( $sysmda_controller );
@@ -1376,8 +1389,7 @@ check( 'vary: other headers are ignored', false, MarkdownController::vary_covers
 // has outdated terms, so the date is only honoured while it is a strong
 // validator for the representation.
 
-$sysmda_hc_method = new ReflectionMethod( MarkdownController::class, 'handle_conditional' );
-$sysmda_hc_method->setAccessible( true );
+$sysmda_hc_method = sysmda_reflection_method( MarkdownController::class, 'handle_conditional' );
 
 /** Runs handle_conditional() with only an If-Modified-Since header set. */
 $sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv ) {
@@ -1527,8 +1539,7 @@ check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtControl
 // posts behind it are never reached. In the extreme a whole section vanishes
 // while the site still has servable content of that type.
 
-$sysmda_sp_method = new ReflectionMethod( LlmsTxtController::class, 'servable_posts' );
-$sysmda_sp_method->setAccessible( true );
+$sysmda_sp_method = sysmda_reflection_method( LlmsTxtController::class, 'servable_posts' );
 $sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner() ) );
 
 /** Builds a fixture list: $formats entries, '' meaning a standard (servable) format. */
@@ -1606,8 +1617,7 @@ $GLOBALS['sysmda_test_query_pages'] = array();
 // save_post — so renaming the site used to leave the old name in the index for
 // a full TTL. Both assertions fail against 0.26.3.
 
-$sysmda_llms_cv_method = new ReflectionMethod( LlmsTxtController::class, 'cache_version' );
-$sysmda_llms_cv_method->setAccessible( true );
+$sysmda_llms_cv_method = sysmda_reflection_method( LlmsTxtController::class, 'cache_version' );
 $sysmda_llms_controller = new LlmsTxtController( $metadata );
 $sysmda_llms_cv         = function () use ( $sysmda_llms_cv_method, $sysmda_llms_controller ) {
 	return $sysmda_llms_cv_method->invoke( $sysmda_llms_controller );
@@ -1638,8 +1648,7 @@ check( 'llms: body etag is the md5 of the body', '"' . md5( "# Site\n" ) . '"', 
 check( 'llms: a different body is a different etag', true, LlmsTxtController::body_etag( 'a' ) !== LlmsTxtController::body_etag( 'b' ) );
 check( 'llms: the same body is the same etag', LlmsTxtController::body_etag( 'x' ), LlmsTxtController::body_etag( 'x' ) );
 
-$sysmda_llms_hc_method = new ReflectionMethod( LlmsTxtController::class, 'handle_conditional' );
-$sysmda_llms_hc_method->setAccessible( true );
+$sysmda_llms_hc_method = sysmda_reflection_method( LlmsTxtController::class, 'handle_conditional' );
 
 /** Runs the index's conditional check with a given If-None-Match header. */
 $sysmda_llms_hc = function ( $header, $etag ) use ( $sysmda_llms_hc_method, $sysmda_llms_controller ) {
@@ -1742,8 +1751,7 @@ check( 'etag: empty header', false, MarkdownController::etag_matches( '', '"abc"
 
 // The response tag is weak (the validator is computed from metadata, never from
 // the bytes, so byte-for-byte identity cannot be promised — see etag()).
-$sysmda_etag_method = new ReflectionMethod( MarkdownController::class, 'etag' );
-$sysmda_etag_method->setAccessible( true );
+$sysmda_etag_method = sysmda_reflection_method( MarkdownController::class, 'etag' );
 check( 'etag: the emitted tag is weak', 'W/"abc"', $sysmda_etag_method->invoke( null, 'abc' ) );
 
 // Weak comparison ignores the flag on BOTH sides (RFC 9110 §8.8.3.2). The first
@@ -2072,8 +2080,7 @@ unset(
 // The DOM pass is where the body is assembled, so it gets golden coverage: the
 // bugs it used to hide (silent truncation, glued tables, collapsed code) were all
 // invisible to the pure-logic tests that only reached absolutize().
-$sysmda_dom_method = new ReflectionMethod( ContentRenderer::class, 'process_dom' );
-$sysmda_dom_method->setAccessible( true );
+$sysmda_dom_method = sysmda_reflection_method( ContentRenderer::class, 'process_dom' );
 
 $sysmda_dom = static function ( $html, $base = 'https://example.com/blog/my-post/' ) use ( $sysmda_renderer, $sysmda_dom_method ) {
 	return $sysmda_dom_method->invoke( $sysmda_renderer, $html, $base );
@@ -2493,8 +2500,7 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 // is never released, a backup that clobbers itself). Exercised on a temp file:
 // no WordPress needed, and it catches the kind of typo that only shows up on a
 // live site's .htaccess — the one file whose breakage takes a site down.
-$sysmda_update = new ReflectionMethod( LiteSpeedCompat::class, 'update' );
-$sysmda_update->setAccessible( true );
+$sysmda_update = sysmda_reflection_method( LiteSpeedCompat::class, 'update' );
 
 $sysmda_tmp_dir  = sys_get_temp_dir() . '/sysmda-tests-' . getmypid();
 @mkdir( $sysmda_tmp_dir, 0777, true );

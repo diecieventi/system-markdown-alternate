@@ -60,7 +60,7 @@ bash bin/build.sh
 bash bin/release-tag.sh
 ```
 
-## Current state (v0.35.x)
+## Current state
 
 The v1 scope is done and widely exceeded. Implemented:
 
@@ -993,7 +993,7 @@ running code at the WP level.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
-├── DIST/                         ← distributable zip + BUILD-INFO.txt (versioned; a RELEASE SNAPSHOT, not a build of HEAD)
+├── DIST/                         ← versioned convenience copy of the most recent release zip
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1214,20 +1214,18 @@ new HtmlConverter([
 
 ```bash
 bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundled)
-                         #   + DIST/BUILD-INFO.txt (version, commit, git describe, date)
 ```
 
-`DIST/` holds a **committed release snapshot, not a build of `HEAD`** — that is
-the policy, and `DIST/BUILD-INFO.txt` is what makes it checkable: it records the
-plugin version, the commit, `git describe` and the build date. Post-release
-commits that change no version leave the zip correct while its `readme.txt`
-differs from `main`, which is expected; the manifest is how a reviewer tells
-that apart from a package that quietly fell behind. Do not "fix" such a
-difference by rebuilding outside a release.
+`DIST/` is a **versioned convenience copy** of the most recent release zip, not
+the source of release provenance. The release tag is authoritative: both the
+GitHub Release and the WordPress.org deploy rebuild their package from that tag.
+Post-release commits that do not change the version may therefore leave the
+committed zip behind `main`; that is expected, and is not a reason to rebuild it
+outside a release.
 
 The zip includes the production Composer dependencies, so it installs without
-Composer on the server. Local build environment: PHP 8.4, Composer and `zip`
-(no wp-cli).
+Composer on the server. Local build environment: PHP 8.4, Composer, `rsync` and
+`zip` (no wp-cli).
 
 ### Publishing to wordpress.org (SVN)
 
@@ -1235,16 +1233,14 @@ On WP.org you **deploy**, you don't develop: the GitHub repo remains the home of
 development, SVN is distribution only. What goes into SVN is **the content of the
 `system-markdown-alternate/` folder** (not the repo root: no `README.md`,
 `AGENTS.md`, `bin/`, `DIST/`, `.github/`), with **`vendor/` bundled** (runtime
-dependency). The plugin-folder exclusions live in
-`system-markdown-alternate/.distignore` (`tests/`, `composer.lock`, and the
-`league/html-to-markdown` **CLI binaries** — `vendor/bin` and
-`vendor/league/html-to-markdown/bin` — which the wordpress.org Plugin Check
-flags as "not permitted files"; they are never invoked at runtime, the plugin
-uses the library classes only). The same binary exclusions are mirrored in
-`bin/build.sh` and in the deploy workflow's `rsync` (both build a package
-without consulting `.distignore`). The production package intentionally keeps
-`composer.json` alongside `vendor/`, as required for dependency review by
-WordPress.org Plugin Check.
+dependency). `system-markdown-alternate/.distignore` is the **single source of
+package exclusions**, read by both `bin/build.sh` and the WordPress.org deploy
+workflow: tests, development metadata/configuration, Composer's lock file and
+the `league/html-to-markdown` CLI binaries are omitted. Those binaries are
+never invoked at runtime and the wordpress.org Plugin Check flags them as
+"not permitted files"; the plugin uses the library classes only. The
+production package intentionally keeps `composer.json` alongside `vendor/`,
+as required for dependency review by WordPress.org Plugin Check.
 
 - Manual flow: `bash bin/build.sh`, then copy the content into `svn/trunk` and
   tag it under `svn/tags/x.y.z`.
@@ -1254,9 +1250,9 @@ WordPress.org Plugin Check.
   `10up/action-wordpress-plugin-deploy`, triggered on **publishing a GitHub
   Release** (not on a bare tag push, to avoid a run without SVN credentials) or
   by hand from the Actions tab. Since `BUILD_DIR` ignores `.distignore`, the
-  workflow stages a clean copy of `system-markdown-alternate/` itself (same
-  exclusions as `.distignore`) before handing it to the action. `VERSION` is
-  derived from the tag name (`v0.18.0` → `0.18.0`).
+  workflow stages a clean copy of `system-markdown-alternate/` itself by passing
+  that shared exclusion file to `rsync` before handing the result to the action.
+  `VERSION` is derived from the tag name (`v0.18.0` → `0.18.0`).
   **The job refuses to deploy anything that is not an existing `vX.Y.Z` tag**
   whose plugin header, `SYSMDA_VERSION`, `readme.txt` stable tag and
   `CHANGELOG.md` entry all agree, and checks out `refs/tags/…` explicitly so a

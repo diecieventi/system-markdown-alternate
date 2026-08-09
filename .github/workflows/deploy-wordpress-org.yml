@@ -115,18 +115,13 @@ jobs:
         run: composer install --no-dev --optimize-autoloader --working-dir=system-markdown-alternate
 
       - name: Stage clean build directory
-        # The action's BUILD_DIR ignores .distignore, so stage it explicitly
-        # with the same exclusions as system-markdown-alternate/.distignore.
+        # The action's BUILD_DIR ignores .distignore, so stage the package with
+        # the same shared exclusion file used by bin/build.sh.
         run: |
           mkdir -p build/system-markdown-alternate
-          rsync -a system-markdown-alternate/ build/system-markdown-alternate/ \
-            --exclude=tests \
-            --exclude=.distignore \
-            --exclude=composer.lock \
-            --exclude=phpcs.xml.dist \
-            --exclude=phpcs.xml \
-            --exclude=vendor/bin \
-            --exclude=vendor/league/html-to-markdown/bin
+          rsync -a \
+            --exclude-from=system-markdown-alternate/.distignore \
+            system-markdown-alternate/ build/system-markdown-alternate/
 
       - name: WordPress Plugin Deploy
         uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
