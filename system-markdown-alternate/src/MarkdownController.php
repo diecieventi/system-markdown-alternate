@@ -522,10 +522,9 @@ class MarkdownController {
 	 * must revalidate before serving it — a `.md` can never be handed out after
 	 * the article behind it changed. That is the goal the old "send nothing"
 	 * decision was written for; this is the header that actually delivers it.
-	 * `public` states what is true by construction: the representation never
-	 * varies by visitor (protected content has no `.md`, drafts 404, and the
-	 * body is built from cleaned blocks rather than `the_content`, so
-	 * personalisation filters never run).
+	 * `public` applies only when representation_is_shared() identifies the
+	 * anonymous representation. Authenticated requests take the private,
+	 * no-store branch; that method owns the visitor-variance rationale.
 	 *
 	 * Freshness for shared caches is still not imposed, but it is no longer
 	 * unreachable either: `sysmda_cache_control` can return an `s-maxage`, and

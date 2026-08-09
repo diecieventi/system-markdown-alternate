@@ -127,7 +127,7 @@ bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundl
 The zip includes the production Composer dependencies (`league/html-to-markdown`),
 so it installs straight into WordPress without Composer on the server.
 
-Build environment: PHP ≥ 7.4, Composer and `zip`.
+Build environment: PHP ≥ 7.4, Composer, `rsync` and `zip`.
 
 ## Coding standards
 

@@ -1,17 +1,29 @@
-# Files excluded from the WordPress.org package (SVN).
+# Files excluded from every distributable package (GitHub ZIP and WordPress.org SVN).
 #
-# Used by deployment tools (for example 10up/action-wordpress-plugin-deploy)
-# that rsync this directory to SVN while excluding these patterns. Note:
+# Both bin/build.sh and the WordPress.org deploy workflow pass this file to
+# rsync. Keep one exclusion policy here so the two packages cannot drift.
 # `vendor/` is intentionally omitted because it is a runtime dependency and
-# MUST be shipped (bundle it with `composer install --no-dev` before deployment).
+# MUST be shipped after `composer install --no-dev`.
 
-/tests
-/.distignore
+tests
+.distignore
 composer.lock
+.DS_Store
+.git
+.github
+.gitignore
 
 # Development tooling config (PHPCS/WPCS): never used at runtime.
-/phpcs.xml.dist
-/phpcs.xml
+phpcs.xml.dist
+phpcs.xml
+
+# Composer development dependencies. `composer install --no-dev` removes the
+# normal directories; these exclusions are a safety net for local leftovers.
+vendor/dealerdirect
+vendor/phpcompatibility
+vendor/phpcsstandards
+vendor/squizlabs
+vendor/wp-coding-standards
 
 # CLI binaries shipped by league/html-to-markdown. They are never invoked at
 # runtime (the plugin uses the library classes only) and the wordpress.org
