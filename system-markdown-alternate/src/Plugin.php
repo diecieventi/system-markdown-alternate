@@ -59,6 +59,9 @@ class Plugin {
 		// [sysmda_md_url] shortcode for the dynamic .md URL.
 		( new Shortcodes() )->register();
 
+		// Explicit, opt-in copy/view/download control for human readers.
+		( new MarkdownActions() )->register();
+
 		// GenerateBlocks {{sysmda_md_url}} dynamic tag (automatically active with GB 2.x).
 		( new DynamicTags() )->register();
 

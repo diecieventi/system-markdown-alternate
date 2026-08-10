@@ -17,12 +17,13 @@ class ShortcodeCleaner {
 	 *
 	 * `sysmda_md_button` is the front-end button removed in 0.34.0. The tag is
 	 * kept here on purpose: it is no longer registered, so any left behind in old
-	 * post content would otherwise survive as the literal text
-	 * `[sysmda_md_button]` inside the `.md`. Stripping happens after
-	 * `apply_filters` because the saved "Excluded shortcodes" option *replaces*
-	 * the defaults below rather than adding to them.
+	 * post content would otherwise survive as literal text. `sysmda_md_actions`
+	 * is the current opt-in human control and must never publish its own UI into
+	 * the Markdown. Stripping happens after `apply_filters` because the saved
+	 * "Excluded shortcodes" option *replaces* the defaults below rather than
+	 * adding to them.
 	 */
-	const ALWAYS_EXCLUDED = array( 'sysmda_md_button' );
+	const ALWAYS_EXCLUDED = array( 'sysmda_md_button', 'sysmda_md_actions' );
 
 	/**
 	 * @param string $content Source content.

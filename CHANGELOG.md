@@ -9,6 +9,41 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.39.0
+
+* **Added `[sysmda_md_actions]`, an explicit reader-facing Markdown control.**
+  It follows the GitHub Docs split-button behaviour requested for this feature:
+  the primary **Copy as Markdown** action fetches and copies the complete `.md`
+  document, while the dropdown repeats that action and adds **View as
+  Markdown** in a new tab plus **Download Markdown**. `id="123"` targets another
+  post through the same `Shortcodes::resolve_post()` and `PostSupport` rules as
+  the existing URL/download shortcodes, so unsupported, draft, protected and
+  non-standard-format content produces no control rather than a broken link.
+* **The menu is designed for unknown theme layouts rather than assuming an
+  article column.** JavaScript moves it to `document.body`, positions it against
+  the viewport, flips horizontally and vertically when an edge has no room,
+  clamps it to an 8 px inset, and recalculates on scroll/resize. That prevents
+  an ancestor's width or `overflow` from clipping the dropdown — the mobile
+  failure that made the old, broader front-end button untenable in `0.34.0`.
+  Native buttons/links retain their semantics; `aria-expanded`, Escape,
+  outside-focus closing, arrow/Home/End navigation, a polite live region and a
+  hidden “opens in new tab” note cover keyboard and assistive-technology use.
+* **Assets remain opt-in with the shortcode.** The small namespaced stylesheet
+  and dependency-free script are enqueued early when `has_shortcode()` can see
+  the control in the queried post, and from the render callback as a late
+  fallback for templates, widgets and secondary loops. If that fallback runs
+  after `wp_head`, the stylesheet is explicitly printed before footer scripts;
+  merely enqueuing it there would leave the documented late placement unstyled.
+  WordPress de-duplicates both paths, and pages that render no control load
+  neither asset. The download stays the existing client-only contract: a
+  same-origin `download` attribute and `MetadataBuilder::download_filename()`,
+  with no new request parameter or `Content-Disposition` response.
+* The root stays hidden until JavaScript has initialized it, so a failed or
+  unavailable clipboard API never leaves a dead copy action or an unpositioned
+  menu. Copying uses the promise-backed `ClipboardItem` route Safari requires,
+  then falls back to `writeText`/the legacy textarea path, and refuses to copy a
+  response whose content type is not `text/markdown`.
+
 ## 0.38.2
 
 * **The front-matter `description` still leaked the text of an excluded
