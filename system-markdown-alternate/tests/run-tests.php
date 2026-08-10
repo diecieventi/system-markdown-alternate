@@ -129,6 +129,16 @@ function strip_shortcodes( $content ) {
 	return $content;
 }
 
+/**
+ * Stub: expands the single tag the pipeline tests use. Core short-circuits on
+ * content carrying no bracket at all, and so does the caller, so the stub only
+ * has to be faithful about *what* it rewrites — deliberately with no notion of
+ * markup, which is the property the code-masking pass exists to compensate for.
+ */
+function do_shortcode( $content ) {
+	return str_replace( '[demo]', 'EXPANDED', $content );
+}
+
 function wp_strip_all_tags( $text ) {
 	$text = preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', $text );
 	return strip_tags( $text );
@@ -666,6 +676,79 @@ check( 'absolutize: data', 'data:image/png;base64,AAA', $sysmda_abs( 'data:image
 check( 'absolutize: DATA uppercase', 'DATA:image/png;base64,AAA', $sysmda_abs( 'DATA:image/png;base64,AAA' ) );
 check( 'absolutize: fragment', '#section-2', $sysmda_abs( '#section-2' ) );
 
+// ─── ContentRenderer::expand_shortcodes ──────────────────────────────────────
+//
+// Shortcodes have to be expanded on both source branches — render_block() does
+// not do it, and the pipeline skips the_content, which is what does it on the
+// front end — while never being expanded inside a code region, where the text
+// is the content rather than an instruction. Private, so exercised through
+// reflection like absolutize() above.
+
+$sysmda_expand_method = sysmda_reflection_method( ContentRenderer::class, 'expand_shortcodes' );
+
+$sysmda_expand = function ( $html ) use ( $sysmda_expand_method, $sysmda_renderer ) {
+	return $sysmda_expand_method->invoke( $sysmda_renderer, $html );
+};
+
+check( 'shortcodes: expanded in prose', '<p>EXPANDED</p>', $sysmda_expand( '<p>[demo]</p>' ) );
+check( 'shortcodes: content without a bracket is returned as it is', '<p>plain</p>', $sysmda_expand( '<p>plain</p>' ) );
+
+// The three shapes a code sample arrives in: a bare <pre>, an inline <code>,
+// and the <pre><code> pair every core code block and highlighter produces.
+check( 'shortcodes: protected inside pre', '<pre>[demo]</pre>', $sysmda_expand( '<pre>[demo]</pre>' ) );
+check( 'shortcodes: protected inside inline code', '<p>see <code>[demo]</code></p>', $sysmda_expand( '<p>see <code>[demo]</code></p>' ) );
+check(
+	'shortcodes: protected inside pre > code',
+	'<pre class="wp-block-code"><code class="language-php">[demo]</code></pre>',
+	$sysmda_expand( '<pre class="wp-block-code"><code class="language-php">[demo]</code></pre>' )
+);
+
+// Tag names are matched case-insensitively, and the closing tag has to be the
+// matching one: a backreference, not "the next closing tag of any kind".
+check( 'shortcodes: protected inside uppercase PRE', '<PRE>[demo]</PRE>', $sysmda_expand( '<PRE>[demo]</PRE>' ) );
+
+// Every region is restored, in its own place, with the prose around it expanded.
+check(
+	'shortcodes: prose expanded around protected regions',
+	'<p>EXPANDED</p><pre>A [demo]</pre><p>EXPANDED</p><pre>B [demo]</pre>',
+	$sysmda_expand( '<p>[demo]</p><pre>A [demo]</pre><p>[demo]</p><pre>B [demo]</pre>' )
+);
+
+// A `pre`-prefixed tag name is not a code region: \b must not match inside a word.
+check( 'shortcodes: preview element is not a code region', '<preview>EXPANDED</preview>', $sysmda_expand( '<preview>[demo]</preview>' ) );
+
+// ─── ContentRenderer::strip_excluded_content ─────────────────────────────────
+//
+// The exclusion rule applied outside the render pipeline, for the front-matter
+// description fallback. Content that carries no excluded class must come back
+// byte-identical: the description of an ordinary post may not change shape just
+// because this pass exists.
+
+check(
+	'strip_excluded: region with the class removed',
+	'<p>Keep</p><p>Keep too</p>',
+	$sysmda_renderer->strip_excluded_content( '<p>Keep</p><div class="md-exclude"><p>Drop</p></div><p>Keep too</p>' )
+);
+check(
+	'strip_excluded: nested element with the class removed',
+	'<div class="wrapper"><p>Keep</p></div>',
+	$sysmda_renderer->strip_excluded_content( '<div class="wrapper"><p>Keep</p><span class="no-md">Drop</span></div>' )
+);
+check(
+	'strip_excluded: content without the class is untouched',
+	'<p>Nothing to strip &amp; nothing to parse</p>',
+	$sysmda_renderer->strip_excluded_content( '<p>Nothing to strip &amp; nothing to parse</p>' )
+);
+
+// The cheap substring guard says "maybe" for a class name that is only prose;
+// the DOM pass then removes nothing, and the input must survive unchanged
+// rather than come back through a serialization round trip.
+check(
+	'strip_excluded: class named in prose only is untouched',
+	'<p>Mark a section with md-exclude &amp; it disappears</p>',
+	$sysmda_renderer->strip_excluded_content( '<p>Mark a section with md-exclude &amp; it disappears</p>' )
+);
+
 // ─── PostSupport::sanitize_types ─────────────────────────────────────────────
 //
 // `attachment` must never be servable, whatever the filter returns — the
@@ -756,7 +839,7 @@ foreach (
 
 // ─── MetadataBuilder::description ─────────────────────────────────────
 
-$metadata = new MetadataBuilder( new ShortcodeCleaner() );
+$metadata = new MetadataBuilder( new ShortcodeCleaner(), $sysmda_renderer );
 
 $p = new WP_Post(
 	array(
@@ -773,6 +856,27 @@ $p = new WP_Post(
 	)
 );
 check( 'description: style and iframe content removed', 'Introduction Conclusion', $metadata->description( $p ) );
+
+// The fallback reads the post content, not the rendered body, so the exclusion
+// rules have to be applied to it as well: whatever the body refuses to publish
+// may not be summarised into the front matter either.
+$p = new WP_Post(
+	array(
+		'ID'           => 22,
+		'post_content' => '<p>Visible.</p><div class="md-exclude"><p>Confidential.</p></div><p>Also visible.</p>',
+	)
+);
+check( 'description: md-exclude region omitted', 'Visible. Also visible.', $metadata->description( $p ) );
+
+// Block markup takes the same path: the class is on the rendered element inside
+// the block, and the block delimiters are stripped as the comments they are.
+$p = new WP_Post(
+	array(
+		'ID'           => 23,
+		'post_content' => '<!-- wp:paragraph --><p>Intro.</p><!-- /wp:paragraph --><!-- wp:paragraph {"className":"md-exclude"} --><p class="md-exclude">Confidential.</p><!-- /wp:paragraph -->',
+	)
+);
+check( 'description: md-exclude block omitted', 'Intro.', $metadata->description( $p ) );
 
 // ─── MetadataBuilder::build_front_matter (F1 golden conformance) ─────
 //
@@ -1572,7 +1676,7 @@ check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtControl
 // while the site still has servable content of that type.
 
 $sysmda_sp_method = sysmda_reflection_method( LlmsTxtController::class, 'servable_posts' );
-$sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner() ) );
+$sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner(), $sysmda_renderer ) );
 
 /** Builds a fixture list: $formats entries, '' meaning a standard (servable) format. */
 $sysmda_sp_fixture = static function ( array $formats ) {

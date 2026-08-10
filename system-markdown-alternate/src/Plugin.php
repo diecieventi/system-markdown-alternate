@@ -24,7 +24,7 @@ class Plugin {
 		$shortcodes = new ShortcodeCleaner();
 		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
 		$converter  = new MarkdownConverter();
-		$metadata   = new MetadataBuilder( $shortcodes );
+		$metadata   = new MetadataBuilder( $shortcodes, $renderer );
 
 		$this->controller = new MarkdownController( $renderer, $converter, $metadata );
 

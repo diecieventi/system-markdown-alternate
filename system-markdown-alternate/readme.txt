@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.38.0
+Stable tag: 0.38.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -168,6 +168,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.38.1 =
+
+* Fixed: a shortcode written inside a block — typed into a paragraph, in a Custom HTML block or in the core Shortcode block — reached the Markdown as literal `[tag]` text instead of being expanded.
+* Fixed: a shortcode *shown as an example* inside a code block or an inline code span is no longer expanded, so code samples are published as written.
+* Fixed: a section marked `md-exclude` (or `no-md`) could still be summarised into the front-matter `description` of posts with no SEO description and no excerpt, publishing text the body deliberately leaves out.
+
 = 0.38.0 =
 
 * Fixed: a code sample containing a ``` fence used to break out of its own code block and swallow the rest of the document. Fenced blocks and inline code spans now size their delimiters to the content they wrap.
@@ -180,21 +186,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Supported canonical HTML pages now advertise their Markdown representation in the HTTP `Link` header as well as in the document `<head>`. The header is also present on `HEAD` responses, appends without replacing other link relations and is not emitted on `.md`, negotiated Markdown, `406` or redirect responses.
 * Simplified release packaging around one shared `.distignore`: the local build and the wordpress.org deploy now stage the same files, and the obsolete `BUILD-INFO.txt` artifact is gone.
 * Cleaned up the test bootstrap for PHP 8.5 and removed an empty duplicate `php_codesniffer` test suite from CI.
-
-= 0.36.0 =
-
-* **Renaming a category or tag now refreshes the Markdown.** `categories:` and `tags:` are always part of the front matter, but nothing told the caching layer they had changed, so a client that had already fetched a post kept being told "not modified" — indefinitely, with the cache on or off. Changing the site timezone had the same effect on the dates, and replacing the file behind a featured image on its URL.
-* **Fenced code inside a quote or a list item is preserved again.** Only code at the left margin was recognised as code, so anything indented inside a blockquote or a list had its trailing spaces trimmed and its blank lines collapsed — silently rewriting samples, transcripts and diffs.
-* **`Vary: Accept` is no longer skipped by mistake.** A site already sending `Vary: Accept-Encoding` (most of them, once compression is on) looked to the plugin as if the header were covered, and it was never added — leaving caches free to hand the HTML page to a client asking for Markdown.
-* **The `.md` is now explicitly the anonymous version of a post.** A logged-in visitor's request is never stored in the shared cache and is never publicly cacheable, so a block or shortcode that renders differently for that visitor cannot end up being served to everyone else.
-* **New `sysmda_post_is_servable` filter** so a membership or paywall plugin can deny the Markdown of a single post. The built-in checks only understand WordPress's own post status and password field.
-* A post type that is no longer registered as public stops being served, instead of remaining servable because its name was still saved in the settings.
-* `?format=banana` no longer disables the `406` response that `?format=markdown` is allowed to skip.
-* A read error while updating `.htaccess` now aborts the update instead of rewriting the file from the part that had been read.
-* `/llms.txt` counts eligible posts against its per-type limit, so a batch of excluded ones no longer shortens the index — or empties a section that still has content behind it.
-* The panel now distinguishes "`/llms.txt` enabled" from "enabled but waiting for a content type", which is when the endpoint deliberately stays silent.
-* Control characters arriving from an import or a REST write can no longer break the YAML front matter.
-* Hardened the wordpress.org release workflow: every GitHub Action is pinned to an exact revision, and a deploy is refused unless the tag exists and the version agrees across the plugin header, the readme and the changelog.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

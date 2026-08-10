@@ -24,8 +24,12 @@ class MetadataBuilder {
 	/** @var ShortcodeCleaner */
 	private $shortcodes;
 
-	public function __construct( ShortcodeCleaner $shortcodes ) {
+	/** @var ContentRenderer */
+	private $renderer;
+
+	public function __construct( ShortcodeCleaner $shortcodes, ContentRenderer $renderer ) {
 		$this->shortcodes = $shortcodes;
+		$this->renderer   = $renderer;
 	}
 
 	/**
@@ -597,6 +601,15 @@ class MetadataBuilder {
 	 * Description fallback order: Rank Math => excerpt => trimmed content text.
 	 *
 	 * Public because LlmsTxtController reuses it for enriched index entries.
+	 *
+	 * The last fallback reads the post content rather than the rendered body —
+	 * deliberately, since it also runs per entry when building `/llms.txt`,
+	 * where rendering every listed post would be prohibitive. That shortcut is
+	 * what made it leak: the exclusion rules are applied by the render pipeline,
+	 * so a `md-exclude` section the body never publishes was summarised into the
+	 * front matter regardless. The content therefore goes through the same
+	 * exclusion pass first (a no-op, and byte-identical, for the content that
+	 * carries no such class — which is nearly all of it).
 	 */
 	public function description( \WP_Post $post ): string {
 		$rank_math = get_post_meta( $post->ID, 'rank_math_description', true );
@@ -617,6 +630,7 @@ class MetadataBuilder {
 
 		$raw = $post->post_content;
 		$raw = $this->shortcodes->strip( $raw );   // Removes excluded shortcodes (even when they are not registered).
+		$raw = $this->renderer->strip_excluded_content( $raw ); // Removes md-exclude regions, as the body does.
 		$raw = strip_shortcodes( $raw );           // Removes other registered shortcodes.
 		$raw = preg_replace( '/<!--.*?-->/s', ' ', $raw ); // Replaces block delimiters with spaces.
 		$raw = preg_replace( '/<(script|style|iframe)\b[^>]*>.*?<\/\1\s*>/is', ' ', $raw ); // Replaces non-text nodes with spaces.

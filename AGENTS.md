@@ -159,6 +159,23 @@ The v1 scope is done and widely exceeded. Implemented:
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
+  - **shortcodes are expanded on both branches, and never inside code**
+    (`0.38.1`, `expand_shortcodes()`). Two halves of one rule, and the second is
+    why the fix is a single shared helper rather than a line added to the block
+    branch. (a) `render_block()` does **not** expand shortcodes — on the front
+    end that is `the_content`, which this pipeline skips by design (step 4
+    below) — so nothing expanded them at all for block content, and a shortcode
+    typed into a paragraph, a Custom HTML block or the core Shortcode block was
+    published as literal `\[tag\]`. (b) `do_shortcode()` is a plain regex over
+    the whole string with no notion of markup, so the classic branch, which had
+    always called it, expanded a code sample *showing* `[gallery]` as if it were
+    the real thing — rewriting the sample into whatever the shortcode renders.
+    Code regions are therefore masked with placeholders around the expansion,
+    for both branches at once. Do not "simplify" this to a bare `do_shortcode()`
+    on either side, and do not add a filter to make the protection optional:
+    WordPress's own `[[tag]]` escape already covers literal brackets outside
+    code. A masking failure falls back to expanding unprotected, because
+    publishing the raw tag would be the worse of the two.
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
@@ -629,6 +646,19 @@ The v1 scope is done and widely exceeded. Implemented:
   only when it contains an unresolved `%variable%` placeholder → excerpt fallback
   → trimmed text (~200 chars). Front matter includes `featured_image`
   (+ `featured_image_alt`).
+  **The last fallback reads the post content, not the rendered body, and that
+  shortcut is deliberate — so it has to re-apply the exclusion rules itself**
+  (`0.38.1`): the same method builds every entry of `/llms.txt`, where rendering
+  each listed post would be prohibitive, which is why it must stay cheap. But
+  the exclusions live in the render pipeline, so a `md-exclude` section the body
+  refuses to publish was summarised straight into the front matter of any post
+  with no SEO description and no excerpt. It now runs through
+  `ContentRenderer::strip_excluded_content()` first, which returns its input
+  untouched when no excluded class is present — content without one is never
+  round-tripped through the DOM, and its description stays byte-identical.
+  The rule generalizes: **anything deriving text from `post_content` instead of
+  the rendered body owes the same pass.** What the body excludes is excluded
+  everywhere, front matter and `/llms.txt` included.
 - **The `ETag` is weak (`W/"…"`) and stays weak** (decided July 2026, `0.28.0`,
   outcome of the ETag/cache review — see `docs/cache-infrastructure-notes.md`):
   the validator is computed from metadata (modification date, plugin version,
@@ -1463,6 +1493,18 @@ Test posts:
     any pre-existing Link relation is preserved. The field is absent from the
     `.md` response, negotiated Markdown, `406`, feed, embed, trackback, paged
     comments and `<!--nextpage-->` sub-pages.
+
+14. Post with a registered shortcode in three places — typed into a paragraph,
+    in a Custom HTML block and in the core Shortcode block → all three are
+    **expanded** in the `.md`, none appears as literal `\[tag\]`. The same
+    shortcode written inside a code block and inside an inline `<code>` span →
+    published **verbatim**, unexpanded. Both halves again on a classic-editor
+    post (no block markup), which takes the other branch.
+
+15. Post with an `md-exclude` section, **no** SEO description and **no** excerpt
+    → the excluded text is absent from the body *and* from the front-matter
+    `description:`. A post without any excluded class → its `description:` is
+    unchanged from the previous release (the pass must be a no-op there).
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
