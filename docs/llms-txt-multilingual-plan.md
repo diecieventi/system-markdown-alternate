@@ -1,7 +1,7 @@
 # Plan: translations in `/llms.txt` (dedicated section)
 
-> English-only (repo convention). Independent of everything else, and the only
-> implementation plan still open. **Do not code before the staging
+> English-only (repo convention). Independent of everything else. **Do not code
+> before the staging
 > reconnaissance below** — the current plan's central query assumption is not
 > reliable and must be verified against real WPML/Polylang behavior first.
 
