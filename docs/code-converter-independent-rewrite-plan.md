@@ -1,10 +1,10 @@
 # Plan: independent rewrite of the code-element converters
 
-> **Status: review gate closed with split prerequisites; implementation blocked.**
+> **Status: implemented for 0.41.0 after all prerequisites merged.**
 > The parallel code review was reconciled on 10 August 2026. It did not change
-> the converter design, but the cache/security prerequisite PR recorded below
-> must land before converter implementation starts. This document remains
-> planning only until that prerequisite is merged.
+> the converter design. The cache/security prerequisites landed in PR #75; the
+> independent implementation then followed the test-first and restricted-source
+> protocol recorded below.
 
 ## Executive decision
 
@@ -12,8 +12,8 @@ Replace `SafeCodeConverter` and `SafePreformattedConverter` with one independent
 designed converter that owns both `<code>` and `<pre>` behavior. The new
 implementation will use only:
 
-- the public `league/html-to-markdown` converter API (`ConverterInterface` and
-  `ElementInterface`);
+- the public `league/html-to-markdown` converter API (`ConverterInterface`,
+  `PreConverterInterface` and `ElementInterface`);
 - this plugin's existing `CodeFence` behavior;
 - the CommonMark rules for code spans and fenced code blocks;
 - behavior and regression tests written from the plugin's output contract.
@@ -164,7 +164,8 @@ one-time observation.
 
 New file: `system-markdown-alternate/src/CodeElementConverter.php`.
 
-Implements `League\HTMLToMarkdown\Converter\ConverterInterface` and supports:
+Implements `League\HTMLToMarkdown\Converter\ConverterInterface` and
+`League\HTMLToMarkdown\PreConverterInterface`, and supports:
 
 ```php
 array( 'code', 'pre' )
@@ -174,6 +175,7 @@ Suggested internal methods (names may change during implementation, behavior
 may not):
 
 - `convert( ElementInterface $element ): string`
+- `preConvert( ElementInterface $element ): void`
 - `convert_code( ElementInterface $element ): string`
 - `convert_pre( ElementInterface $element ): string`
 - `render_inline( string $value ): string`
@@ -182,8 +184,13 @@ may not):
 - `language_from_classes( string $classes ): string`
 - `normalize_line_endings( string $value ): string`
 
-The class should be stateless. No WordPress functions, options, filters or
-globals belong in it.
+The class keeps only ephemeral traversal state: `preConvert()` records whether
+each `<pre>` originally had exactly one `<code>` child, and `convert_pre()`
+consumes and deletes that flag. This is necessary because the real library
+replaces converted children with text nodes before it calls the parent
+converter; inspecting `getChildren()` at parent-conversion time cannot recover
+their provenance. No WordPress functions, options, filters or globals belong in
+the class.
 
 ### Dispatch contract
 
@@ -301,9 +308,12 @@ empty candidates result in no info string, never an invalid fence opener.
 
 Read the pre value via `getValue()` after child conversion.
 
-- If `CodeFence::is_safely_fenced( $value )` is true, return that one block with
-  the exact separator expected by the League environment. Do not alter its
-  delimiter, language or body.
+- If `preConvert()` recorded exactly one structural `<code>` child **and**
+  `CodeFence::is_safely_fenced( $value )` is true, return that one block with the
+  exact separator expected by the League environment. Do not alter its
+  delimiter, language or body. The child check proves provenance: a bare
+  `<pre>` may contain literal text that happens to be a valid fence and must
+  still be wrapped.
 - Otherwise render the entire value as a new fenced block. This includes plain
   bare text, several converted child code spans/blocks, pseudo-fences and
   malformed combinations.
@@ -314,8 +324,9 @@ Read the pre value via `getValue()` after child conversion.
   conservative language resolver. A `<pre>` whose value is already one fenced
   block keeps the child's existing info string instead.
 
-`CodeFence::is_safely_fenced()` remains the single structural pass-through
-predicate. Do not add a second weaker heuristic.
+`CodeFence::is_safely_fenced()` remains the single syntax predicate. Combine it
+with the pre-conversion structure above; do not add a second weaker fence
+heuristic or a marker inside the converted text.
 
 ## Compatibility policy
 
@@ -437,6 +448,8 @@ Through the real `HtmlConverter` environment, not a hand-written mock:
 - `<code>` value is decoded text and excludes the serialized wrapper;
 - bare `<pre>` value is decoded text;
 - `<pre><code>…</code></pre>` receives the child's final Markdown;
+- `PreConverterInterface::preConvert()` sees the original `<code>` child before
+  traversal replaces it with a text node;
 - one converter registered for both tags is invoked in the expected child-first
   order;
 - unexpected/unhandled tags cannot be routed to it by registration.
@@ -697,21 +710,21 @@ The rewrite is complete only when all of the following are true:
 - copy, view and download actions return the same safe Markdown;
 - no unrelated runtime or public API change is bundled into the PR.
 
-## Questions deliberately left for the review crossover
+## Resolved implementation decisions
 
-1. Should inline line endings become spaces now, or should the first rewrite be
-   strictly byte-compatible and defer that correction?
-2. What exact output should represent an empty inline `<code>` element?
-3. Should symmetric leading/trailing spaces be preserved with expanded padding
-   in this release?
-4. Should fallback language detection accept only `language-*`, or also the
-   broader forms recognized before the DOM pass?
-5. Does the review find a reason to keep two classes rather than register one
-   converter for both tags?
-6. Does any new finding require a real WordPress integration harness before
-   this rewrite, rather than staging-only validation?
-7. Is the resulting release a patch (strict internal rewrite) or a minor
-   (approved output corrections)?
-
-These are not implementation details to guess. Resolve them using the parallel
-review findings and real-content evidence before Phase 1 is frozen.
+1. Inline CRLF, CR and LF each become one space, matching CommonMark §6.1 and
+   preventing silent word concatenation.
+2. An empty inline `<code>` emits no bytes: CommonMark has no valid empty code
+   span delimiter pair, so emitting adjacent backticks would add invalid syntax.
+3. Symmetric leading/trailing ASCII spaces are preserved with one compensating
+   padding pair; all-space content is not padded because CommonMark does not
+   strip it.
+4. Fallback language detection accepts anchored `language-*` class tokens plus
+   `data-language` / `data-lang`. Broader pre-DOM forms remain the responsibility
+   of `ContentRenderer::detect_code_language()`.
+5. One `CodeElementConverter` owns both tags; the review found no reason to keep
+   the split protocol.
+6. The acknowledged real-WordPress coverage gap does not block this pure and
+   real-library rewrite. Staging validation remains part of release acceptance.
+7. The approved newline, whitespace, empty-value and decoded-text corrections
+   make this `0.41.0`, a minor release under the repository's pre-1.0 policy.

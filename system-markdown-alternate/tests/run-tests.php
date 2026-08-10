@@ -574,8 +574,7 @@ require __DIR__ . '/../src/MarkdownConverter.php';
 // present. MarkdownConverter references them inside a method body, which PHP
 // resolves only when that method runs.
 if ( $GLOBALS['sysmda_has_vendor'] ) {
-	require __DIR__ . '/../src/SafeCodeConverter.php';
-	require __DIR__ . '/../src/SafePreformattedConverter.php';
+	require __DIR__ . '/../src/CodeElementConverter.php';
 	require __DIR__ . '/../src/SafeParagraphConverter.php';
 }
 require __DIR__ . '/../src/PostSupport.php';
@@ -591,6 +590,7 @@ require __DIR__ . '/../src/MarkdownActions.php';
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\CodeElementConverter;
 use Diecieventi\SystemMarkdownAlternate\CodeFence;
 use Diecieventi\SystemMarkdownAlternate\CodeRegions;
 use Diecieventi\SystemMarkdownAlternate\ContentRenderer;
@@ -604,6 +604,10 @@ use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
+use League\HTMLToMarkdown\Converter\ConverterInterface;
+use League\HTMLToMarkdown\ElementInterface;
+use League\HTMLToMarkdown\HtmlConverter;
+use League\HTMLToMarkdown\PreConverterInterface;
 
 // ─── Micro-framework ─────────────────────────────────────────────────────────
 
@@ -2919,6 +2923,8 @@ check( 'fence: a mid-line run counts too', '````', CodeFence::block_delimiter( '
 check( 'fence: inline delimiter is one by default', '`', CodeFence::inline_delimiter( 'x' ) );
 check( 'fence: inline delimiter clears a backtick', '``', CodeFence::inline_delimiter( 'a ` b' ) );
 check( 'fence: padding only when it touches a backtick', true, CodeFence::needs_padding( '`x' ) );
+check( 'fence: symmetric boundary spaces need compensation', true, CodeFence::needs_padding( ' x ' ) );
+check( 'fence: all-space content needs no compensation', false, CodeFence::needs_padding( '   ' ) );
 check( 'fence: no padding otherwise', false, CodeFence::needs_padding( 'x`y' ) );
 check( 'fence: info string strips a backtick', 'php', CodeFence::info_string( 'p`hp' ) );
 
@@ -2956,6 +2962,147 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 	echo "NOTE: skipping the Markdown conversion tests (vendor/ absent — run `composer install`).\n";
 } else {
 	$sysmda_conv = new MarkdownConverter();
+
+	// Public-interface characterization for the independently rewritten code
+	// converter. This deliberately observes only ElementInterface::getValue()
+	// through the real HtmlConverter traversal: it is the API contract the new
+	// implementation relies on, and it prevents a library upgrade from silently
+	// restoring wrapper-markup extraction.
+	$sysmda_characterization = new class() implements ConverterInterface, PreConverterInterface {
+		/** @var array<int,array{tag:string,value:string}> */
+		public $seen = array();
+		/** @var array<int,array{tag:string,children:string[]}> */
+		public $before = array();
+
+		public function preConvert( ElementInterface $element ): void {
+			if ( 'pre' !== strtolower( $element->getTagName() ) ) {
+				return;
+			}
+
+			$children = array();
+			foreach ( $element->getChildren() as $child ) {
+				$children[] = $child->getTagName();
+			}
+
+			$this->before[] = array(
+				'tag'      => 'pre',
+				'children' => $children,
+			);
+		}
+
+		public function convert( ElementInterface $element ): string {
+			$tag          = strtolower( $element->getTagName() );
+			$this->seen[] = array(
+				'tag'   => $tag,
+				'value' => $element->getValue(),
+			);
+
+			return 'code' === $tag ? 'CHILD{' . $element->getValue() . '}' : 'PARENT{' . $element->getValue() . '}';
+		}
+
+		public function getSupportedTags(): array {
+			return array( 'code', 'pre' );
+		}
+	};
+	$sysmda_characterization_html = new HtmlConverter( array( 'strip_tags' => true ) );
+	$sysmda_characterization_html->getEnvironment()->addConverter( $sysmda_characterization );
+
+	$sysmda_characterization->seen = array();
+	$sysmda_characterization_html->convert( '<code>&lt;x&gt; &amp; "quoted"</code>' );
+	check(
+		'convert API: code value is decoded text without its wrapper',
+		array( array( 'tag' => 'code', 'value' => '<x> & "quoted"' ) ),
+		$sysmda_characterization->seen
+	);
+
+	$sysmda_characterization->seen = array();
+	$sysmda_characterization_html->convert( '<pre>&lt;x&gt; &amp; "quoted"</pre>' );
+	check(
+		'convert API: bare pre value is decoded text',
+		array( array( 'tag' => 'pre', 'value' => '<x> & "quoted"' ) ),
+		$sysmda_characterization->seen
+	);
+
+	$sysmda_characterization->seen = array();
+	$sysmda_characterization->before = array();
+	$sysmda_characterization_html->convert( '<pre><code>&lt;x&gt;</code></pre>' );
+	check(
+		'convert API: one converter sees code before pre and pre receives child Markdown',
+		array(
+			array( 'tag' => 'code', 'value' => '<x>' ),
+			array( 'tag' => 'pre', 'value' => 'CHILD{<x>}' ),
+		),
+		$sysmda_characterization->seen
+	);
+	check(
+		'convert API: pre-conversion sees the original code child before replacement',
+		array( array( 'tag' => 'pre', 'children' => array( 'code' ) ) ),
+		$sysmda_characterization->before
+	);
+
+	$sysmda_characterization->seen = array();
+	$sysmda_characterization_html->convert( '<kbd>x</kbd>' );
+	check( 'convert API: registration cannot route an unsupported tag', array(), $sysmda_characterization->seen );
+
+	$sysmda_code_converter = new CodeElementConverter();
+	check( 'convert API: one production converter owns code and pre', array( 'code', 'pre' ), $sysmda_code_converter->getSupportedTags() );
+
+	$sysmda_unexpected_element = new class() implements ElementInterface {
+		public function isBlock(): bool {
+			return false;
+		}
+		public function isText(): bool {
+			return false;
+		}
+		public function isWhitespace(): bool {
+			return false;
+		}
+		public function getTagName(): string {
+			return 'kbd';
+		}
+		public function getValue(): string {
+			return '<literal>';
+		}
+		public function hasParent(): bool {
+			return false;
+		}
+		public function getParent(): ?ElementInterface {
+			return null;
+		}
+		public function getNextSibling(): ?ElementInterface {
+			return null;
+		}
+		public function getPreviousSibling(): ?ElementInterface {
+			return null;
+		}
+		public function isDescendantOf( $tagNames ): bool {
+			return false;
+		}
+		public function hasChildren(): bool {
+			return false;
+		}
+		public function getChildren(): array {
+			return array();
+		}
+		public function getNext(): ?ElementInterface {
+			return null;
+		}
+		public function getSiblingPosition(): int {
+			return 0;
+		}
+		public function getChildrenAsString(): string {
+			return '';
+		}
+		public function setFinalMarkdown( string $markdown ): void {
+		}
+		public function getListItemLevel(): int {
+			return 0;
+		}
+		public function getAttribute( string $name ): string {
+			return '';
+		}
+	};
+	check( 'convert API: defensive unexpected-tag dispatch preserves the value', '<literal>', $sysmda_code_converter->convert( $sysmda_unexpected_element ) );
 
 	// Tables. Without the library's TableConverter registered, strip_tags glued
 	// every cell together ("NamePriceCoffee2") — worse than useless to an LLM.
@@ -3108,6 +3255,91 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_conv->convert( '<p>a <code>x</code> b</p>' )
 	);
 
+	// CommonMark §6.1 turns line endings inside code spans into spaces. It also
+	// removes one symmetric boundary space unless the value is all spaces. The
+	// renderer must compensate so parsing the Markdown reproduces the intended
+	// text instead of concatenating or trimming it.
+	check(
+		'convert: inline LF becomes one space',
+		"a `x y` b\n",
+		$sysmda_conv->convert( "<p>a <code>x\ny</code> b</p>" )
+	);
+	check(
+		'convert: inline CRLF becomes one space',
+		"a `x y` b\n",
+		$sysmda_conv->convert( "<p>a <code>x\r\ny</code> b</p>" )
+	);
+	check(
+		'convert: inline CR becomes one space',
+		"a `x y` b\n",
+		$sysmda_conv->convert( "<p>a <code>x\ry</code> b</p>" )
+	);
+	check(
+		'convert: symmetric inline spaces survive CommonMark normalization',
+		"a `  x  ` b\n",
+		$sysmda_conv->convert( '<p>a <code> x </code> b</p>' )
+	);
+	check(
+		'convert: leading-only inline space stays byte-identical',
+		"a ` x` b\n",
+		$sysmda_conv->convert( '<p>a <code> x</code> b</p>' )
+	);
+	check(
+		'convert: trailing-only inline space stays byte-identical',
+		"a `x ` b\n",
+		$sysmda_conv->convert( '<p>a <code>x </code> b</p>' )
+	);
+	check(
+		'convert: all-space inline content needs no compensation',
+		"a `   ` b\n",
+		$sysmda_conv->convert( '<p>a <code>   </code> b</p>' )
+	);
+	check(
+		'convert: empty inline code emits no invalid delimiter pair',
+		"a b\n",
+		$sysmda_conv->convert( '<p>a <code></code>b</p>' )
+	);
+	check(
+		'convert: inline structure is not changed by the old content trigger',
+		"a ``x` y`` b\n",
+		$sysmda_conv->convert( '<p>a <code>x` y</code> b</p>' )
+	);
+	check(
+		'convert: nested highlighting contributes decoded text, not markup',
+		"`x<y & z`\n",
+		$sysmda_conv->convert( '<p><code><span>x</span>&lt;y &amp; z</code></p>' )
+	);
+	check(
+		'convert: inline entities, quotes and non-ASCII decode exactly once',
+		"`<>&\"' café`\n",
+		$sysmda_conv->convert( '<p><code>&lt;&gt;&amp;&quot;&#039; café</code></p>' )
+	);
+
+	// Property-style delimiter corpus: every run length and position gets a
+	// delimiter that is strictly longer, without introducing block newlines.
+	foreach ( range( 0, 12 ) as $sysmda_run_length ) {
+		$sysmda_run = str_repeat( '`', $sysmda_run_length );
+		$sysmda_inline_values = 0 === $sysmda_run_length
+			? array( 'plain' => 'plain' )
+			: array(
+				'start'  => $sysmda_run . 'a',
+				'middle' => 'a' . $sysmda_run . 'b',
+				'end'    => 'a' . $sysmda_run,
+			);
+
+		foreach ( $sysmda_inline_values as $sysmda_position => $sysmda_value ) {
+			$sysmda_delimiter = str_repeat( '`', $sysmda_run_length + 1 );
+			$sysmda_padding   = '`' === $sysmda_value[0] || '`' === substr( $sysmda_value, -1 ) ? ' ' : '';
+			$sysmda_expected  = $sysmda_delimiter . $sysmda_padding . $sysmda_value . $sysmda_padding . $sysmda_delimiter . " sentinel\n";
+
+			check(
+				"convert property: inline run {$sysmda_run_length} at {$sysmda_position}",
+				$sysmda_expected,
+				$sysmda_conv->convert( '<p><code>' . $sysmda_value . '</code> sentinel</p>' )
+			);
+		}
+	}
+
 	// A fence typed as prose. Nothing here is code at all, and the paragraph
 	// used to open a fence that ran to the end of the document.
 	check(
@@ -3162,9 +3394,9 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 
 	// ── Unnormalized <pre> reaching the converter ───────────────────────────
 	//
-	// process_dom() gives every <pre> a <code> child, so SafeCodeConverter
-	// normally builds the fence and SafePreformattedConverter only passes it
-	// through. A bare <pre> still gets here two ways: the documented
+	// process_dom() gives every <pre> a <code> child, so CodeElementConverter
+	// normally builds the child fence and the parent passes it through. A bare
+	// <pre> still gets here two ways: the documented
 	// `sysmda_markdown_rendered_html` filter runs after process_dom(), and
 	// process_dom() returns its input unchanged on a parse failure. These use
 	// convert() directly, which is exactly that situation.
@@ -3176,6 +3408,16 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'convert: bare <pre> bounded by backticks is fenced, not passed through',
 		"````\n`a\n```\nb`\n````\n\nAfter.\n",
 		$sysmda_conv->convert( "<pre>`a\n```\nb`</pre><p>After.</p>" )
+	);
+	check(
+		'convert: bare pre text that is a valid fence remains literal content',
+		"````\n```\nx\n```\n````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre>```\nx\n```</pre><p>After.</p>" )
+	);
+	check(
+		'convert: pre-conversion provenance is consumed per element',
+		"```\na\n```\n\n\n````\n```\nb\n```\n````\n",
+		$sysmda_conv->convert( "<pre><code>a</code></pre><pre>```\nb\n```</pre>" )
 	);
 
 	// A <pre> holding two <code> children has a code child but is still not one
@@ -3197,6 +3439,109 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		"````\na\n```\nb\n````\n",
 		$sysmda_conv->convert( "<pre><code>a\n```\nb</code></pre>" )
 	);
+
+	check(
+		'convert: unclosed fenced text is wrapped by a wider fence',
+		"````\n```\na\n````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre>```\na</pre><p>After.</p>" )
+	);
+	check(
+		'convert: an invalid backtick info string is wrapped, not passed through',
+		"````\n```a`b\nx\n```\n````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre>```a`b\nx\n```</pre><p>After.</p>" )
+	);
+	check(
+		'convert: a short closing run is wrapped as literal preformatted text',
+		"`````\n````\na\n```\n`````\n\nAfter.\n",
+		$sysmda_conv->convert( "<pre>````\na\n```</pre><p>After.</p>" )
+	);
+	check( 'convert: bare empty pre is structurally empty', "```\n```\n", $sysmda_conv->convert( '<pre></pre>' ) );
+	check(
+		'convert: block highlighting contributes decoded text, not markup',
+		"```\nx<y & z\n```\n",
+		$sysmda_conv->convert( '<pre><span>x</span>&lt;y &amp; z</pre>' )
+	);
+
+	// Block boundaries preserve meaningful newlines but do not manufacture a
+	// blank line before the closing fence when the source already ends in LF.
+	check( 'convert: empty code block is structurally empty', "```\n```\n", $sysmda_conv->convert( '<pre><code></code></pre>' ) );
+	check( 'convert: block without final LF gets one separator', "```\nx\n```\n", $sysmda_conv->convert( '<pre><code>x</code></pre>' ) );
+	check( 'convert: one final LF gets no extra blank line', "```\nx\n```\n", $sysmda_conv->convert( "<pre><code>x\n</code></pre>" ) );
+	check( 'convert: two final LFs preserve one intentional blank line', "```\nx\n\n```\n", $sysmda_conv->convert( "<pre><code>x\n\n</code></pre>" ) );
+	check( 'convert: block CRLF normalizes to LF', "```\nx\ny\n```\n", $sysmda_conv->convert( "<pre><code>x\r\ny</code></pre>" ) );
+
+	// Fallback language detection is deliberately conservative and ordered:
+	// anchored language-* tokens, then code data attributes, then the parent pre.
+	check(
+		'convert: anchored language token wins among multiple classes',
+		"```php\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code class="foo language-php language-js">x</code></pre>' )
+	);
+	check(
+		'convert: code language class precedes its data attributes',
+		"```php\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code class="language-php" data-language="js">x</code></pre>' )
+	);
+	check(
+		'convert: misleading class is not a language token',
+		"```\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code class="notlanguage-php">x</code></pre>' )
+	);
+	check(
+		'convert: empty language token emits no info string',
+		"```\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code class="language-">x</code></pre>' )
+	);
+	check(
+		'convert: code data-language precedes code data-lang',
+		"```php\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code data-language="php" data-lang="js">x</code></pre>' )
+	);
+	check(
+		'convert: code data-lang is accepted when data-language is absent',
+		"```js\nx\n```\n",
+		$sysmda_conv->convert( '<pre><code data-lang="js">x</code></pre>' )
+	);
+	check(
+		'convert: code data language precedes the parent pre language',
+		"```php\nx\n```\n",
+		$sysmda_conv->convert( '<pre class="language-ruby"><code data-language="php">x</code></pre>' )
+	);
+	check(
+		'convert: parent pre language is used on the fallback path',
+		"```ruby\nx\n```\n",
+		$sysmda_conv->convert( '<pre class="foo language-ruby"><code>x</code></pre>' )
+	);
+	check(
+		'convert: bare pre data language is sanitized',
+		"```cpp\nx\n```\n",
+		$sysmda_conv->convert( '<pre data-language="c`pp"><span>x</span></pre>' )
+	);
+
+	// Property-style block corpus: the outer delimiter always clears the longest
+	// internal run and a sentinel paragraph remains outside the construct.
+	foreach ( range( 0, 12 ) as $sysmda_run_length ) {
+		$sysmda_run = str_repeat( '`', $sysmda_run_length );
+		$sysmda_block_values = 0 === $sysmda_run_length
+			? array( 'plain' => 'plain' )
+			: array(
+				'start'    => $sysmda_run . 'a',
+				'middle'   => 'a' . $sysmda_run . 'b',
+				'end'      => 'a' . $sysmda_run,
+				'own-line' => "a\n" . $sysmda_run . "\nb",
+			);
+
+		foreach ( $sysmda_block_values as $sysmda_position => $sysmda_value ) {
+			$sysmda_delimiter = str_repeat( '`', max( 3, $sysmda_run_length + 1 ) );
+			$sysmda_expected  = $sysmda_delimiter . "\n" . $sysmda_value . "\n" . $sysmda_delimiter . "\n\nSentinel.\n";
+
+			check(
+				"convert property: block run {$sysmda_run_length} at {$sysmda_position}",
+				$sysmda_expected,
+				$sysmda_conv->convert( '<pre><code>' . $sysmda_value . '</code></pre><p>Sentinel.</p>' )
+			);
+		}
+	}
 }
 
 // ─── LiteSpeedCompat::update (read-modify-write on a real file) ──────────────

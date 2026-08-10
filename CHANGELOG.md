@@ -9,6 +9,33 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.41.0
+
+* **One independently designed converter now owns both `<code>` and `<pre>`.**
+  The implementation was written test-first from the frozen behavior plan,
+  CommonMark's code-span/fence rules, the plugin's `CodeFence` contract and the
+  public `league/html-to-markdown` interfaces. It reads decoded element values
+  through `ElementInterface::getValue()` instead of serialized child markup;
+  the two adapted converter files are gone. League remains the general HTML to
+  Markdown engine and its bundled MIT license remains in the distribution.
+* **Inline code now preserves the text the HTML element actually represents.**
+  Each CR/LF line ending becomes one space instead of silently concatenating
+  words; symmetric boundary spaces receive compensating padding so CommonMark
+  parsing does not remove them; an empty element emits no invalid backtick pair;
+  and nested syntax-highlighter spans contribute decoded text rather than their
+  wrapper tags. Content remains structurally inline regardless of its bytes.
+* **Fenced block boundaries no longer manufacture an extra blank line.** A
+  source with no final newline receives exactly the separator it needs, while
+  one or several existing trailing newlines are preserved. Empty blocks remain
+  valid and content-sized delimiters still make breakout impossible. A bare
+  `<pre>` whose literal text resembles a valid fence is wrapped by a wider one;
+  pass-through requires a single structural `<code>` child as well as safe
+  fence syntax, so literal backticks cannot be reinterpreted as Markdown.
+* **Fallback language detection is token-based and ordered.** It accepts only an
+  anchored `language-*` class token, then `data-language` / `data-lang`, checking
+  `<code>` before its parent `<pre>` and sanitizing every candidate. A class such
+  as `notlanguage-php` can no longer become the false info string `notphp`.
+
 ## 0.40.1
 
 * **Authenticated `/llms.txt` rendering no longer touches the shared anonymous
