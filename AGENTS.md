@@ -148,7 +148,8 @@ The v1 scope is done and widely exceeded. Implemented:
   - **whitespace normalization skips fenced code**: trailing spaces and blank-line
     runs are meaningful inside a fence (Markdown hard breaks, transcripts, diffs).
   - **no Markdown delimiter is ever chosen without looking at what it wraps**
-    (`0.38.0`, `CodeFence` + the three `Safe*` converters). The library hardcodes
+    (`0.38.0`, `CodeFence`; independently rewritten `CodeElementConverter` in
+    `0.41.0`). The library hardcodes
     three backticks for a block and one for a span, so content carrying that
     delimiter escaped its own construct: a code sample containing ` ``` ` closed
     its fence early, the rest of the sample became prose, and the trailing
@@ -156,6 +157,13 @@ The v1 scope is done and widely exceeded. Implemented:
     all. Fences are now sized to the longest run inside them and prose fences are
     escaped. Do not "simplify" this back to a constant; and if a new construct
     with a delimiter is ever added, size it the same way.
+  - `CodeElementConverter::preConvert()` records whether a `<pre>` originally
+    had exactly one `<code>` child, then consumes that flag when converting the
+    parent. The library has replaced children with text nodes by then, so a late
+    `getChildren()` check cannot distinguish converted child Markdown from a
+    bare `<pre>` whose literal content happens to be a valid fence. Pass-through
+    requires both recorded provenance and `CodeFence::is_safely_fenced()`; do
+    not remove either half or introduce a marker into the emitted text.
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
@@ -454,15 +462,6 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
-- **Independent code-element converter rewrite**
-  (`docs/code-converter-independent-rewrite-plan.md`): proposed planning only,
-  **implementation blocked** until the parallel code review is complete and its
-  findings have been reconciled with the plan. The default direction replaces
-  `SafeCodeConverter` + `SafePreformattedConverter` with one independently
-  designed `code`/`pre` converter while retaining `league/html-to-markdown` as
-  the general conversion engine. Do not edit runtime code from this plan before
-  the maintainer closes its review gate.
-
 ### To check next time (not urgent, parked here)
 
 - **The caching contract is done; the `304` is a host property, not a gap.**
@@ -1252,11 +1251,10 @@ running code at the WP level.
         ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
-        ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + the three Safe* overrides)
+        ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + code/paragraph safety overrides)
         ├── CodeFence.php           ← content-sized code delimiters (pure logic, no WP/library deps)
+        ├── CodeElementConverter.php ← independently designed <code>/<pre> converter using public library interfaces
         ├── CodeRegions.php         ← masks <pre>/<code> around a transform; shared by shortcode expansion AND removal
-        ├── SafeCodeConverter.php        ← replaces the library's <code> converter
-        ├── SafePreformattedConverter.php ← replaces the library's <pre> converter
         ├── SafeParagraphConverter.php   ← wraps the library's <p> converter (escapes a prose fence)
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)

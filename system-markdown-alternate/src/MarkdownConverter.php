@@ -45,12 +45,12 @@ class MarkdownConverter {
 	 * machine-readable representation. Registered explicitly, it produces GFM
 	 * pipe tables and escapes `|` inside cells.
 	 *
-	 * The three `Safe*` converters replace library defaults rather than adding
-	 * to them (`Environment::addConverter()` keys by tag, so the last
-	 * registration for a tag wins). All three close the same class of defect:
-	 * the library picks a Markdown delimiter without looking at what it is
-	 * wrapping, so content carrying that delimiter escapes its own construct and
-	 * corrupts the rest of the document. See CodeFence.
+	 * The code-element and paragraph converters replace library defaults rather
+	 * than adding to them (`Environment::addConverter()` keys by tag, so the last
+	 * registration for a tag wins). Both close the same class of defect: a
+	 * Markdown delimiter must be selected after inspecting what it wraps, or the
+	 * content can escape its own construct and corrupt the rest of the document.
+	 * See CodeFence.
 	 */
 	private function converter(): HtmlConverter {
 		$converter = new HtmlConverter(
@@ -66,8 +66,7 @@ class MarkdownConverter {
 		$environment = $converter->getEnvironment();
 
 		$environment->addConverter( new TableConverter() );
-		$environment->addConverter( new SafeCodeConverter() );
-		$environment->addConverter( new SafePreformattedConverter() );
+		$environment->addConverter( new CodeElementConverter() );
 		$environment->addConverter( new SafeParagraphConverter() );
 
 		return $converter;
@@ -80,9 +79,8 @@ class MarkdownConverter {
 	 * Both rules would otherwise rewrite the code itself: trailing spaces are
 	 * significant in a Markdown sample (two of them are a hard break) and runs of
 	 * blank lines carry meaning in REPL transcripts, diffs and patch bodies.
-	 * The converter always fences preformatted content (PreformattedConverter and
-	 * CodeConverter both emit backticks), so tracking fences covers every code
-	 * block it can produce.
+	 * CodeElementConverter always fences preformatted content, so tracking fences
+	 * covers every code block this pipeline can produce.
 	 */
 	private function normalize_whitespace( string $markdown ): string {
 		$markdown = str_replace( "\r\n", "\n", $markdown );

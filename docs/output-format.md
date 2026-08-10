@@ -230,6 +230,24 @@ longest backtick run inside it** (never fewer than three), and an inline code
 span does the same (padded with a space when the content starts or ends with a
 backtick, which CommonMark strips again on the way back).
 
+Since `0.41.0`, one independently designed converter owns both `<code>` and
+`<pre>` through the library's public element-value API. Inline line endings map
+to one space each, as required by CommonMark; a non-all-space value that begins
+and ends with an ASCII space receives an extra symmetric padding pair so those
+boundary spaces survive parsing. An empty inline `<code>` emits no invalid
+delimiter pair. Nested syntax-highlighter elements contribute decoded text, not
+their wrapper markup. Fenced blocks preserve intentional trailing newlines but
+do not add a blank line merely because the source already ended in one. A
+literal fence inside a bare `<pre>` remains code content and is wrapped by a
+wider outer fence; only a safe fence produced by one structural `<code>` child
+passes through unchanged.
+
+Fallback language detection is ordered and conservative: an anchored
+`language-*` class token on `<code>`, then its `data-language` / `data-lang`,
+then the same sources on the parent `<pre>`. Every candidate is sanitized before
+it reaches the info string; misleading tokens such as `notlanguage-php` do not
+match.
+
 This is a correctness property, not a formatting preference. A fixed three-
 backtick fence is closed by any ` ``` ` in the code it wraps, so a sample that
 shows fenced Markdown — or a heredoc, or pasted terminal output — used to

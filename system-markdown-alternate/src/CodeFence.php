@@ -46,17 +46,22 @@ class CodeFence {
 	/**
 	 * Whether an inline span needs a space of padding inside its delimiters.
 	 *
-	 * CommonMark strips one leading and one trailing space from a code span that
-	 * has both, which is what makes the padding safe; without it a span whose
-	 * content starts or ends with a backtick would merge with its own delimiter
-	 * and change length.
+	 * Padding separates a boundary backtick from the delimiter. It also preserves
+	 * a value that already begins and ends with an ASCII space: CommonMark §6.1
+	 * removes one such symmetric pair unless the value consists only of spaces.
 	 */
 	public static function needs_padding( string $code ): bool {
 		if ( '' === $code ) {
 			return false;
 		}
 
-		return '`' === $code[0] || '`' === substr( $code, -1 );
+		if ( '`' === $code[0] || '`' === substr( $code, -1 ) ) {
+			return true;
+		}
+
+		return ' ' === $code[0]
+			&& ' ' === substr( $code, -1 )
+			&& '' !== trim( $code, ' ' );
 	}
 
 	/**

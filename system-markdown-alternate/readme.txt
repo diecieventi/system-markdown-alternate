@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.40.1
+Stable tag: 0.41.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -176,6 +176,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.41.0 =
+
+* Changed: one independently designed converter now owns both inline `<code>` and block `<pre>` output through the public `league/html-to-markdown` element-value API. The two adapted converter files are removed; the general conversion engine and its bundled MIT license remain unchanged.
+* Fixed: inline code now maps each CR/LF line ending to one space, preserves symmetric boundary spaces under CommonMark parsing, emits no invalid delimiter pair for an empty element, and treats nested syntax-highlighter markup as decoded text.
+* Fixed: fenced blocks no longer gain an extra blank line when their source already ends in a newline. A literal fence inside a bare `<pre>` is wrapped by a wider fence; only a safe fence produced by one structural `<code>` child passes through. Fallback language detection now accepts only anchored `language-*` class tokens, then `data-language` / `data-lang`, with code attributes before the parent pre.
+
 = 0.40.1 =
 
 * Security: authenticated `/llms.txt` requests now rebuild their visitor-context body without reading or populating the shared anonymous cache. Their response remains private and non-storable; anonymous caching is unchanged.
@@ -188,12 +194,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed: an excluded shortcode written inside a code block or an inline code span was deleted from it. An article documenting `[contact-form-7 id="42"]` had the tag removed from its own example, publishing `echo do_shortcode('');`. Expansion had been protected since 0.38.1; removal had not, so the rule applied to one half of the pipeline only.
 * Note: this also applies to the plugin's own `[sysmda_md_actions]` tag — written inside a code sample it is now shown as documentation, while a bare one is still removed and neither ever renders into the Markdown.
 * Added to the default excluded shortcodes: `fluentform`, the newsletter forms `mc4wp_form`, `mailpoet_form`, `newsletter_form` and `sibwp_form`, and the tables of contents `ez-toc`, `ez-toc-widget-sticky` and `toc`.
-
-= 0.39.0 =
-
-* Added: `[sysmda_md_actions]` renders an opt-in GitHub-style split button. The primary action copies the complete Markdown document; its dropdown repeats the copy action and adds new-tab view and direct download actions.
-* The menu is keyboard accessible, closes on Escape/outside focus, announces copy feedback, and repositions left/right or above/below to stay inside the viewport. It is moved outside theme layout containers while open so overflow rules cannot clip it.
-* Its minimal CSS and dependency-free JavaScript load only on pages that render the shortcode, with early detection for post content and a late fallback for templates, widgets and secondary loops. Late placements explicitly print their stylesheet before footer scripts, so they remain styled even when first rendered after the document head.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
