@@ -122,12 +122,13 @@ jobs:
           NEWEST: ${{ steps.resolve.outputs.newest }}
         run: |
           for TAG in $TAGS; do
-            # Built from the tagged tree rather than taken from the committed
-            # DIST/, so the asset always matches the released source.
+            # Built from the tagged tree, so the asset always matches the
+            # released source. DIST/ is a build output and is not tracked, so
+            # nothing here reads a committed zip.
             #
-            # --force because DIST/system-markdown-alternate.zip is tracked and
-            # bin/build.sh rewrites it: without it the second iteration aborts
-            # with "local changes would be overwritten by checkout".
+            # --force is kept as a guard for repeated iterations: the build
+            # writes DIST/ and vendor/, and a checkout must not be able to
+            # abort on leftovers from the previous tag in the loop.
             git checkout --quiet --force --detach "$TAG"
             bash bin/build.sh
 

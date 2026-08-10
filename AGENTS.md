@@ -1091,7 +1091,7 @@ running code at the WP level.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
-├── DIST/                         ← versioned convenience copy of the most recent release zip
+├── DIST/                         ← build output of bin/build.sh (NOT versioned)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1368,12 +1368,19 @@ new HtmlConverter([
 bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundled)
 ```
 
-`DIST/` is a **versioned convenience copy** of the most recent release zip, not
-the source of release provenance. The release tag is authoritative: both the
-GitHub Release and the WordPress.org deploy rebuild their package from that tag.
-Post-release commits that do not change the version may therefore leave the
-committed zip behind `main`; that is expected, and is not a reason to rebuild it
-outside a release.
+`DIST/` is a **local build output and is not versioned** (decided August 2026 —
+do not commit the zip again). The release tag is authoritative: the `Publish
+release` workflow rebuilds the package from the tag before attaching it, and the
+WordPress.org deploy stages from the repository, so neither ever read a
+committed zip. Keeping one only created work and risk — a whole PR was once
+spent rebuilding it (#66), it silently fell behind `main` whenever a commit did
+not change the version, and `publish-release.yml` needed a `git checkout
+--force` purely because the tracked file was rewritten on every build.
+**Where to get an installable zip**: the asset on the GitHub Release (built from
+the tag, so it matches the released source by construction), or `bash
+bin/build.sh` locally when you want one for a test site or to inspect what
+ships. Testing an unreleased branch was never what the committed copy was for
+anyway — it held the last *release*, not your working tree.
 
 The zip includes the production Composer dependencies, so it installs without
 Composer on the server. Local build environment: PHP 8.4, Composer, `rsync` and
@@ -1437,8 +1444,10 @@ as required for dependency review by WordPress.org Plugin Check.
   `bin/build.sh` there and attaches the resulting
   `DIST/system-markdown-alternate.zip` (the auto-generated "Source code"
   archives are not an installable plugin), with the tag notes as the body. The
-  asset is rebuilt from the tagged tree rather than taken from the committed
-  `DIST/`, so it always matches the released source. Idempotent: a tag that
+  asset is built from the tagged tree, so it always matches the released source
+  — and it is **the** way to get an installable zip of a release without
+  building one, now that `DIST/` is no longer committed (see "Build & deploy").
+  Idempotent: a tag that
   already has a Release is reported and left alone. The manual equivalent, if
   ever needed from the Mac:
   ```bash

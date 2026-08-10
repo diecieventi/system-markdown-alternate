@@ -18,6 +18,10 @@ node_modules/
 /.build-tmp/
 *.log
 
+# DIST/ is where bin/build.sh writes the zip. It is a local build output, not a
+# committed artifact: both release paths (the GitHub Release and the
+# wordpress.org deploy) rebuild the package from the tag, so a copy in the
+# repository is read by nothing and can only fall behind the source.
+/DIST/
+
 # NOTE: composer.lock is intentionally versioned for reproducible builds.
-# NOTE: the zip in DIST/ is intentionally versioned as a downloadable artifact
-#       that can be uploaded manually to the test site.

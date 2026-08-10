@@ -113,7 +113,7 @@ conformance tests in `system-markdown-alternate/tests/run-tests.php`.
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
-├── DIST/                         ← distributable zip (versioned)
+├── DIST/                         ← build output of bin/build.sh (not versioned)
 └── system-markdown-alternate/    ← the plugin
     ├── system-markdown-alternate.php
     ├── readme.txt                ← wordpress.org-format readme
@@ -131,6 +131,12 @@ bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundl
 
 The zip includes the production Composer dependencies (`league/html-to-markdown`),
 so it installs straight into WordPress without Composer on the server.
+
+`DIST/` is a build output and is not committed: every published release already
+carries the zip as an asset on its [GitHub
+Release](https://github.com/diecieventi/system-markdown-alternate/releases),
+built from the tag. Run the script when you want a package of the current
+working tree — to install on a test site, or to see exactly what ships.
 
 Build environment: PHP ≥ 7.4, Composer, `rsync` and `zip`.
 
