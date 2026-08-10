@@ -9,6 +9,28 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.38.2
+
+* **The front-matter `description` still leaked the text of an excluded
+  *block*.** `0.38.1` made the description fallback apply the exclusion rules to
+  the post content, but only the element-level one — the DOM pass that matches a
+  CSS class. Two block-level cases stayed open, and both are reachable from the
+  settings page: a block excluded **by name** ("Excluded blocks"), which is
+  harmless for the names the plugin ships — they are dynamic blocks with no text
+  of their own — but not for a static block like a pullquote, whose text sits in
+  the saved markup; and a block excluded through `attrs.className` whose saved
+  inner HTML does not repeat the class attribute, leaving the DOM pass nothing
+  to match on. In both, the body dropped the block and the front matter (and
+  enriched `/llms.txt`) published its text.
+
+  Block content now goes through `BlockCleaner` and is re-serialized before the
+  class pass runs, so the fallback applies the same rules as the body rather
+  than a subset of them. Deliberately with no cheap substring guard in front of
+  it: a guard would be evaluated against the post's own markup, and a synced
+  pattern keeps its content in another post, so it would go blind exactly where
+  `BlockCleaner` follows the reference. Descriptions of content with nothing
+  excluded are unchanged.
+
 ## 0.38.1
 
 * **Shortcodes inside blocks are expanded.** `render_block()` does not expand
