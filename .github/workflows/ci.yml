@@ -6,6 +6,18 @@ on:
   pull_request:
 
 jobs:
+  release-tag-script:
+    runs-on: ubuntu-latest
+    name: Release tag script
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Lint shell scripts
+        run: bash -n bin/*.sh bin/tests/*.sh
+
+      - name: Run release tag regression test
+        run: bash bin/tests/release-tag.sh
+
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:

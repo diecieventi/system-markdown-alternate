@@ -51,7 +51,7 @@ if [ -z "$ALL_VERSIONS" ]; then
 	exit 1
 fi
 
-if ! printf '%s\n' "$ALL_VERSIONS" | grep -qx "$MIN_VERSION"; then
+if ! grep -Fqx "$MIN_VERSION" <<< "$ALL_VERSIONS"; then
 	echo "!!  $MIN_VERSION is not in $CHANGELOG, so the version gate cannot be applied." >&2
 	echo "!!  Releases before it are intentionally untagged; fix the gate before tagging." >&2
 	exit 1
@@ -64,23 +64,27 @@ CREATED=0
 for VERSION in $VERSIONS; do
 	TAG="v$VERSION"
 
-	if printf '%s\n' "$REMOTE_TAGS" | grep -qx "$TAG"; then
+	if grep -Fqx "$TAG" <<< "$REMOTE_TAGS"; then
 		continue # already on origin
 	fi
 
 	# Oldest commit on main touching this exact version string = the commit
-	# that bumped SYSMDA_VERSION to it (the squashed release commit).
-	COMMIT=$(git log origin/main --reverse --format=%H -S "'SYSMDA_VERSION', '$VERSION'" -- "$PLUGIN_FILE" | head -n 1)
+	# that bumped SYSMDA_VERSION to it (the squashed release commit). Capture the
+	# complete result before selecting its first line: `git log | head` can make
+	# git exit with SIGPIPE while pipefail is active.
+	COMMITS=$(git log origin/main --reverse --format=%H -S "'SYSMDA_VERSION', '$VERSION'" -- "$PLUGIN_FILE")
+	COMMIT=${COMMITS%%$'\n'*}
 	if [ -z "$COMMIT" ]; then
 		echo "!!  $TAG: no commit found bumping SYSMDA_VERSION to $VERSION — skipped."
 		continue
 	fi
 
 	# Changelog entries of this version = tag notes ("Notes" on the GitHub
-	# Tags page). git tag strips leading/trailing blank lines itself.
+	# Tags page). Keep consuming the blob after the section ends: exiting awk
+	# early can send SIGPIPE to git show. git tag strips surrounding blank lines.
 	NOTES=$(git show "origin/main:$CHANGELOG" | awk -v v="$VERSION" '
 		$0 == "## " v { grab = 1; next }
-		grab && /^## / { exit }
+		grab && /^## / { grab = 0 }
 		grab { print }
 	')
 
