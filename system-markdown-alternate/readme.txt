@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.38.1
+Stable tag: 0.38.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -168,6 +168,11 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.38.2 =
+
+* Fixed: the front-matter `description` still exposed the text of an excluded *block* — one excluded by name from the "Excluded blocks" setting, or through its CSS class when the saved markup does not repeat that class. 0.38.1 closed this for excluded regions marked with a class, but not for whole blocks, so the body dropped them and the description (and enriched `/llms.txt`) published them.
+* Development: the build script now checks its dependencies before it starts and only replaces the packaged zip once the build has succeeded. No effect on the plugin itself.
+
 = 0.38.1 =
 
 * Fixed: a shortcode written inside a block — typed into a paragraph, in a Custom HTML block or in the core Shortcode block — reached the Markdown as literal `[tag]` text instead of being expanded.
@@ -180,12 +185,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed: a paragraph whose text is a bare ``` fence is escaped instead of opening a code block that runs to the end of the document.
 * Fixed: image, table and embed captions are separated from what they caption instead of being glued to it on one line.
 * Fixed: `core/details` no longer renders its summary and body concatenated; the summary becomes a bold lead-in paragraph.
-
-= 0.37.0 =
-
-* Supported canonical HTML pages now advertise their Markdown representation in the HTTP `Link` header as well as in the document `<head>`. The header is also present on `HEAD` responses, appends without replacing other link relations and is not emitted on `.md`, negotiated Markdown, `406` or redirect responses.
-* Simplified release packaging around one shared `.distignore`: the local build and the wordpress.org deploy now stage the same files, and the obsolete `BUILD-INFO.txt` artifact is gone.
-* Cleaned up the test bootstrap for PHP 8.5 and removed an empty duplicate `php_codesniffer` test suite from CI.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

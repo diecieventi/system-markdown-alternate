@@ -653,12 +653,31 @@ The v1 scope is done and widely exceeded. Implemented:
   the exclusions live in the render pipeline, so a `md-exclude` section the body
   refuses to publish was summarised straight into the front matter of any post
   with no SEO description and no excerpt. It now runs through
-  `ContentRenderer::strip_excluded_content()` first, which returns its input
-  untouched when no excluded class is present — content without one is never
-  round-tripped through the DOM, and its description stays byte-identical.
+  `ContentRenderer::strip_excluded_content()` first.
+  **That pass has to apply BOTH exclusion rules, not just the class one**
+  (`0.38.2`, found in review — the `0.38.1` version applied only the DOM class
+  pass and left half the gap open). The reasoning that justified skipping the
+  block-level rule was that a block excluded by name is dynamic and carries no
+  text in the source: true of the names the plugin ships, **false in general**,
+  because "Excluded blocks" is a settings-page field and a site can name a
+  *static* block whose text sits right there in the saved markup. The same hole
+  swallowed blocks excluded through `attrs.className` when the saved inner HTML
+  does not repeat the class attribute — the DOM pass has nothing to match on.
+  So block content is run through `BlockCleaner` and re-serialized first, and
+  only then through the class pass (which still returns its input untouched when
+  no class matched, so classic content and unexcluded markup are never
+  round-tripped through the DOM).
+  **No cheap substring guard in front of the block pass**: any guard would be
+  evaluated against *this* post's markup, and a synced pattern keeps its content
+  in another post, so the guard would go blind exactly where `BlockCleaner`
+  follows the reference. One `parse_blocks()` per fallback description is the
+  accepted price, and it is only paid when a post has neither an SEO description
+  nor an excerpt.
   The rule generalizes: **anything deriving text from `post_content` instead of
-  the rendered body owes the same pass.** What the body excludes is excluded
-  everywhere, front matter and `/llms.txt` included.
+  the rendered body owes the same pass — all of it.** What the body excludes is
+  excluded everywhere, front matter and `/llms.txt` included. When in doubt,
+  reuse the cleaner rather than reason about which exclusions "cannot matter":
+  that reasoning is what failed here.
 - **The `ETag` is weak (`W/"…"`) and stays weak** (decided July 2026, `0.28.0`,
   outcome of the ETag/cache review — see `docs/cache-infrastructure-notes.md`):
   the validator is computed from metadata (modification date, plugin version,
@@ -1091,7 +1110,7 @@ running code at the WP level.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
-├── DIST/                         ← versioned convenience copy of the most recent release zip
+├── DIST/                         ← build output of bin/build.sh (NOT versioned)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1368,12 +1387,19 @@ new HtmlConverter([
 bash bin/build.sh        # → DIST/system-markdown-alternate.zip (vendor/ bundled)
 ```
 
-`DIST/` is a **versioned convenience copy** of the most recent release zip, not
-the source of release provenance. The release tag is authoritative: both the
-GitHub Release and the WordPress.org deploy rebuild their package from that tag.
-Post-release commits that do not change the version may therefore leave the
-committed zip behind `main`; that is expected, and is not a reason to rebuild it
-outside a release.
+`DIST/` is a **local build output and is not versioned** (decided August 2026 —
+do not commit the zip again). The release tag is authoritative: the `Publish
+release` workflow rebuilds the package from the tag before attaching it, and the
+WordPress.org deploy stages from the repository, so neither ever read a
+committed zip. Keeping one only created work and risk — a whole PR was once
+spent rebuilding it (#66), it silently fell behind `main` whenever a commit did
+not change the version, and `publish-release.yml` needed a `git checkout
+--force` purely because the tracked file was rewritten on every build.
+**Where to get an installable zip**: the asset on the GitHub Release (built from
+the tag, so it matches the released source by construction), or `bash
+bin/build.sh` locally when you want one for a test site or to inspect what
+ships. Testing an unreleased branch was never what the committed copy was for
+anyway — it held the last *release*, not your working tree.
 
 The zip includes the production Composer dependencies, so it installs without
 Composer on the server. Local build environment: PHP 8.4, Composer, `rsync` and
@@ -1437,8 +1463,10 @@ as required for dependency review by WordPress.org Plugin Check.
   `bin/build.sh` there and attaches the resulting
   `DIST/system-markdown-alternate.zip` (the auto-generated "Source code"
   archives are not an installable plugin), with the tag notes as the body. The
-  asset is rebuilt from the tagged tree rather than taken from the committed
-  `DIST/`, so it always matches the released source. Idempotent: a tag that
+  asset is built from the tagged tree, so it always matches the released source
+  — and it is **the** way to get an installable zip of a release without
+  building one, now that `DIST/` is no longer committed (see "Build & deploy").
+  Idempotent: a tag that
   already has a Release is reported and left alone. The manual equivalent, if
   ever needed from the Mac:
   ```bash

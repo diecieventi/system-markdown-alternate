@@ -68,6 +68,34 @@ function parse_blocks( $content ) {
 	return isset( $GLOBALS['sysmda_test_parsed'][ $content ] ) ? $GLOBALS['sysmda_test_parsed'][ $content ] : array();
 }
 
+/** Stub matching core: block content is content carrying a block delimiter. */
+function has_blocks( $content ) {
+	return false !== strpos( (string) $content, '<!-- wp:' );
+}
+
+/**
+ * Stub: reassembles the markup of a block list.
+ *
+ * Core re-emits the delimiter comments as well; here the inner HTML is enough,
+ * because every caller of this in the plugin feeds the result to a pass that
+ * strips comments anyway. What the tests need from it is precisely what core
+ * guarantees: the blocks that survived cleaning keep their markup, and the ones
+ * that were removed contribute nothing.
+ */
+function serialize_blocks( $blocks ) {
+	$out = '';
+
+	foreach ( (array) $blocks as $block ) {
+		$out .= isset( $block['innerHTML'] ) ? (string) $block['innerHTML'] : '';
+
+		if ( ! empty( $block['innerBlocks'] ) ) {
+			$out .= serialize_blocks( $block['innerBlocks'] );
+		}
+	}
+
+	return $out;
+}
+
 function get_option( $name, $default = false ) {
 	return array_key_exists( $name, $GLOBALS['sysmda_test_options'] ) ? $GLOBALS['sysmda_test_options'][ $name ] : $default;
 }
@@ -570,6 +598,23 @@ class PassthroughShortcodeCleaner extends ShortcodeCleaner {
 	}
 }
 
+/**
+ * A parsed block that carries saved markup, as post content does.
+ *
+ * make_block() below builds structure only (empty innerHTML): it exists for the
+ * cleaning tests, which care about which blocks survive. The source-content
+ * passes care about the text the survivors carry, so they need the markup too.
+ */
+function sysmda_source_block( $name, $inner_html, $attrs = array() ) {
+	return array(
+		'blockName'    => $name,
+		'attrs'        => $attrs,
+		'innerBlocks'  => array(),
+		'innerContent' => array( $inner_html ),
+		'innerHTML'    => $inner_html,
+	);
+}
+
 function make_block( $name, $inner_blocks = array(), $attrs = array() ) {
 	$inner_content = array();
 	foreach ( $inner_blocks as $ib ) {
@@ -870,13 +915,57 @@ check( 'description: md-exclude region omitted', 'Visible. Also visible.', $meta
 
 // Block markup takes the same path: the class is on the rendered element inside
 // the block, and the block delimiters are stripped as the comments they are.
-$p = new WP_Post(
-	array(
-		'ID'           => 23,
-		'post_content' => '<!-- wp:paragraph --><p>Intro.</p><!-- /wp:paragraph --><!-- wp:paragraph {"className":"md-exclude"} --><p class="md-exclude">Confidential.</p><!-- /wp:paragraph -->',
-	)
+$sysmda_desc_src = '<!-- wp:paragraph --><p>Intro.</p><!-- /wp:paragraph --><!-- wp:paragraph {"className":"md-exclude"} --><p class="md-exclude">Confidential.</p><!-- /wp:paragraph -->';
+
+$GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
+	sysmda_source_block( 'core/paragraph', '<p>Intro.</p>' ),
+	sysmda_source_block( 'core/paragraph', '<p class="md-exclude">Confidential.</p>', array( 'className' => 'md-exclude' ) ),
 );
+
+$p = new WP_Post( array( 'ID' => 23, 'post_content' => $sysmda_desc_src ) );
 check( 'description: md-exclude block omitted', 'Intro.', $metadata->description( $p ) );
+
+// A block excluded by NAME. The shipped defaults are all dynamic blocks with no
+// text of their own, which is what made this look safe to skip; but "Excluded
+// blocks" is a settings-page field, so a site can exclude a static block whose
+// text sits in the saved markup. The body drops it, and so must the fallback.
+$sysmda_desc_src = '<!-- wp:paragraph --><p>Kept.</p><!-- /wp:paragraph --><!-- wp:pullquote --><blockquote>Excluded by name.</blockquote><!-- /wp:pullquote -->';
+
+$GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
+	sysmda_source_block( 'core/paragraph', '<p>Kept.</p>' ),
+	sysmda_source_block( 'core/pullquote', '<blockquote>Excluded by name.</blockquote>' ),
+);
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_block_names'] = array( 'core/pullquote' );
+
+$p = new WP_Post( array( 'ID' => 24, 'post_content' => $sysmda_desc_src ) );
+check( 'description: block excluded by name omitted', 'Kept.', $metadata->description( $p ) );
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_block_names'] );
+
+// A block excluded through attrs.className whose saved inner HTML does NOT
+// repeat the class attribute. The element-level pass cannot see it — there is no
+// class to match on — so only the block-level pass removes it.
+$sysmda_desc_src = '<!-- wp:acme/panel {"className":"md-exclude"} --><div>Hidden panel copy.</div><!-- /wp:acme/panel --><!-- wp:paragraph --><p>Shown.</p><!-- /wp:paragraph -->';
+
+$GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
+	sysmda_source_block( 'acme/panel', '<div>Hidden panel copy.</div>', array( 'className' => 'md-exclude' ) ),
+	sysmda_source_block( 'core/paragraph', '<p>Shown.</p>' ),
+);
+
+$p = new WP_Post( array( 'ID' => 25, 'post_content' => $sysmda_desc_src ) );
+check( 'description: className block without a class attribute omitted', 'Shown.', $metadata->description( $p ) );
+
+// Ordinary block content keeps the description it had before the block pass
+// existed: nothing is excluded, so nothing is dropped.
+$sysmda_desc_src = '<!-- wp:paragraph --><p>First.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Second.</p><!-- /wp:paragraph -->';
+
+$GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
+	sysmda_source_block( 'core/paragraph', '<p>First.</p>' ),
+	sysmda_source_block( 'core/paragraph', '<p>Second.</p>' ),
+);
+
+$p = new WP_Post( array( 'ID' => 26, 'post_content' => $sysmda_desc_src ) );
+check( 'description: ordinary block content unaffected', 'First. Second.', $metadata->description( $p ) );
 
 // ─── MetadataBuilder::build_front_matter (F1 golden conformance) ─────
 //

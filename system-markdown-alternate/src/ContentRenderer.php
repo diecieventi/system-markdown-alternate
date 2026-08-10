@@ -167,16 +167,39 @@ class ContentRenderer {
 	 * Exists for the `description` front-matter fallback, which derives its text
 	 * from the post content directly rather than from the rendered body — so
 	 * without this a section the body promises never to publish came straight
-	 * back out in the front matter. It handles the class-marked regions, which
-	 * is what that rule is written in terms of; blocks excluded by name are
-	 * dynamic and contribute no text to the source content anyway, and excluded
-	 * shortcodes are already gone by the time this runs.
+	 * back out in the front matter. Excluded shortcodes are already gone by the
+	 * time this runs; the two exclusion rules left are applied here, and BOTH of
+	 * them are needed:
 	 *
-	 * Returns the input unchanged when no exclusion matched, so content that has
-	 * none is never round-tripped through the DOM — neither for the cost nor for
-	 * the serialization differences a round trip would introduce.
+	 * - **Block-level** (`BlockCleaner`), for block content. The first version
+	 *   of this method skipped it, on the reasoning that a block excluded by
+	 *   name is dynamic and contributes no text to the source anyway. That is
+	 *   true of the names the plugin ships and false in general: "Excluded
+	 *   blocks" is a settings-page field, so a site can exclude a *static*
+	 *   block — a pullquote, a quote — whose text sits right there in the saved
+	 *   markup. The same gap swallowed blocks excluded through
+	 *   `attrs.className` when the saved inner HTML does not repeat the class
+	 *   attribute. The body dropped them and the description published them.
+	 * - **Element-level** (the DOM pass below), for a class on markup *inside* a
+	 *   block, and for classic content, which has no blocks to walk.
+	 *
+	 * The block pass runs whenever the source has blocks, with no cheap
+	 * pre-filter, and that is deliberate: any substring guard would have to be
+	 * evaluated against this post's markup, and a synced pattern keeps its
+	 * content in another post entirely — so a guard would go blind exactly where
+	 * `BlockCleaner` follows the reference. Expanding those patterns also makes
+	 * the description follow the body, which renders them. The cost is one
+	 * `parse_blocks()` per fallback description, `/llms.txt` entries included;
+	 * it is paid only when a post has neither an SEO description nor an excerpt.
+	 *
+	 * The DOM pass returns its input untouched when nothing matched, so content
+	 * carrying no excluded class is never round-tripped through the DOM.
 	 */
 	public function strip_excluded_content( string $html ): string {
+		if ( has_blocks( $html ) ) {
+			$html = serialize_blocks( $this->blocks->clean( parse_blocks( $html ) ) );
+		}
+
 		$classes = $this->excluded_classes();
 
 		if ( ! $this->mentions_class( $html, $classes ) ) {
