@@ -88,8 +88,7 @@ is a preference.
 2. **A separate admin page.** The settings panel is a single `options.php` form
    (`AdminSettings::render_page()` wraps the registered sections in tabs but
    keeps every field in that one form). A results table with per-row checkboxes
-   and actions is a second form and cannot live inside it. Already stated in
-   `docs/strategy-review-2026-07.md`.
+   and actions is a second form and cannot live inside it.
 3. **Static scan, never rendering.** Since `0.36.0` the `.md` is by definition
    the *anonymous* representation. A scan launched from wp-admin runs
    authenticated, so anything it rendered would be a logged-in rendering — the

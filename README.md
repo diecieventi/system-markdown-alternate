@@ -107,8 +107,13 @@ conformance tests in `system-markdown-alternate/tests/run-tests.php`.
 ├── README.md                     ← this file (GitHub)
 ├── AGENTS.md                     ← operational guide (tool-agnostic; CLAUDE.md is a symlink)
 ├── CHANGELOG.md                  ← full release history (readme.txt links here)
-├── docs/filters.md               ← the developer extension API (with stability levels)
-├── docs/output-format.md         ← the .md output format (public contract)
+├── docs/                         ← contracts, active plans and operational notes
+│   ├── filters.md                ← developer extension API (with stability levels)
+│   ├── output-format.md          ← the .md output format (public contract)
+│   ├── staging-acceptance.md     ← real-WordPress release checklist
+│   ├── cache-infrastructure-notes.md
+│   ├── exclusion-scanner-plan.md
+│   └── llms-txt-multilingual-plan.md
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
