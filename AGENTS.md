@@ -224,6 +224,11 @@ The v1 scope is done and widely exceeded. Implemented:
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
 - **`/llms.txt`** (cached, excludes protected content) with an on/off toggle.
+  The body cache is the anonymous representation only: authenticated requests
+  rebuild in the visitor's context without reading or populating the shared
+  entry and are sent `private, no-store, must-revalidate`. Their strong ETag is
+  still safe because it is derived from the freshly rebuilt body, not from a
+  shared metadata validator.
   Since `0.29.0` it answers conditional requests like the `.md` endpoint:
   **`ETag` + `304`** and the same `Cache-Control`. Its `ETag` is the **md5 of the
   body about to be sent** — the one strong validator in the plugin, and
@@ -849,6 +854,11 @@ The v1 scope is done and widely exceeded. Implemented:
     the ETag is weak: do not send a claim this plugin cannot back. Anonymous
     traffic, which is the entire audience for this endpoint, is untouched and
     keeps the full shared-cache behaviour.
+    `/llms.txt` uses the same definition for its **body cache** and cache-control
+    policy: logged-in requests neither read nor populate the anonymous index
+    entry. Its conditional path is intentionally different because its strong
+    ETag hashes the rebuilt bytes themselves; a matching tag therefore describes
+    that visitor's actual body rather than the anonymous cache.
   - `sysmda_post_is_servable` is the per-post **veto**, honoured by every
     consumer through `PostSupport::is_servable()`. It exists because the
     built-in checks know WordPress's own notion of access (status, the core
@@ -1398,8 +1408,17 @@ not exist as far as the public API is concerned.
    documented way for a site to declare the rest (dynamic blocks, shortcodes,
    filters reading options or remote data) — that filter is the answer to
    "my output changes and the `.md` does not", not a new special case in the
-   controller. Both fingerprints stay empty when they have nothing to describe,
-   which is what keeps an upgrade from invalidating every plain post.
+   controller. Both fingerprints stay empty when they have no configured
+   surface to describe, which is what keeps an upgrade from invalidating every
+   plain post. Once a custom taxonomy is selected, however, its **empty state is
+   still a state** and remains fingerprinted: removing the last term must not
+   make `If-Modified-Since` trust a post date that did not move. The same
+   disappearing state for `_thumbnail_id` and `rank_math_description` is
+   recorded through a deferred salt bump on metadata deletion (or an update to
+   an empty value), while non-empty edits stay in the cheaper per-post
+   fingerprint. Generic ACF source fields also owe the synced-pattern traversal:
+   their values join the block source before rendering, so their `core/block`
+   references share the post body's transitive walk and cycle guard.
    **Two traps, both hit while fixing exactly this:** (a) synced patterns must
    be followed **transitively** — an article → pattern A → pattern B chain
    renders B, so recording only A leaves the validator stale one level down

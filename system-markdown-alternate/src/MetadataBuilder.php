@@ -241,6 +241,17 @@ class MetadataBuilder {
 	 * @return array<string, string[]> Taxonomy slug => term names, both sorted.
 	 */
 	public static function taxonomy_terms( \WP_Post $post ): array {
+		$slugs = self::selected_taxonomy_slugs( $post );
+
+		return self::taxonomy_terms_for_slugs( $post, $slugs );
+	}
+
+	/**
+	 * The effective, validated custom-taxonomy selection for a post.
+	 *
+	 * @return string[]
+	 */
+	private static function selected_taxonomy_slugs( \WP_Post $post ): array {
 		/**
 		 * Filters which taxonomy slugs are emitted in the front matter.
 		 *
@@ -264,13 +275,26 @@ class MetadataBuilder {
 			return array();
 		}
 
+		$selected = array();
+		foreach ( $slugs as $slug ) {
+			if ( self::is_emittable_taxonomy( $slug ) ) {
+				$selected[] = $slug;
+			}
+		}
+
+		return array_values( array_unique( $selected ) );
+	}
+
+	/**
+	 * Resolves term names for an already validated taxonomy selection.
+	 *
+	 * @param string[] $slugs Effective taxonomy slugs.
+	 * @return array<string, string[]>
+	 */
+	private static function taxonomy_terms_for_slugs( \WP_Post $post, array $slugs ): array {
 		$raw = array();
 
 		foreach ( $slugs as $slug ) {
-			if ( ! self::is_emittable_taxonomy( $slug ) ) {
-				continue;
-			}
-
 			$terms = get_the_terms( $post, $slug );
 
 			// false (no terms) or WP_Error (taxonomy not registered).
@@ -290,15 +314,19 @@ class MetadataBuilder {
 	 * Folded into the cache validator by MarkdownController::cache_version().
 	 * Term assignments and renames do not touch `post_modified_gmt`, so without
 	 * this a conditional request would keep answering `304` with outdated terms
-	 * — even with the body cache disabled. Returns an empty string when the
-	 * feature is off, leaving the validator byte-identical to earlier versions.
+	 * — even with the body cache disabled. A selected taxonomy keeps a fingerprint
+	 * when the post has no terms, because removing the last term must not make the
+	 * old post date strong again. Returns an empty string only when the feature is
+	 * off, leaving the validator byte-identical to earlier versions.
 	 */
 	public static function taxonomies_fingerprint( \WP_Post $post ): string {
-		$taxonomies = self::taxonomy_terms( $post );
+		$slugs = self::selected_taxonomy_slugs( $post );
 
-		if ( empty( $taxonomies ) ) {
+		if ( empty( $slugs ) ) {
 			return '';
 		}
+
+		$taxonomies = self::taxonomy_terms_for_slugs( $post, $slugs );
 
 		return md5( (string) wp_json_encode( $taxonomies ) );
 	}
@@ -308,7 +336,7 @@ class MetadataBuilder {
 	 * row, and that therefore changes without moving `post_modified_gmt`.
 	 *
 	 * Same contract as taxonomies_fingerprint(), same reason: this value is
-	 * folded into MarkdownController::cache_version(), which is also the strong
+	 * folded into MarkdownController::cache_version(), which also feeds the weak
 	 * ETag. Editing a synced pattern, swapping the featured image, rewriting the
 	 * Rank Math description or changing an ACF field all change the body while
 	 * the post row stays untouched — so without this a client holding the old
@@ -347,7 +375,7 @@ class MetadataBuilder {
 			$parts[] = 'desc:' . md5( $rank_math );
 		}
 
-		$parts = array_merge( $parts, self::acf_dependencies( $post ) );
+		self::collect_acf_dependencies( $post, $seen, $parts );
 
 		/**
 		 * Filter: extra cache-validator inputs for output this plugin cannot
@@ -409,25 +437,37 @@ class MetadataBuilder {
 	}
 
 	/**
-	 * Fingerprint parts for the ACF fields the bundled integration appends.
+	 * Collects fingerprint parts for the ACF fields the bundled integration
+	 * appends, including synced patterns expanded from generic source fields.
 	 *
 	 * Reads the same fields through the same filters AcfIntegration uses, so the
 	 * validator cannot drift from what is actually emitted. Empty when ACF is
 	 * not active — `get_field()` is its own availability check, exactly as in
 	 * AcfIntegration.
 	 *
-	 * @return string[]
+	 * Generic fields join the post source before block rendering, so a
+	 * `core/block` reference inside one follows the same transitive dependency
+	 * graph as a reference in `post_content`. Subtitle and TL;DR fields are
+	 * fingerprinted as values but are not parsed for patterns because their
+	 * integration paths do not expand blocks.
+	 *
+	 * @param array $seen  Pattern IDs already visited, by ID.
+	 * @param array $parts Fingerprint parts, appended to.
 	 */
-	private static function acf_dependencies( \WP_Post $post ): array {
+	private static function collect_acf_dependencies( \WP_Post $post, array &$seen, array &$parts ): void {
 		if ( ! function_exists( 'get_field' ) ) {
-			return array();
+			return;
 		}
 
-		$keys   = (array) apply_filters( 'sysmda_acf_field_keys', array(), $post );
+		$source_keys = array();
+		foreach ( (array) apply_filters( 'sysmda_acf_field_keys', array(), $post ) as $key ) {
+			$source_keys[] = (string) $key;
+		}
+
+		$keys   = $source_keys;
 		$keys[] = (string) apply_filters( 'sysmda_acf_subtitle_key', '', $post );
 		$keys[] = (string) apply_filters( 'sysmda_acf_tldr_key', '', $post );
 
-		$parts = array();
 		foreach ( $keys as $key ) {
 			$key = (string) $key;
 			if ( '' === $key ) {
@@ -436,9 +476,11 @@ class MetadataBuilder {
 
 			$value   = get_field( $key, $post->ID );
 			$parts[] = 'acf:' . $key . ':' . md5( (string) wp_json_encode( $value ) );
-		}
 
-		return $parts;
+			if ( in_array( $key, $source_keys, true ) && is_string( $value ) && has_blocks( $value ) ) {
+				self::collect_pattern_refs( parse_blocks( $value ), $seen, $parts );
+			}
+		}
 	}
 
 	/**

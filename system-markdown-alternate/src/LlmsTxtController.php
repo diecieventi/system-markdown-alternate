@@ -115,11 +115,12 @@ class LlmsTxtController {
 	 */
 	private function render(): void {
 		/** Filter: /llms.txt cache TTL in seconds. 0 disables caching. */
-		$ttl     = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
-		$version = $this->cache_version();
-		$body    = null;
+		$ttl       = (int) apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
+		$use_cache = self::uses_shared_body_cache( $ttl );
+		$version   = $this->cache_version();
+		$body      = null;
 
-		if ( $ttl > 0 ) {
+		if ( $use_cache ) {
 			$cached = Cache::get( self::CACHE_KEY );
 			if ( is_array( $cached ) && isset( $cached['v'], $cached['txt'] ) && $cached['v'] === $version ) {
 				$body = (string) $cached['txt'];
@@ -129,7 +130,7 @@ class LlmsTxtController {
 		if ( null === $body ) {
 			$body = $this->build();
 
-			if ( $ttl > 0 ) {
+			if ( $use_cache ) {
 				Cache::set(
 					self::CACHE_KEY,
 					array(
@@ -156,6 +157,17 @@ class LlmsTxtController {
 		}
 
 		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput
+	}
+
+	/**
+	 * Whether this request may read and populate the shared index body cache.
+	 *
+	 * Authenticated rendering may be visitor-dependent through the servability
+	 * filter, so it must be rebuilt without touching the anonymous cache. The
+	 * body-derived ETag remains safe because it describes those rebuilt bytes.
+	 */
+	private static function uses_shared_body_cache( int $ttl ): bool {
+		return $ttl > 0 && MarkdownController::representation_is_shared();
 	}
 
 	/**

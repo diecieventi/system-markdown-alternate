@@ -114,6 +114,13 @@ class AdminSettings {
 		add_action( 'edited_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
 		add_action( 'delete_term', array( $this, 'maybe_bump_for_term' ), 10, 3 );
 
+		// Removing the last featured-image or Rank Math dependency makes the
+		// dependency fingerprint empty. The post row may remain untouched, so
+		// preserve the invalidation history in the global salt; otherwise an
+		// If-Modified-Since-only client could start receiving stale 304s again.
+		add_action( 'deleted_post_meta', array( $this, 'bump_for_deleted_dependency_meta' ), 10, 4 );
+		add_action( 'updated_post_meta', array( $this, 'maybe_bump_for_empty_dependency_meta' ), 10, 4 );
+
 		// The write itself happens once, at the very end of the request: see
 		// flush_cache_salt().
 		add_action( 'shutdown', array( $this, 'flush_cache_salt' ) );
@@ -205,6 +212,45 @@ class AdminSettings {
 	 */
 	public function maybe_bump_for_term( $term_id, $tt_id, $taxonomy ): void {
 		if ( in_array( $taxonomy, array( 'category', 'post_tag' ), true ) ) {
+			$this->bump_cache_salt();
+		}
+	}
+
+	/**
+	 * Hook: deleted_post_meta. Preserves invalidation when a dependency vanishes.
+	 *
+	 * @param mixed  $meta_ids   Deleted metadata IDs (unused).
+	 * @param int    $post_id    Post whose metadata changed (unused).
+	 * @param string $meta_key   Deleted metadata key.
+	 * @param mixed  $_meta_value Previous metadata value (unused).
+	 */
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress hook signature requires all four arguments.
+	public function bump_for_deleted_dependency_meta( $meta_ids, $post_id, $meta_key, $_meta_value ): void {
+		if ( in_array( $meta_key, array( '_thumbnail_id', 'rank_math_description' ), true ) ) {
+			$this->bump_cache_salt();
+		}
+	}
+
+	/**
+	 * Hook: updated_post_meta. Handles dependencies stored as an empty value.
+	 *
+	 * WordPress normally deletes an empty featured-image relation, but plugins
+	 * may update either dependency to an empty scalar instead. Positive IDs and
+	 * non-empty descriptions remain covered by the per-post fingerprint and do
+	 * not need a site-wide invalidation.
+	 *
+	 * @param int    $meta_id    Updated metadata ID (unused).
+	 * @param int    $post_id    Post whose metadata changed (unused).
+	 * @param string $meta_key   Updated metadata key.
+	 * @param mixed  $meta_value New metadata value.
+	 */
+	public function maybe_bump_for_empty_dependency_meta( $meta_id, $post_id, $meta_key, $meta_value ): void {
+		if ( '_thumbnail_id' === $meta_key && ( ! is_scalar( $meta_value ) || (int) $meta_value <= 0 ) ) {
+			$this->bump_cache_salt();
+		}
+
+		if ( 'rank_math_description' === $meta_key
+			&& ( ! is_scalar( $meta_value ) || '' === (string) $meta_value ) ) {
 			$this->bump_cache_salt();
 		}
 	}

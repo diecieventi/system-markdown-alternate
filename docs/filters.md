@@ -427,7 +427,8 @@ not the result of looking one up.
 apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );
 apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
 ```
-Maximum posts listed per type, and the cache TTL in seconds (`0` = off).
+Maximum posts listed per type, and the shared anonymous body-cache TTL in
+seconds (`0` = off). Authenticated requests always bypass that body cache.
 `sysmda_llms_txt_max_posts` is **[Advanced](#advanced)**: it describes how the
 index is assembled, and the llms.txt layout follows a spec that is still moving.
 

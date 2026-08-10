@@ -325,23 +325,27 @@ brief, a successful Markdown response carries:
   intentionally non-indexable)
 - `Link: <permalink>; rel="canonical"` back to the HTML
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
-- `ETag` + `Last-Modified`, with conditional `304 Not Modified` support
+- for the anonymous representation, `ETag` + `Last-Modified`, with conditional
+  `304 Not Modified` support
   (`If-None-Match` takes priority over `If-Modified-Since`). When the
   `taxonomies:` block is emitted — or the post has any other dependency outside
   its own row — `If-Modified-Since` is **ignored**: the body can then change
   without `post_modified_gmt` moving, so only the fingerprinted `ETag` can prove
   a cached copy is still current. `Last-Modified` is still sent, as information.
 
-  Since `0.28.0` the `ETag` is **weak** (`W/"…"`). It is derived from the post's
-  modification date, the plugin version, the settings salt and the dependency
-  fingerprints — not from the response bytes — so it asserts *semantic*
-  equivalence, not the byte-for-byte identity a strong tag claims. This changes
-  nothing for clients: `If-None-Match` is defined to use weak comparison, and
-  the endpoint implements neither `If-Match` nor `If-Range` (the only two things
-  that need a strong tag). Incoming validators are compared with the `W/` flag
-  ignored on both sides, so a tag issued by an earlier version, or weakened by
-  an intermediary, still revalidates; Apache's `-gzip`/`-br` compression suffix
-  is ignored as well.
+  Authenticated `.md` requests are rebuilt in the visitor's context, bypass the
+  shared body cache and carry neither validator; they are never answered `304`.
+
+  Since `0.28.0` the anonymous `ETag` is **weak** (`W/"…"`). It is derived from
+  the post's modification date, the plugin version, the settings salt and the
+  dependency fingerprints — not from the response bytes — so it asserts
+  *semantic* equivalence, not the byte-for-byte identity a strong tag claims.
+  This changes nothing for clients: `If-None-Match` is defined to use weak
+  comparison, and the endpoint implements neither `If-Match` nor `If-Range`
+  (the only two things that need a strong tag). Incoming validators are compared
+  with the `W/` flag ignored on both sides, so a tag issued by an earlier version,
+  or weakened by an intermediary, still revalidates; Apache's `-gzip`/`-br`
+  compression suffix is ignored as well.
 
 Two request paths reach the same Markdown:
 
@@ -354,9 +358,9 @@ Two request paths reach the same Markdown:
 
 **Caching distinction.** The two paths get opposite policies, on purpose:
 
-- the dedicated `.md` URLs send `Cache-Control: public, max-age=0,
-  must-revalidate` (since `0.29.0`; before that they sent nothing of their own
-  and inherited WordPress's `no-store`). Any cache may store the body; none may
+- anonymous requests to the dedicated `.md` URLs send `Cache-Control: public,
+  max-age=0, must-revalidate` (since `0.29.0`; before that they sent nothing of
+  their own and inherited WordPress's `no-store`). Any cache may store the body; none may
   reuse it without revalidating first, so a `.md` can never outlive the article
   behind it. This is not belt-and-braces: page-cache plugins purge the permalink
   on save and do not know `permalink.md` exists, so nothing would clear a stored
@@ -370,10 +374,13 @@ Two request paths reach the same Markdown:
   and safety must never depend on it. Here the risk is not staleness but a cache
   handing Markdown to a browser, which is why storage is refused outright.
 
-**`/llms.txt`** follows the `.md` policy and, since `0.29.0`, answers
-`If-None-Match` with `304`. Its `ETag` is the md5 of the body being sent — a
-strong validator, unlike the `.md` one, because the index already exists in full
-before the response is written.
+**`/llms.txt`** follows the anonymous `.md` cache policy and, since `0.29.0`,
+answers `If-None-Match` with `304`. Its `ETag` is the md5 of the body being sent
+— a strong validator, unlike the `.md` one, because the index already exists in
+full before the response is written. An authenticated request bypasses the
+shared index body cache and is rebuilt in that visitor's context; it is sent
+`private, no-store, must-revalidate`. Its body-derived ETag remains valid because
+it describes those freshly rebuilt bytes rather than the shared representation.
 
 **No `Content-Disposition`, ever** (decided `0.35.0`). The `.md` has exactly one
 representation and one behaviour, and the response carries no header — and reads

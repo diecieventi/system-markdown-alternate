@@ -9,6 +9,31 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.40.1
+
+* **Authenticated `/llms.txt` rendering no longer touches the shared anonymous
+  body cache.** The index applies the same servability policy as every other
+  surface, and site code may make that policy membership-dependent. A logged-in
+  request could therefore build a different title/description list and store it
+  under the one public cache key, or read the anonymous list instead of its own.
+  Authenticated requests now rebuild without reading or writing that cache and
+  remain `private, no-store`; anonymous cache behaviour is unchanged. The index
+  keeps its body-derived strong ETag because it describes the bytes actually
+  rebuilt for that request.
+* **Synced patterns referenced from generic ACF source fields now participate
+  transitively in the dependency fingerprint.** Those fields join the post
+  source before block rendering, but the validator previously traversed only
+  `post_content`, so editing a referenced `wp_block` could change the `.md`
+  without changing its ETag. The ACF traversal now shares the same cycle guard
+  and dependency list as the post body.
+* **Removing the last out-of-row dependency can no longer make an old post date
+  trustworthy again.** A selected custom taxonomy now fingerprints its empty
+  state as well as its terms, so removing the last term still disables
+  `If-Modified-Since` and moves the ETag. Deleting or emptying the featured-image
+  relation or Rank Math description records the disappearance through the
+  deferred global salt. Plain posts with no configured external surface retain
+  the `If-Modified-Since` fast path.
+
 ## 0.40.0
 
 * **The three exclusion settings now add to the built-in defaults instead of
