@@ -1,7 +1,7 @@
 # Exclusion scanner — discovering what the `.md` is actually publishing
 
 > Implementation plan. Status: **not started**, greenlit by the D1 measurement of
-> 10 August 2026 (§2). Written against `main @ 0.38.2`.
+> 10 August 2026 (§2). Written against `main @ 0.38.2`, revised for `0.39.0`.
 >
 > This plan does not reopen the design: the shape below was fixed while the idea
 > was parked, and every constraint in §3 is blocking. If the work is picked up,
@@ -89,8 +89,10 @@ is a preference.
    `AdminSettings::option_to_list()`: an empty option yields the hardcoded
    defaults, a non-empty one **replaces them entirely**. Writing only the newly
    ticked tag would silently drop `contact-form-7`, `gravityform`, `wpforms`,
-   `mailerlite_form` and `lwptoc`. `ShortcodeCleaner::ALWAYS_EXCLUDED` is merged
-   *after* the filter and must never be written into the option.
+   `mailerlite_form` and `lwptoc`. `ShortcodeCleaner::ALWAYS_EXCLUDED`
+   (`sysmda_md_button`, `sysmda_md_actions` as of `0.39.0`) is merged *after* the
+   filter and must never be written into the option, nor offered as a
+   suggestion — it is already unconditional.
 6. **The signal is frequency over source content, not inspection of output.**
    `strip_tags` is on, so no raw tag survives into the Markdown, and
    `url_to_postid() === 0` does not prove a link is broken — both were rejected
@@ -202,10 +204,22 @@ suggestion keeps invalidating the cache as it does today.
 
 ### 4.8 Execution
 
-Batched over AJAX (nonce + `manage_options`), default 50 posts per request, with
-progress and resumption; the partial aggregate accumulates in the option.
-`parse_blocks()` runs only when `has_blocks()` is true — shortcode discovery is
-a regex over the raw string and needs no parse.
+Batched, default 50 posts per request, with progress and resumption; the partial
+aggregate accumulates in the option. `parse_blocks()` runs only when
+`has_blocks()` is true — shortcode discovery is a regex over the raw string and
+needs no parse.
+
+**The transport is an open decision, not a settled one.** The plugin has no
+admin AJAX, REST route or nonce-checked endpoint anywhere today, so batching
+over `wp_ajax_*` introduces a request class it has never had — extra surface
+right before a wordpress.org review, which reads AJAX handlers, nonces and
+capability checks closely. A plain form POST that processes one batch per page
+load and redirects needs no endpoint and no JavaScript at all. Note that
+`0.39.0` removed the *other* half of this argument: the project now ships
+front-end JS (`assets/md-actions.js`, which `fetch()`es the public `.md`), so
+"this plugin does not do JavaScript" is no longer true — but a public fetch of a
+public URL and an authenticated admin endpoint are not the same review surface.
+Decide before writing, not after.
 
 ### 4.9 The page
 
@@ -244,7 +258,7 @@ Single PR, atomic commits, on a dedicated branch.
    for "informs, never applies" and for the aggregates-only storage), `README.md`
    and `readme.txt` (feature bullet, changelog, one FAQ entry). No
    `docs/filters.md` change: no new filters.
-8. **Release** — `0.39.0` (new feature): bump the plugin header and
+8. **Release** — `0.40.0` (new feature): bump the plugin header and
    `SYSMDA_VERSION`, update `Stable tag` and the changelog in both `readme.txt`
    and `CHANGELOG.md`, drop the now-fourth-oldest entry from `readme.txt`.
 
