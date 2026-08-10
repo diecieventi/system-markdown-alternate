@@ -9,6 +9,19 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.42.0
+
+* Added to the default exclusions, each verified against the plugin's own
+  source rather than assumed: `ninja_form` (shortcode) and `ninja-forms/form`
+  (block) for Ninja Forms — the singular, unquoted-id shortcode syntax
+  confirmed by the plugin's publishing docs, the block name by its `block.json`
+  registration — and `formidable` (shortcode) and `formidable/simple-form`
+  (block) for Formidable Forms, whose block name was read directly from
+  `FrmSimpleBlocksController::register_simple_form_block()` in the plugin's
+  GitHub source. Formidable's other shortcodes (`frm-show-entry`,
+  `formresults`, `frm-stats`, `frm-graph`, …) display submitted entry data —
+  real content, not interface chrome — and are deliberately left out.
+
 ## 0.41.1
 
 * **An actions shortcode first rendered after the footer-script pass now

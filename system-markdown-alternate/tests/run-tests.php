@@ -777,6 +777,12 @@ $out = $cleaner->clean( array( make_block( 'core/paragraph' ), make_block( 'grav
 check( 'blocks: form excluded', 1, count( $out ) );
 check( 'blocks: paragraph preserved', 'core/paragraph', $out[0]['blockName'] );
 
+// Ninja Forms and Formidable form-embed blocks, verified against each
+// plugin's own source rather than guessed at.
+$out = $cleaner->clean( array( make_block( 'core/paragraph' ), make_block( 'ninja-forms/form' ), make_block( 'formidable/simple-form' ) ) );
+check( 'blocks: ninja-forms/form excluded by default', 1, count( $out ) );
+check( 'blocks: formidable/simple-form excluded by default', 'core/paragraph', $out[0]['blockName'] );
+
 // Exclusion by className, including nested blocks, with innerContent realignment.
 $group = make_block(
 	'core/group',
@@ -4037,6 +4043,23 @@ check(
 	'strip: ez-toc is excluded by default',
 	'Index:  end',
 	$sysmda_code_cleaner->strip( 'Index: [ez-toc] end' )
+);
+check(
+	'strip: ninja_form is excluded by default',
+	'x  y',
+	$sysmda_code_cleaner->strip( 'x [ninja_form id=1] y' )
+);
+check(
+	'strip: formidable (the form itself) is excluded by default',
+	'x  y',
+	$sysmda_code_cleaner->strip( 'x [formidable id=3] y' )
+);
+// Formidable's other tags display submitted entry data — real content, not
+// interface chrome — and are deliberately not on the default list.
+check(
+	'strip: formidable entry-display tags are NOT excluded by default',
+	'x [frm-show-entry id=3] y [formresults id=3] z',
+	$sysmda_code_cleaner->strip( 'x [frm-show-entry id=3] y [formresults id=3] z' )
 );
 
 /*

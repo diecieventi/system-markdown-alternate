@@ -267,11 +267,12 @@ Removed from the body unless the corresponding filter changes them:
 
 - **Blocks** (`sysmda_markdown_excluded_block_names`): `gravityforms/form`,
   `contact-form-7/contact-form-selector`, `wpforms/form-selector`,
-  `mailerlite/form`, `luckywp/toc`.
+  `mailerlite/form`, `luckywp/toc`, and — since `0.40.0` — `ninja-forms/form`,
+  `formidable/simple-form`.
 - **Shortcodes** (`sysmda_markdown_excluded_shortcodes`): `contact-form-7`,
   `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc`, and — since `0.40.0` —
-  `ez-toc`, `toc`, `ez-toc-widget-sticky`, `fluentform`, `mc4wp_form`,
-  `mailpoet_form`, `newsletter_form`, `sibwp_form`.
+  `ez-toc`, `toc`, `ez-toc-widget-sticky`, `fluentform`, `ninja_form`,
+  `formidable`, `mc4wp_form`, `mailpoet_form`, `newsletter_form`, `sibwp_form`.
 - **CSS classes** (`sysmda_markdown_excluded_classes`): `no-md`, `md-exclude`,
   `exclude-from-markdown`.
 

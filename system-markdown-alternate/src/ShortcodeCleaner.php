@@ -44,6 +44,11 @@ class ShortcodeCleaner {
 		'gravityform',
 		'wpforms',
 		'fluentform',
+		'ninja_form', // Ninja Forms (singular tag, unquoted numeric id).
+		// Formidable Forms. Its other tags (frm-show-entry, formresults,
+		// frm-stats, frm-graph, …) display submitted entry data — real
+		// content — and are deliberately NOT excluded.
+		'formidable',
 		// Newsletter subscription forms. This is the category that produced the
 		// symptom the rule above is written against: a label, a submit button
 		// and a GDPR consent paragraph landing in the middle of an article.
