@@ -31,6 +31,8 @@ class BlockCleaner {
 		'gravityforms/form',
 		'contact-form-7/contact-form-selector',
 		'wpforms/form-selector',
+		'ninja-forms/form',
+		'formidable/simple-form',
 		'mailerlite/form',
 		'luckywp/toc', // LuckyWP TOC: navigation, not content.
 	);
