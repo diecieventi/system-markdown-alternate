@@ -30,6 +30,22 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   pattern keeps its content in another post, so it would go blind exactly where
   `BlockCleaner` follows the reference. Descriptions of content with nothing
   excluded are unchanged.
+* **`DIST/` is no longer committed.** The zip in the repository was a copy of the
+  last release package that no release path reads: the `Publish release`
+  workflow rebuilds from the tag before attaching the asset, and the
+  wordpress.org deploy stages from the repository. Keeping it only produced
+  drift whenever a commit did not change the version, a pull request spent on
+  refreshing it, and a `git checkout --force` in the workflow that existed
+  purely because a tracked file was rewritten on every build. The zip of a
+  release is the asset on its GitHub Release, built from the tag; `bin/build.sh`
+  still produces one on demand.
+* `bin/build.sh` checks for `composer`, `rsync` and `zip` before installing or
+  writing anything — `rsync` became a hard requirement when packaging moved to
+  `.distignore`, and a missing one used to surface as `command not found`
+  halfway through a build that had already replaced the installed dependencies
+  with `--no-dev`. The zip is now assembled in the staging directory and moved
+  into place only once complete, so a failed build no longer deletes the
+  previous one and puts nothing back.
 
 ## 0.38.1
 

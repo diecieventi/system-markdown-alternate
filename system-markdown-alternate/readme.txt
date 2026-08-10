@@ -171,6 +171,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.38.2 =
 
 * Fixed: the front-matter `description` still exposed the text of an excluded *block* — one excluded by name from the "Excluded blocks" setting, or through its CSS class when the saved markup does not repeat that class. 0.38.1 closed this for excluded regions marked with a class, but not for whole blocks, so the body dropped them and the description (and enriched `/llms.txt`) published them.
+* Development: the build script now checks its dependencies before it starts and only replaces the packaged zip once the build has succeeded. No effect on the plugin itself.
 
 = 0.38.1 =
 
