@@ -19,11 +19,33 @@ class ShortcodeCleaner {
 	 * kept here on purpose: it is no longer registered, so any left behind in old
 	 * post content would otherwise survive as literal text. `sysmda_md_actions`
 	 * is the current opt-in human control and must never publish its own UI into
-	 * the Markdown. Stripping happens after `apply_filters` because the saved
-	 * "Excluded shortcodes" option *replaces* the defaults below rather than
-	 * adding to them.
+	 * the Markdown. These are merged in *after* `apply_filters`, so that site
+	 * code returning a narrowed list — the supported way to drop a built-in
+	 * default since `0.40.0` — cannot drop these two with it.
 	 */
 	const ALWAYS_EXCLUDED = array( 'sysmda_md_button', 'sysmda_md_actions' );
+
+	/**
+	 * Built-in excluded shortcodes: the default value of the filter below.
+	 *
+	 * A constant rather than a local array because the settings page shows this
+	 * list to the user and used to keep its own copy of it, which is a drift
+	 * waiting to happen — adding a tag here and forgetting there makes the panel
+	 * describe defaults the plugin does not have.
+	 *
+	 * The bar for adding one is that the tag can only ever produce interface,
+	 * never text the author wrote: forms and navigation qualify, anything that
+	 * can carry content does not. A wrong entry here deletes real content on
+	 * every site that updates.
+	 */
+	const DEFAULT_EXCLUDED = array(
+		'contact-form-7',
+		'gravityform',
+		'wpforms',
+		'mailerlite_form',
+		'lwptoc',  // LuckyWP Table of Contents: navigation, not content.
+		'ez-toc',  // Easy Table of Contents: same, and a different plugin.
+	);
 
 	/**
 	 * @param string $content Source content.
@@ -38,19 +60,28 @@ class ShortcodeCleaner {
 
 		$pattern = get_shortcode_regex( $tags );
 
-		$result = preg_replace_callback(
-			'/' . $pattern . '/s',
-			static function ( $m ) {
-				// Escaped shortcode using [[...]]: preserve it.
-				if ( '[' === $m[1] && ']' === $m[6] ) {
-					return $m[0];
-				}
-				return '';
-			},
-			$content
-		);
+		// Code regions are masked for the same reason expansion masks them: a
+		// tag inside a code sample is being *shown*, not used, so removing it
+		// would silently gut an article that documents the shortcode. See
+		// CodeRegions.
+		return CodeRegions::protect(
+			$content,
+			static function ( string $chunk ) use ( $pattern ): string {
+				$result = preg_replace_callback(
+					'/' . $pattern . '/s',
+					static function ( $m ) {
+						// Escaped shortcode using [[...]]: preserve it.
+						if ( '[' === $m[1] && ']' === $m[6] ) {
+							return $m[0];
+						}
+						return '';
+					},
+					$chunk
+				);
 
-		return null === $result ? $content : $result;
+				return null === $result ? $chunk : $result;
+			}
+		);
 	}
 
 	/**
@@ -59,16 +90,8 @@ class ShortcodeCleaner {
 	 * @return string[]
 	 */
 	private function excluded_shortcodes(): array {
-		$defaults = array(
-			'contact-form-7',
-			'gravityform',
-			'wpforms',
-			'mailerlite_form',
-			'lwptoc', // LuckyWP Table of Contents: navigation, not content.
-		);
-
 		/** Filters shortcodes excluded from Markdown. */
-		$tags = (array) apply_filters( 'sysmda_markdown_excluded_shortcodes', $defaults );
+		$tags = (array) apply_filters( 'sysmda_markdown_excluded_shortcodes', self::DEFAULT_EXCLUDED );
 
 		return array_values( array_unique( array_merge( $tags, self::ALWAYS_EXCLUDED ) ) );
 	}

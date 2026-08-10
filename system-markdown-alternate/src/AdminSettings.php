@@ -38,9 +38,13 @@ class AdminSettings {
 	const LEGACY_OPTION_TAXONOMIES = 'sysmda_front_matter_taxonomies';
 
 	/** Exclusion defaults (displayed in the panel for reference only). */
-	const DEFAULT_SHORTCODES  = array( 'contact-form-7', 'gravityform', 'wpforms', 'mailerlite_form', 'lwptoc' );
-	const DEFAULT_BLOCK_NAMES = array( 'gravityforms/form', 'contact-form-7/contact-form-selector', 'wpforms/form-selector', 'mailerlite/form', 'luckywp/toc' );
-	const DEFAULT_CSS_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
+	/*
+	 * The built-in exclusion lists shown in the panel are read from the classes
+	 * that apply them, never copied. They used to be duplicated here, which is a
+	 * drift the user sees: a tag added to the cleaner and forgotten here made
+	 * the "View built-in defaults" disclosure describe a plugin that no longer
+	 * existed.
+	 */
 
 	/** @var string Settings page hook (used to load assets only on that page). */
 	private $hook = '';
@@ -772,7 +776,7 @@ class AdminSettings {
 		add_filter(
 			'sysmda_markdown_excluded_shortcodes',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sysmda_excluded_shortcodes', $defaults );
+				return $this->option_to_merged_list( 'sysmda_excluded_shortcodes', $defaults );
 			},
 			20
 		);
@@ -780,7 +784,7 @@ class AdminSettings {
 		add_filter(
 			'sysmda_markdown_excluded_block_names',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sysmda_excluded_block_names', $defaults );
+				return $this->option_to_merged_list( 'sysmda_excluded_block_names', $defaults );
 			},
 			20
 		);
@@ -788,7 +792,7 @@ class AdminSettings {
 		add_filter(
 			'sysmda_markdown_excluded_classes',
 			function ( $defaults ) {
-				return $this->option_to_list( 'sysmda_excluded_classes', $defaults );
+				return $this->option_to_merged_list( 'sysmda_excluded_classes', $defaults );
 			},
 			20
 		);
@@ -859,12 +863,51 @@ class AdminSettings {
 	 * @return string[]
 	 */
 	private function option_to_list( string $option, array $defaults ): array {
-		$v = get_option( $option );
-		if ( false === $v || '' === $v ) {
-			return $defaults;
-		}
-		$items = array_values( array_filter( array_map( 'trim', explode( "\n", (string) $v ) ) ) );
+		$items = $this->option_lines( $option );
+
 		return ! empty( $items ) ? $items : $defaults;
+	}
+
+	/**
+	 * Same textarea, but the saved lines are **added to** the defaults instead
+	 * of replacing them.
+	 *
+	 * Used by the three exclusion lists, and the difference is not cosmetic.
+	 * Under the old replace semantics, typing a single tag into "Excluded
+	 * shortcodes" silently dropped every built-in default with it: a site adding
+	 * one newsletter tag lost `contact-form-7`, `gravityform`, `wpforms`,
+	 * `mailerlite_form` and `lwptoc` in the same save, and the only hint was a
+	 * help text saying the defaults apply when the box is empty — true, and
+	 * useless once it is not. Exclusions are a safety list; the failure mode of
+	 * getting them wrong is publishing a form into every `.md`, so they add up
+	 * rather than trade off.
+	 *
+	 * Removing a default is therefore no longer possible from the panel, and
+	 * that is the accepted cost: it stays available through
+	 * `sysmda_markdown_excluded_*`, which runs at priority 10, before the
+	 * closure feeding this in at 20 — so site code can still hand a narrowed
+	 * list through, and only the textarea is additive.
+	 *
+	 * @param string[] $defaults Incoming filter value (the built-in list).
+	 * @return string[]
+	 */
+	private function option_to_merged_list( string $option, array $defaults ): array {
+		return array_values( array_unique( array_merge( $defaults, $this->option_lines( $option ) ) ) );
+	}
+
+	/**
+	 * Non-empty trimmed lines of a textarea option, or an empty array.
+	 *
+	 * @return string[]
+	 */
+	private function option_lines( string $option ): array {
+		$v = get_option( $option );
+
+		if ( false === $v || '' === $v ) {
+			return array();
+		}
+
+		return array_values( array_filter( array_map( 'trim', explode( "\n", (string) $v ) ) ) );
 	}
 
 	// ─── Intro sezioni ──────────────────────────────────────────────────────────
@@ -1044,15 +1087,15 @@ class AdminSettings {
 	}
 
 	public function field_excluded_shortcodes(): void {
-		$this->render_exclusion_field( 'sysmda_excluded_shortcodes', self::DEFAULT_SHORTCODES );
+		$this->render_exclusion_field( 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED );
 	}
 
 	public function field_excluded_block_names(): void {
-		$this->render_exclusion_field( 'sysmda_excluded_block_names', self::DEFAULT_BLOCK_NAMES );
+		$this->render_exclusion_field( 'sysmda_excluded_block_names', BlockCleaner::DEFAULT_EXCLUDED );
 	}
 
 	public function field_excluded_classes(): void {
-		$this->render_exclusion_field( 'sysmda_excluded_classes', self::DEFAULT_CSS_CLASSES );
+		$this->render_exclusion_field( 'sysmda_excluded_classes', ContentRenderer::EXCLUDED_CLASSES );
 	}
 
 	/**
@@ -1063,7 +1106,7 @@ class AdminSettings {
 	private function render_exclusion_field( string $option, array $defaults ): void {
 		$v = (string) get_option( $option, '' );
 		echo '<textarea name="' . esc_attr( $option ) . '" rows="4" class="code sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sysmda-help">' . esc_html__( 'One per line. Leave empty to use the built-in defaults.', 'system-markdown-alternate' ) . '</p>';
+		echo '<p class="description sysmda-help">' . esc_html__( 'One per line. These are added to the built-in defaults below, which always apply — removing one of them requires a filter.', 'system-markdown-alternate' ) . '</p>';
 		echo '<details class="sysmda-defaults-toggle"><summary>' . esc_html__( 'View built-in defaults', 'system-markdown-alternate' ) . '</summary>';
 		echo '<pre class="sysmda-defaults">' . esc_html( implode( "\n", $defaults ) ) . '</pre>';
 		echo '</details>';

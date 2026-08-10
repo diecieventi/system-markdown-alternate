@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.39.0
+Stable tag: 0.40.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -176,6 +176,13 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.40.0 =
+
+* Changed: the three exclusion settings (shortcodes, blocks, CSS classes) now **add to** the built-in defaults instead of replacing them. Previously, typing a single tag into one of those boxes silently dropped every default in it, so a site adding one newsletter shortcode also stopped excluding Contact Form 7, Gravity Forms, WPForms, MailerLite and LuckyWP TOC. Removing a built-in default now requires the matching `sysmda_markdown_excluded_*` filter.
+* Fixed: an excluded shortcode written inside a code block or an inline code span was deleted from it. An article documenting `[contact-form-7 id="42"]` had the tag removed from its own example, publishing `echo do_shortcode('');`. Expansion had been protected since 0.38.1; removal had not, so the rule applied to one half of the pipeline only.
+* Note: this also applies to the plugin's own `[sysmda_md_actions]` tag — written inside a code sample it is now shown as documentation, while a bare one is still removed and neither ever renders into the Markdown.
+* Added: `ez-toc` (Easy Table of Contents) to the default excluded shortcodes.
+
 = 0.39.0 =
 
 * Added: `[sysmda_md_actions]` renders an opt-in GitHub-style split button. The primary action copies the complete Markdown document; its dropdown repeats the copy action and adds new-tab view and direct download actions.
@@ -186,12 +193,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Fixed: the front-matter `description` still exposed the text of an excluded *block* — one excluded by name from the "Excluded blocks" setting, or through its CSS class when the saved markup does not repeat that class. 0.38.1 closed this for excluded regions marked with a class, but not for whole blocks, so the body dropped them and the description (and enriched `/llms.txt`) published them.
 * Development: the build script now checks its dependencies before it starts and only replaces the packaged zip once the build has succeeded. No effect on the plugin itself.
-
-= 0.38.1 =
-
-* Fixed: a shortcode written inside a block — typed into a paragraph, in a Custom HTML block or in the core Shortcode block — reached the Markdown as literal `[tag]` text instead of being expanded.
-* Fixed: a shortcode *shown as an example* inside a code block or an inline code span is no longer expanded, so code samples are published as written.
-* Fixed: a section marked `md-exclude` (or `no-md`) could still be summarised into the front-matter `description` of posts with no SEO description and no excerpt, publishing text the body deliberately leaves out.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

@@ -1,7 +1,23 @@
 # Exclusion scanner — discovering what the `.md` is actually publishing
 
-> Implementation plan. Status: **not started**, greenlit by the D1 measurement of
-> 10 August 2026 (§2). Written against `main @ 0.38.2`, revised for `0.39.0`.
+> Implementation plan. Status: **parked, not started.** Written against
+> `main @ 0.38.2`, revised for `0.39.0`.
+>
+> Deferred by the maintainer in August 2026, after the measurement in §2 and
+> before any code: scanning the content corpus is work to do "when the plugin is
+> more proven and reliable", and neither the staging site nor the reference site
+> currently holds a corpus worth scanning — answering the question would mean
+> installing the plugin on production sites first. The immediate half of the
+> problem was taken instead, and shipped in `0.40.0`: the exclusion lists now
+> accumulate rather than replace, excluded tags survive inside code samples, and
+> `ez-toc` joined the defaults. Those close the *damage*; this plan is about
+> *discovery*, which stays open.
+>
+> The gate for picking it up is the one thing it was always waiting for: a real
+> corpus to point it at. A single read-only SQL count of shortcode tags over a
+> production site answers whether the answer is three tags or three hundred, and
+> that number decides between a one-off query, the reduced form in §4.1 and the
+> full page.
 >
 > This plan does not reopen the design: the shape below was fixed while the idea
 > was parked, and every constraint in §3 is blocking. If the work is picked up,
