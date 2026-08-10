@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.41.0
+Stable tag: 0.41.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -176,6 +176,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.41.1 =
+
+* Fixed: an actions shortcode first rendered after WordPress had already printed footer scripts stayed hidden because its JavaScript missed the consumed queue. The late path now prints only its own registered handle immediately through the WordPress scripts API; earlier renders still use the normal footer queue and repeated calls remain de-duplicated.
+
 = 0.41.0 =
 
 * Changed: one independently designed converter now owns both inline `<code>` and block `<pre>` output through the public `league/html-to-markdown` element-value API. The two adapted converter files are removed; the general conversion engine and its bundled MIT license remain unchanged.
@@ -187,13 +191,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Security: authenticated `/llms.txt` requests now rebuild their visitor-context body without reading or populating the shared anonymous cache. Their response remains private and non-storable; anonymous caching is unchanged.
 * Fixed: synced patterns referenced from generic ACF source fields now participate transitively in the `.md` cache validator, so editing a pattern cannot leave a stale body or `304` behind.
 * Fixed: removing the last selected custom-taxonomy term, featured image or Rank Math description can no longer make `If-Modified-Since` trust an older post timestamp again. Selected-but-empty taxonomy state stays fingerprinted; disappearing metadata invalidates through the deferred salt.
-
-= 0.40.0 =
-
-* Changed: the three exclusion settings (shortcodes, blocks, CSS classes) now **add to** the built-in defaults instead of replacing them. Previously, typing a single tag into one of those boxes silently dropped every default in it, so a site adding one newsletter shortcode also stopped excluding Contact Form 7, Gravity Forms, WPForms, MailerLite and LuckyWP TOC. Removing a built-in default now requires the matching `sysmda_markdown_excluded_*` filter.
-* Fixed: an excluded shortcode written inside a code block or an inline code span was deleted from it. An article documenting `[contact-form-7 id="42"]` had the tag removed from its own example, publishing `echo do_shortcode('');`. Expansion had been protected since 0.38.1; removal had not, so the rule applied to one half of the pipeline only.
-* Note: this also applies to the plugin's own `[sysmda_md_actions]` tag — written inside a code sample it is now shown as documentation, while a bare one is still removed and neither ever renders into the Markdown.
-* Added to the default excluded shortcodes: `fluentform`, the newsletter forms `mc4wp_form`, `mailpoet_form`, `newsletter_form` and `sibwp_form`, and the tables of contents `ez-toc`, `ez-toc-widget-sticky` and `toc`.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

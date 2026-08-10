@@ -9,6 +9,17 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.41.1
+
+* **An actions shortcode first rendered after the footer-script pass now
+  initializes normally.** A template or plugin callback running after
+  WordPress's priority-20 footer printer could enqueue `md-actions.js` after the
+  queue had already been consumed. The component starts hidden until that
+  script initializes it, so the valid shortcode remained invisible. The late
+  path now prints only its registered handle through the WordPress scripts API,
+  preserving localization and dependency handling; earlier renders still use
+  the normal footer queue and repeated calls remain de-duplicated.
+
 ## 0.41.0
 
 * **One independently designed converter now owns both `<code>` and `<pre>`.**
