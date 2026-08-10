@@ -449,6 +449,14 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
+- **Independent code-element converter rewrite**
+  (`docs/code-converter-independent-rewrite-plan.md`): proposed planning only,
+  **implementation blocked** until the parallel code review is complete and its
+  findings have been reconciled with the plan. The default direction replaces
+  `SafeCodeConverter` + `SafePreformattedConverter` with one independently
+  designed `code`/`pre` converter while retaining `league/html-to-markdown` as
+  the general conversion engine. Do not edit runtime code from this plan before
+  the maintainer closes its review gate.
 
 ### To check next time (not urgent, parked here)
 
