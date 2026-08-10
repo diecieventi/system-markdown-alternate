@@ -20,6 +20,8 @@ on:
       - 'system-markdown-alternate/system-markdown-alternate.php'
       - 'system-markdown-alternate/readme.txt'
       - 'CHANGELOG.md'
+      - 'bin/release-tag.sh'
+      - '.github/workflows/release-tag.yml'
   workflow_dispatch:
     inputs:
       dry_run:
