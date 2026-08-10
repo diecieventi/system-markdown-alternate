@@ -26,6 +26,9 @@ class MarkdownActions {
 	/** Handle shared by the stylesheet and script. */
 	const HANDLE = 'sysmda-md-actions';
 
+	/** Whether this request already has the late-style footer callback. */
+	private static $late_style_hooked = false;
+
 	/**
 	 * Registers the shortcode and front-end assets.
 	 */
@@ -113,6 +116,32 @@ class MarkdownActions {
 
 		if ( wp_script_is( self::HANDLE, 'registered' ) ) {
 			wp_enqueue_script( self::HANDLE );
+		}
+
+		/*
+		 * A template/widget/secondary-loop shortcode may first render after
+		 * wp_print_styles has already emptied the head queue. Scripts have a
+		 * native footer queue; styles do not, so explicitly print this one before
+		 * the footer scripts reveal the hidden component. If rendering itself is
+		 * already happening inside wp_footer, the earlier priority has passed and
+		 * the style must be printed immediately.
+		 */
+		if ( did_action( 'wp_print_styles' ) && ! wp_style_is( self::HANDLE, 'done' ) ) {
+			if ( doing_action( 'wp_footer' ) ) {
+				self::print_late_styles();
+			} elseif ( ! self::$late_style_hooked ) {
+				add_action( 'wp_footer', array( self::class, 'print_late_styles' ), 0 );
+				self::$late_style_hooked = true;
+			}
+		}
+	}
+
+	/**
+	 * Prints a stylesheet enqueued too late for wp_head, at most once.
+	 */
+	public static function print_late_styles(): void {
+		if ( wp_style_is( self::HANDLE, 'enqueued' ) && ! wp_style_is( self::HANDLE, 'done' ) ) {
+			wp_print_styles( self::HANDLE );
 		}
 	}
 

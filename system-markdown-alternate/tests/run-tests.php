@@ -443,6 +443,37 @@ function wp_enqueue_script( $handle ) {
 	return true;
 }
 
+function did_action( $hook_name ) {
+	return isset( $GLOBALS['sysmda_test_did_actions'][ $hook_name ] )
+		? $GLOBALS['sysmda_test_did_actions'][ $hook_name ]
+		: 0;
+}
+
+function doing_action( $hook_name = null ) {
+	return isset( $GLOBALS['sysmda_test_doing_action'] ) && $hook_name === $GLOBALS['sysmda_test_doing_action'];
+}
+
+function add_action( $hook_name, $callback, $priority = 10, $accepted_args = 1 ) {
+	$GLOBALS['sysmda_test_actions'][ $hook_name ][ $priority ][] = $callback;
+	return true;
+}
+
+function wp_print_styles( $handles = false ) {
+	$handles = is_array( $handles ) ? $handles : array( $handles );
+
+	foreach ( $handles as $handle ) {
+		if ( isset( $GLOBALS['sysmda_test_assets']['styles'][ $handle ] ) ) {
+			$GLOBALS['sysmda_test_assets']['styles'][ $handle ]['done'] = true;
+			$GLOBALS['sysmda_test_assets']['styles'][ $handle ]['print_count'] =
+				isset( $GLOBALS['sysmda_test_assets']['styles'][ $handle ]['print_count'] )
+					? $GLOBALS['sysmda_test_assets']['styles'][ $handle ]['print_count'] + 1
+					: 1;
+		}
+	}
+
+	return array();
+}
+
 /**
  * Stub: records the status codes the conditional-request logic would send, so a
  * 304 can be asserted without a real HTTP response ($GLOBALS reset per test).
@@ -2752,6 +2783,7 @@ $sysmda_actions_post = $sysmda_mk_post(
 $GLOBALS['sysmda_test_posts'][777] = $sysmda_actions_post;
 
 $sysmda_actions = new MarkdownActions();
+$GLOBALS['sysmda_test_did_actions']['wp_print_styles'] = 1;
 $sysmda_rendered_actions = $sysmda_actions->render_shortcode( array( 'id' => 777 ) );
 check( 'actions shortcode: explicit servable post renders', true, false !== strpos( $sysmda_rendered_actions, 'https://example.com/actions-post.md' ) );
 check( 'actions shortcode: download uses the shared filename builder', true, false !== strpos( $sysmda_rendered_actions, 'download="actions-post.md"' ) );
@@ -2759,6 +2791,12 @@ check( 'actions shortcode: late render registers its stylesheet', true, wp_style
 check( 'actions shortcode: late render registers its script', true, wp_script_is( MarkdownActions::HANDLE, 'registered' ) );
 check( 'actions shortcode: late render enqueues its stylesheet', true, wp_style_is( MarkdownActions::HANDLE, 'enqueued' ) );
 check( 'actions shortcode: late render enqueues its script', true, wp_script_is( MarkdownActions::HANDLE, 'enqueued' ) );
+check( 'actions shortcode: late render schedules a footer style printer', 1, count( $GLOBALS['sysmda_test_actions']['wp_footer'][0] ) );
+
+call_user_func( $GLOBALS['sysmda_test_actions']['wp_footer'][0][0] );
+call_user_func( $GLOBALS['sysmda_test_actions']['wp_footer'][0][0] );
+check( 'actions shortcode: late stylesheet is marked done', true, wp_style_is( MarkdownActions::HANDLE, 'done' ) );
+check( 'actions shortcode: late stylesheet prints once', 1, $GLOBALS['sysmda_test_assets']['styles'][ MarkdownActions::HANDLE ]['print_count'] );
 
 $GLOBALS['sysmda_test_posts'][778] = $sysmda_mk_post(
 	array(
@@ -2773,6 +2811,7 @@ check( 'actions shortcode: unknown ID produces no control', '', $sysmda_actions-
 
 unset( $GLOBALS['sysmda_test_posts'][777], $GLOBALS['sysmda_test_posts'][778] );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
+unset( $GLOBALS['sysmda_test_did_actions']['wp_print_styles'] );
 
 // ─── CodeFence (pure logic, no library needed) ───────────────────────────────
 

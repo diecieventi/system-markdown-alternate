@@ -180,7 +180,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Added: `[sysmda_md_actions]` renders an opt-in GitHub-style split button. The primary action copies the complete Markdown document; its dropdown repeats the copy action and adds new-tab view and direct download actions.
 * The menu is keyboard accessible, closes on Escape/outside focus, announces copy feedback, and repositions left/right or above/below to stay inside the viewport. It is moved outside theme layout containers while open so overflow rules cannot clip it.
-* Its minimal CSS and dependency-free JavaScript load only on pages that render the shortcode, with early detection for post content and a late fallback for templates, widgets and secondary loops.
+* Its minimal CSS and dependency-free JavaScript load only on pages that render the shortcode, with early detection for post content and a late fallback for templates, widgets and secondary loops. Late placements explicitly print their stylesheet before footer scripts, so they remain styled even when first rendered after the document head.
 
 = 0.38.2 =
 

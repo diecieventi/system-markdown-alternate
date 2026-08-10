@@ -31,11 +31,13 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
 * **Assets remain opt-in with the shortcode.** The small namespaced stylesheet
   and dependency-free script are enqueued early when `has_shortcode()` can see
   the control in the queried post, and from the render callback as a late
-  fallback for templates, widgets and secondary loops. WordPress de-duplicates
-  both paths, and pages that render no control load neither asset. The download
-  stays the existing client-only contract: a same-origin `download` attribute
-  and `MetadataBuilder::download_filename()`, with no new request parameter or
-  `Content-Disposition` response.
+  fallback for templates, widgets and secondary loops. If that fallback runs
+  after `wp_head`, the stylesheet is explicitly printed before footer scripts;
+  merely enqueuing it there would leave the documented late placement unstyled.
+  WordPress de-duplicates both paths, and pages that render no control load
+  neither asset. The download stays the existing client-only contract: a
+  same-origin `download` attribute and `MetadataBuilder::download_filename()`,
+  with no new request parameter or `Content-Disposition` response.
 * The root stays hidden until JavaScript has initialized it, so a failed or
   unavailable clipboard API never leaves a dead copy action or an unpositioned
   menu. Copying uses the promise-backed `ClipboardItem` route Safari requires,

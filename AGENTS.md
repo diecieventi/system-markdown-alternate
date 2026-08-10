@@ -337,10 +337,12 @@ The v1 scope is done and widely exceeded. Implemented:
   view plus direct download. It is fixed-scope — no automatic placement,
   settings, item/label filters or theme-wide asset load. CSS/JS enqueue only
   when the shortcode renders (early when it sits in the queried content, late
-  for a template/widget/secondary loop). JavaScript moves the dropdown to
-  `document.body`, positions it against the viewport, flips left/right and
-  above/below, and clamps it inside an 8 px edge inset, so theme overflow and
-  narrow columns cannot clip it. The root is hidden until setup, copy uses the
+  for a template/widget/secondary loop). A late render after `wp_head` explicitly
+  prints the enqueued stylesheet at the start of `wp_footer`; unlike scripts,
+  WordPress has no automatic footer queue for styles. JavaScript moves the
+  dropdown to `document.body`, positions it against the viewport, flips
+  left/right and above/below, and clamps it inside an 8 px edge inset, so theme
+  overflow and narrow columns cannot clip it. The root is hidden until setup, copy uses the
   Safari-safe promise-backed `ClipboardItem` path with fallbacks, and a response
   whose type is not `text/markdown` is refused rather than copied as HTML. The
   whole shortcode is in `ShortcodeCleaner::ALWAYS_EXCLUDED`: interface chrome
