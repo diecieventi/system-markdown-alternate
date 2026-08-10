@@ -159,6 +159,20 @@ The v1 scope is done and widely exceeded. Implemented:
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
+  - **the exclusion lists in the panel ADD to the built-in defaults; they do
+    not replace them** (`0.40.0`). The old semantics were a trap with no visible
+    symptom: `AdminSettings::option_to_list()` returned the defaults only while
+    the textarea was empty, so typing one tag into "Excluded shortcodes" dropped
+    all five built-in ones in the same save. Exclusions are a safety list — the
+    cost of getting one wrong is a form published into every `.md` — so they
+    accumulate. `option_to_merged_list()` is used by the three exclusion filters
+    only; `sysmda_llms_txt_key_content` keeps replace semantics, because a
+    curated list is the user's whole answer rather than an addition to one.
+    Removing a default is deliberately filter-only (priority 10, before the
+    closure that appends at 20). The panel's "built-in defaults" disclosure now
+    reads `ShortcodeCleaner::DEFAULT_EXCLUDED` / `BlockCleaner::DEFAULT_EXCLUDED`
+    / `ContentRenderer::EXCLUDED_CLASSES` instead of keeping a second copy that
+    could drift from what is actually applied.
   - **shortcodes are expanded on both branches, and never inside code**
     (`0.38.1`, `expand_shortcodes()`). Two halves of one rule, and the second is
     why the fix is a single shared helper rather than a line added to the block
@@ -176,6 +190,34 @@ The v1 scope is done and widely exceeded. Implemented:
     WordPress's own `[[tag]]` escape already covers literal brackets outside
     code. A masking failure falls back to expanding unprotected, because
     publishing the raw tag would be the worse of the two.
+  - **and the same masking guards REMOVAL, not just expansion** (`0.40.0`,
+    `CodeRegions`). `0.38.1` shipped exactly half the rule: `strip()` runs
+    before all of the above, on the raw source, and knew nothing about code, so
+    an article documenting an *excluded* tag had it deleted from its own
+    example — `echo do_shortcode('');`. One rule, one content, two halves of the
+    pipeline, one of them missing. The masking therefore lives in a shared class
+    used by both passes, which is the point: a helper cannot be applied on one
+    side and forgotten on the other, whereas two copies of a regex demonstrably
+    can. Two properties of that helper are load-bearing and were both got wrong
+    first time round (caught by Codex on PR #72 and by a test):
+    - **The transform runs at most once.** An enclosing shortcode may rewrite,
+      escape or discard the body it is handed, so a placeholder can legitimately
+      fail to come back. The first version answered that by re-running the
+      transform on the *unmasked* string, which is worse than the problem twice
+      over: it expands `[gallery]` inside the very code sample the class exists
+      to protect, and it repeats every wrapper's side effects. Surviving regions
+      are restored, a consumed one stays consumed — that is the wrapper's
+      decision, not this helper's to undo. `strtr()` leaves absent keys alone, so
+      the partial restore needs no extra pass. The single exception is a
+      *masking* failure, where nothing was masked and the transform has not run
+      at all.
+    - **The placeholder is `[A-Za-z0-9_]` only.** It is handed to arbitrary
+      shortcode callbacks, and the things they routinely do to their own body are
+      exactly what would mangle a livelier token: `esc_html()` rewrites an
+      HTML-comment-shaped one, and `wptexturize()` — reached through any callback
+      that runs `the_content` — turns `--` into an en dash. A word-character
+      token survives both and is restored normally, which removes the most
+      plausible way for a region to go missing instead of handling it afterwards.
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
@@ -380,11 +422,33 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`): the
-  only implementation plan still open. Greenlit, **not started**, and gated on
-  the WPML/Polylang staging reconnaissance described inside — the current
-  plan's central query assumption is not reliable and must be verified against
-  real plugin behaviour before any code is written.
+- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`):
+  greenlit, **not started**, and gated on the WPML/Polylang staging
+  reconnaissance described inside — the current plan's central query assumption
+  is not reliable and must be verified against real plugin behaviour before any
+  code is written.
+- **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
+  started** — deferred August 2026, see the status note at the top of the plan.
+  The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,
+  `ez-toc` added); discovery is what remains, and it is waiting on a real corpus
+  to point at. An admin page that inventories the shortcode tags and block names
+  actually present in the servable corpus, so the three exclusion lists can be
+  filled in from evidence instead of guesswork. Greenlit by a measurement rather
+  than an idea: `0.38.1` made a registered shortcode inside block content expand
+  in full into every `.md` that contains it, and a staging reproduction on
+  10 August 2026 confirmed it end to end (a newsletter form's label, button and
+  GDPR paragraph landing in the middle of the prose). What that measurement
+  cannot say is whether any real corpus *contains* such a shortcode — which is
+  exactly what the scanner exists to answer, and why it is the cheapest
+  available instrument rather than a feature looking for a use. The design is
+  fixed and its constraints are all blocking; two are easy to get wrong and are
+  called out here as well: applying a suggestion must write **the current
+  effective list plus the new tag** (a non-empty option *replaces* the defaults,
+  see `AdminSettings::option_to_list()`), and the results option must be
+  **excluded from the settings-save cache-salt bump**, like the hit-counter
+  buckets, or every scan invalidates the whole cache. It informs and never
+  applies on its own — the same line as "never auto-detect which taxonomies to
+  emit".
 
 ### To check next time (not urgent, parked here)
 
@@ -896,6 +960,14 @@ The v1 scope is done and widely exceeded. Implemented:
   are gone; the options stay in `uninstall.php` as legacy keys, and
   `ShortcodeCleaner::ALWAYS_EXCLUDED` keeps stripping `[sysmda_md_button]` so a
   tag left in old content does not surface as literal text in the `.md`.
+  **Narrowed in `0.40.0`, deliberately:** that stripping now stops at `<pre>`
+  and `<code>`, like every other exclusion. The rule above is about a *leftover*
+  — a bare tag sitting in an old paragraph — and that is unchanged. A tag inside
+  a code span is an author documenting the shortcode (this plugin's own settings
+  page presents both tags exactly that way), and removing it would gut an
+  article about this plugin for precisely the reason it used to gut one about
+  Contact Form 7. What the rule protects is untouched either way: a masked
+  region is never expanded, so the control never *renders* into the Markdown.
   **Narrow exception, by concrete maintainer request (`0.39.0`):**
   `[sysmda_md_actions]` is an explicit shortcode with exactly three fixed
   actions (copy the document, open it in a new tab, download it). It does not
@@ -1164,6 +1236,7 @@ running code at the WP level.
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + the three Safe* overrides)
         ├── CodeFence.php           ← content-sized code delimiters (pure logic, no WP/library deps)
+        ├── CodeRegions.php         ← masks <pre>/<code> around a transform; shared by shortcode expansion AND removal
         ├── SafeCodeConverter.php        ← replaces the library's <code> converter
         ├── SafePreformattedConverter.php ← replaces the library's <pre> converter
         ├── SafeParagraphConverter.php   ← wraps the library's <p> converter (escapes a prose fence)

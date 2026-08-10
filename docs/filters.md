@@ -479,8 +479,28 @@ respectively.
 | Kind | Defaults |
 |------|----------|
 | Block names | `gravityforms/form`, `contact-form-7/contact-form-selector`, `wpforms/form-selector`, `mailerlite/form`, `luckywp/toc` |
-| Shortcodes | `contact-form-7`, `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc` |
+| Shortcodes | `contact-form-7`, `gravityform`, `wpforms`, `fluentform`, `mailerlite_form`, `mc4wp_form`, `mailpoet_form`, `newsletter_form`, `sibwp_form`, `lwptoc`, `ez-toc`, `ez-toc-widget-sticky`, `toc` |
 | CSS classes | `no-md`, `md-exclude`, `exclude-from-markdown` |
+
+The panel's three exclusion textareas **add to** these lists rather than replace
+them (since `0.40.0`; before that, typing anything into a box dropped every
+default in it). So the filter is now the only way to *remove* a default — it runs
+at priority 10, before the closure that appends the saved lines at 20:
+
+```php
+// Publish the LuckyWP table of contents in the .md after all.
+add_filter( 'sysmda_markdown_excluded_shortcodes', function ( $tags ) {
+    return array_values( array_diff( $tags, array( 'lwptoc' ) ) );
+} );
+```
+
+Two tags cannot be removed by any means: `ShortcodeCleaner::ALWAYS_EXCLUDED`
+(`sysmda_md_button`, `sysmda_md_actions`) is merged in after the filter, because
+this plugin's own interface controls must never appear in its own output.
+
+Excluded shortcodes are not stripped from inside `<pre>` or `<code>`: a tag in a
+code sample is being shown, not used. The same masking protects it from
+expansion (see `CodeRegions`).
 
 ## Examples
 

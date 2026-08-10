@@ -251,16 +251,27 @@ Removed from the body unless the corresponding filter changes them:
   `contact-form-7/contact-form-selector`, `wpforms/form-selector`,
   `mailerlite/form`, `luckywp/toc`.
 - **Shortcodes** (`sysmda_markdown_excluded_shortcodes`): `contact-form-7`,
-  `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc`.
+  `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc`, and — since `0.40.0` —
+  `ez-toc`, `toc`, `ez-toc-widget-sticky`, `fluentform`, `mc4wp_form`,
+  `mailpoet_form`, `newsletter_form`, `sibwp_form`.
 - **CSS classes** (`sysmda_markdown_excluded_classes`): `no-md`, `md-exclude`,
   `exclude-from-markdown`.
+
+Since `0.40.0` the panel's three exclusion textareas **add to** these lists
+instead of replacing them, so the defaults above always apply; the matching
+filter is what removes one.
+
+**None of these are stripped inside `<pre>` or `<code>`** (also `0.40.0`): a tag
+in a code sample is being shown, not used, and the same masking already keeps it
+from being expanded.
 
 Removed **unconditionally**, whatever the filters and the panel say:
 
 - **`[sysmda_md_button]`**, the front-end button removed in 0.34.0. The tag is
   still stripped so one left behind in old content does not surface as literal
-  text, and that holds on sites that have replaced the excluded-shortcodes list
-  from the settings page.
+  text, and that holds however the excluded-shortcodes list is configured. It is
+  subject to the code-region rule above: written inside a code sample it is
+  documentation and is shown.
 - **`[sysmda_md_actions]`**, the current opt-in reader control. Its buttons,
   links and icons are interface chrome, never article content, so the entire
   shortcode is removed before the Markdown conversion.

@@ -9,6 +9,51 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.40.0
+
+* **The three exclusion settings now add to the built-in defaults instead of
+  replacing them.** Typing a single tag into "Excluded shortcodes" used to drop
+  all five built-in ones with it: a site adding one newsletter tag silently
+  stopped excluding `contact-form-7`, `gravityform`, `wpforms`,
+  `mailerlite_form` and `lwptoc`, and the only hint was a help text describing
+  the empty case. Exclusions are a safety list — the failure mode of getting one
+  wrong is publishing a form into every `.md` — so they accumulate rather than
+  trade off. Removing a built-in default is still possible, through the matching
+  `sysmda_markdown_excluded_*` filter, which runs at priority 10 before the
+  closure that appends the saved lines at 20; only the textarea is additive.
+  `ShortcodeCleaner::ALWAYS_EXCLUDED` remains removable by nothing.
+* **An excluded shortcode was deleted from inside code samples.** An article
+  documenting `[contact-form-7 id="42"]` in a code block had the tag stripped
+  out of its own example, publishing `echo do_shortcode('');`. `0.38.1`
+  protected code regions from shortcode *expansion*, but the removal pass
+  (`ShortcodeCleaner::strip()`) runs earlier, on the raw source, and had no
+  notion of code — so one rule was applied to one half of the pipeline. The
+  masking now lives in `CodeRegions` and is shared by both, which is what stops
+  it being applied to one side and forgotten on the other. Two properties of it
+  are load-bearing: the transform runs **at most once** — an enclosing shortcode
+  may rewrite, escape or discard the body it is handed, and re-running on the
+  unmasked string to recover a lost placeholder would expand shortcodes inside
+  the very code sample this protects and repeat every wrapper side effect — and
+  the placeholder is made of word characters only, so `esc_html()` and
+  `wptexturize()` (which turns `--` into an en dash) leave it intact where a
+  comment-shaped token would not.
+* Consequence worth stating: the code protection applies to
+  `ShortcodeCleaner::ALWAYS_EXCLUDED` as well, so `[sysmda_md_button]` and
+  `[sysmda_md_actions]` written inside a code sample are now shown instead of
+  removed. The 0.34.0 rule they exist for — a bare tag left in old content must
+  not surface as literal text — is unchanged, and neither can ever *render* into
+  the Markdown, because a masked region is never expanded.
+* The panel's "View built-in defaults" lists are read from the classes that
+  apply them instead of being copied into `AdminSettings`, so they cannot drift
+  from what the plugin actually excludes.
+* Added to the default excluded shortcodes, all verified against the plugins
+  that register them: `fluentform`; the newsletter subscription forms
+  `mc4wp_form`, `mailpoet_form`, `newsletter_form` and `sibwp_form` — the
+  category that produced the original symptom; and the tables of contents
+  `ez-toc`, `ez-toc-widget-sticky` and `toc`. Deliberately **not** added: the
+  bare `newsletter` tag, which is The Newsletter Plugin's public-page shortcode
+  and far too generic a word to claim by default.
+
 ## 0.39.0
 
 * **Added `[sysmda_md_actions]`, an explicit reader-facing Markdown control.**

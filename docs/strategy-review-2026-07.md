@@ -2,9 +2,17 @@
 
 > Historical strategy note from July 2026, reduced to the reasoning that still
 > informs future decisions. The work committed by the original review has
-> shipped. The only open implementation plan is
-> [`llms-txt-multilingual-plan.md`](llms-txt-multilingual-plan.md); everything
-> below is deliberately parked, not planned.
+> shipped. The open implementation plans are
+> [`llms-txt-multilingual-plan.md`](llms-txt-multilingual-plan.md) and
+> [`exclusion-scanner-plan.md`](exclusion-scanner-plan.md); everything below is
+> deliberately parked, not planned.
+>
+> Note on the *Server-side diagnostics* entry below: the exclusion scanner is
+> **not** that idea coming back. It renders nothing, previews no post, and
+> estimates no sizes — it inventories shortcode tags and block names in the
+> source so the exclusion lists can be filled in. The brittle signals listed
+> there (`strip_tags()`, `url_to_postid()`, in-process response comparison) are
+> among the reasons its design is static and frequency-based, and they stay out.
 
 ## Gate for reconsideration
 

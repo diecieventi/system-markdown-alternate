@@ -555,6 +555,7 @@ if ( $GLOBALS['sysmda_has_vendor'] ) {
 }
 
 require __DIR__ . '/../src/AcceptNegotiator.php';
+require __DIR__ . '/../src/CodeRegions.php';
 require __DIR__ . '/../src/ShortcodeCleaner.php';
 require __DIR__ . '/../src/BlockCleaner.php';
 require __DIR__ . '/../src/ContentRenderer.php';
@@ -583,6 +584,7 @@ use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
 use Diecieventi\SystemMarkdownAlternate\CodeFence;
+use Diecieventi\SystemMarkdownAlternate\CodeRegions;
 use Diecieventi\SystemMarkdownAlternate\ContentRenderer;
 use Diecieventi\SystemMarkdownAlternate\PostSupport;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
@@ -3380,6 +3382,214 @@ check(
 	$sysmda_btn_cleaner->strip( $sysmda_actions_source )
 );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] );
+
+// ─── CodeRegions: a code sample is shown, not executed ─────────────────────
+
+/*
+ * A transform shaped like the real ones: it rewrites `[tag]` syntax and leaves
+ * everything else — HTML comments included — alone. That last part is what
+ * makes the masking work, and the fallback test below is what happens when a
+ * transform does not honour it.
+ */
+$sysmda_detag = static function ( string $s ): string {
+	return (string) preg_replace( '/\[[a-z0-9_-]+\]/i', 'GONE', $s );
+};
+
+check(
+	'code regions: the transform runs on ordinary text',
+	'before GONE after',
+	CodeRegions::protect( 'before [tag] after', $sysmda_detag )
+);
+check(
+	'code regions: a <pre> body is hidden from the transform',
+	'GONE <pre>[tag]</pre>',
+	CodeRegions::protect( '[tag] <pre>[tag]</pre>', $sysmda_detag )
+);
+check(
+	'code regions: an inline <code> body is hidden too',
+	'A <code>[tag]</code> GONE',
+	CodeRegions::protect( 'A <code>[tag]</code> [tag]', $sysmda_detag )
+);
+check(
+	'code regions: every region is restored, not just the first',
+	'<pre>[one]</pre> GONE <code>[two]</code>',
+	CodeRegions::protect( '<pre>[one]</pre> [x] <code>[two]</code>', $sysmda_detag )
+);
+check(
+	'code regions: attributes on the opening tag stay with the hidden region',
+	'<pre class="wp-block-code">[tag]</pre>',
+	CodeRegions::protect( '<pre class="wp-block-code">[tag]</pre>', $sysmda_detag )
+);
+check(
+	'code regions: content with no code region is transformed normally',
+	'GONE and GONE',
+	CodeRegions::protect( '[a] and [b]', $sysmda_detag )
+);
+
+/*
+ * An enclosing shortcode may rewrite, escape or discard the body it is handed,
+ * so a placeholder can legitimately fail to come back. The rule is that the
+ * transform still runs exactly once: re-running it on the unmasked string to
+ * "recover" would expand shortcodes inside the very code sample this class
+ * protects, and would repeat every wrapper side effect. Raised by Codex on
+ * PR #72 against the first version, which did exactly that.
+ */
+$sysmda_cr_calls = 0;
+$sysmda_eater    = static function ( string $s ) use ( &$sysmda_cr_calls ): string {
+	++$sysmda_cr_calls;
+
+	// Stands in for a wrapper that consumed its body.
+	return (string) preg_replace( '/sysmda_code_[0-9a-f]+_\d+/', 'EATEN', $s );
+};
+
+check(
+	'code regions: a consumed placeholder is not recovered by re-running',
+	'EATEN',
+	CodeRegions::protect( '<pre>[gallery]</pre>', $sysmda_eater )
+);
+check(
+	'code regions: the transform ran exactly once',
+	1,
+	$sysmda_cr_calls
+);
+
+// The realistic way a placeholder gets mangled is a wrapper escaping its body.
+// A word-character token survives that, so the region is restored normally
+// instead of being lost — which is why the token is not comment-shaped.
+check(
+	'code regions: an escaping transform still restores the region',
+	'&lt;b&gt;x&lt;/b&gt; <pre>[gallery]</pre>',
+	CodeRegions::protect(
+		'<b>x</b> <pre>[gallery]</pre>',
+		static function ( string $s ): string {
+			return htmlspecialchars( $s, ENT_NOQUOTES );
+		}
+	)
+);
+
+// ─── ShortcodeCleaner: excluded tags survive inside code samples ───────────
+
+/*
+ * The regression this pair exists for. `strip()` runs on the raw source, before
+ * anything is rendered, and had no notion of code: an article documenting an
+ * excluded shortcode had it deleted from its own example, leaving
+ * `echo do_shortcode('');`. Expansion had been protected since 0.38.1; removal
+ * had not, so the same rule was applied to one half of the pipeline only.
+ * Reproduced on staging before the fix.
+ */
+$sysmda_code_cleaner = new ShortcodeCleaner();
+
+check(
+	'strip: an excluded tag inside <pre><code> is preserved',
+	"<pre><code>echo do_shortcode('[contact-form-7 id=\"42\"]');</code></pre>",
+	$sysmda_code_cleaner->strip( "<pre><code>echo do_shortcode('[contact-form-7 id=\"42\"]');</code></pre>" )
+);
+check(
+	'strip: an excluded tag inside inline <code> is preserved',
+	'Write <code>[lwptoc]</code> to add an index.',
+	$sysmda_code_cleaner->strip( 'Write <code>[lwptoc]</code> to add an index.' )
+);
+check(
+	'strip: the same tag outside code is still removed',
+	'Before  after',
+	$sysmda_code_cleaner->strip( 'Before [contact-form-7 id="42"] after' )
+);
+check(
+	'strip: documented and live occurrences are treated differently in one pass',
+	'<code>[lwptoc]</code> shows the index; this one  is real.',
+	$sysmda_code_cleaner->strip( '<code>[lwptoc]</code> shows the index; this one [lwptoc] is real.' )
+);
+check(
+	'strip: ez-toc is excluded by default',
+	'Index:  end',
+	$sysmda_code_cleaner->strip( 'Index: [ez-toc] end' )
+);
+
+/*
+ * Code protection reaches ALWAYS_EXCLUDED too, and that is a deliberate
+ * narrowing of the 0.34.0 rule rather than a hole in it. That rule exists so a
+ * bare `[sysmda_md_button]` left in old content after the feature was removed
+ * does not surface as literal text — which still holds, first assertion below.
+ * A tag written *inside a code span* is not a leftover, it is an author
+ * documenting the shortcode, and this plugin's own settings page presents both
+ * tags exactly that way. Stripping it would gut an article about this plugin
+ * for the same reason it used to gut one about Contact Form 7.
+ *
+ * What the rule actually protects is unchanged either way: the shortcode never
+ * *renders* into the Markdown, because a masked region is never expanded.
+ */
+check(
+	'strip: a bare interface tag is still removed, wherever it was left',
+	'old post x  y',
+	$sysmda_code_cleaner->strip( 'old post x [sysmda_md_button] y' )
+);
+check(
+	'strip: an interface tag shown as documentation inside code survives',
+	'Add <code>[sysmda_md_actions]</code> to your template.',
+	$sysmda_code_cleaner->strip( 'Add <code>[sysmda_md_actions]</code> to your template.' )
+);
+
+// ─── AdminSettings: the exclusion textarea adds to the defaults ────────────
+
+/*
+ * Replacing them was a trap with no visible symptom: typing one tag into
+ * "Excluded shortcodes" silently dropped all five built-in ones, and the only
+ * hint was a help text about the empty case. The defaults are a safety list, so
+ * they accumulate.
+ */
+$sysmda_merge = sysmda_reflection_method( AdminSettings::class, 'option_to_merged_list' );
+$sysmda_admin = new AdminSettings();
+
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "acme_form\nacme_optin";
+check(
+	'exclusion option: saved lines are added to the defaults, in order',
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form', 'acme_optin' ) ),
+	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
+);
+
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "  \n\nacme_form\n  \n";
+check(
+	'exclusion option: blank lines and padding are ignored',
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form' ) ),
+	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
+);
+
+// Re-typing a default is harmless rather than a duplicate entry, which matters
+// because the panel shows the defaults right under the box.
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "lwptoc\nacme_form";
+check(
+	'exclusion option: a default re-typed by hand is not duplicated',
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form' ) ),
+	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
+);
+
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = '';
+check(
+	'exclusion option: an empty box leaves the defaults exactly as they are',
+	ShortcodeCleaner::DEFAULT_EXCLUDED,
+	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
+);
+
+// Site code hooking at priority 10 still decides what reaches the closure at
+// 20, so a narrowed list stays narrowed: only the textarea is additive.
+unset( $GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] );
+check(
+	'exclusion option: a filter-narrowed list is respected, the box adds to it',
+	array( 'lwptoc' ),
+	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', array( 'lwptoc' ) )
+);
+
+// The panel must display the very lists that are applied, not a second copy.
+check(
+	'panel defaults: shortcodes come from the class that applies them',
+	true,
+	in_array( 'ez-toc', ShortcodeCleaner::DEFAULT_EXCLUDED, true )
+);
+check(
+	'panel defaults: block names come from the class that applies them',
+	true,
+	in_array( 'luckywp/toc', BlockCleaner::DEFAULT_EXCLUDED, true )
+);
 
 // ─── Filter API: stability contract ──────────────────────────────────
 

@@ -20,6 +20,21 @@ class BlockCleaner {
 	/** CSS classes that mark a block for exclusion. */
 	const EXCLUDED_CLASSES = array( 'no-md', 'md-exclude', 'exclude-from-markdown' );
 
+	/**
+	 * Built-in excluded block names: the default value of the filter below.
+	 *
+	 * A constant for the same reason as `ShortcodeCleaner::DEFAULT_EXCLUDED` —
+	 * the settings page displays this list and must not keep a second copy of
+	 * it.
+	 */
+	const DEFAULT_EXCLUDED = array(
+		'gravityforms/form',
+		'contact-form-7/contact-form-selector',
+		'wpforms/form-selector',
+		'mailerlite/form',
+		'luckywp/toc', // LuckyWP TOC: navigation, not content.
+	);
+
 	/** @var ShortcodeCleaner */
 	private $shortcodes;
 
@@ -183,15 +198,7 @@ class BlockCleaner {
 	 * @return string[]
 	 */
 	private function excluded_block_names(): array {
-		$defaults = array(
-			'gravityforms/form',
-			'contact-form-7/contact-form-selector',
-			'wpforms/form-selector',
-			'mailerlite/form',
-			'luckywp/toc', // LuckyWP TOC: navigation, not content.
-		);
-
 		/** Filters block names excluded from Markdown. */
-		return (array) apply_filters( 'sysmda_markdown_excluded_block_names', $defaults );
+		return (array) apply_filters( 'sysmda_markdown_excluded_block_names', self::DEFAULT_EXCLUDED );
 	}
 }

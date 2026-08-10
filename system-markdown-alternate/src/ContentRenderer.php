@@ -107,14 +107,9 @@ class ContentRenderer {
 	 *   shortcode renders.
 	 *
 	 * Masking the code regions before the expansion fixes the second for both
-	 * branches at once. Only the inside of a code region is hidden, so a
-	 * shortcode wrapping one still runs. WordPress's own escape (`[[tag]]`)
-	 * stays the way to keep literal brackets outside code.
-	 *
-	 * If the masking pass fails (a PCRE limit on pathological input), the
-	 * shortcodes are expanded unprotected rather than skipped: that is the
-	 * behaviour classic content has always had, and leaving them unexpanded
-	 * would publish the raw tag in its place.
+	 * branches at once — see CodeRegions, which owns that masking and is shared
+	 * with the removal pass in `ShortcodeCleaner::strip()`, so the rule cannot
+	 * be applied to one side of the pipeline and forgotten on the other.
 	 */
 	private function expand_shortcodes( string $html ): string {
 		// No bracket, no shortcode: do_shortcode() short-circuits on the same
@@ -123,41 +118,7 @@ class ContentRenderer {
 			return $html;
 		}
 
-		$stash = array();
-		$token = $this->stash_token( $html );
-
-		$masked = preg_replace_callback(
-			'#<(pre|code)\b[^>]*>.*?</\1\s*>#is',
-			static function ( $matches ) use ( &$stash, $token ) {
-				$key = $token . count( $stash ) . '-->';
-
-				$stash[ $key ] = $matches[0];
-
-				return $key;
-			},
-			$html
-		);
-
-		if ( null === $masked ) {
-			return do_shortcode( $html );
-		}
-
-		return strtr( do_shortcode( $masked ), $stash );
-	}
-
-	/**
-	 * Prefix for the placeholders that stand in for code regions, guaranteed not
-	 * to occur in the content it is used on.
-	 *
-	 * Shaped like an HTML comment so that a placeholder which somehow survived
-	 * restoration would be invisible rather than printed as stray text.
-	 */
-	private function stash_token( string $html ): string {
-		do {
-			$token = '<!--sysmda-code-' . md5( uniqid( '', true ) ) . '-';
-		} while ( false !== strpos( $html, $token ) );
-
-		return $token;
+		return CodeRegions::protect( $html, 'do_shortcode' );
 	}
 
 	/**
