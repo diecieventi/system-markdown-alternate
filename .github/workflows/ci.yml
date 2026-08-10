@@ -6,18 +6,6 @@ on:
   pull_request:
 
 jobs:
-  release-tag-script:
-    runs-on: ubuntu-latest
-    name: Release tag script
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      - name: Lint shell scripts
-        run: bash -n bin/*.sh bin/tests/*.sh
-
-      - name: Run release tag regression test
-        run: bash bin/tests/release-tag.sh
-
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
@@ -28,6 +16,16 @@ jobs:
     name: PHP ${{ matrix.php }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # Keep this regression inside an existing required check. Adding a new
+      # job here does not make it blocking until branch protection is updated.
+      - name: Lint shell scripts
+        if: matrix.php == '7.4'
+        run: bash -n bin/*.sh bin/tests/*.sh
+
+      - name: Run release tag regression test
+        if: matrix.php == '7.4'
+        run: bash bin/tests/release-tag.sh
 
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
