@@ -317,8 +317,8 @@ The v1 scope is done and widely exceeded. Implemented:
   nested `taxonomies:` mapping **after `description`** (append-only contract)
   with the terms of the **selected** taxonomies. Slugs and term names sorted with
   `SORT_STRING` — **byte order, not locale collation**, so output never depends
-  on the server locale. **No auto-detection** (removed in 0.25.0, see the
-  decision below and `docs/f3-2-taxonomy-selection-plan.md`): the registry cannot
+  on the server locale. **No auto-detection** (removed in 0.25.0; see the
+  durable decision below): the registry cannot
   say whether a taxonomy belongs in a machine-readable representation, and the
   0.24.x `public`-only check published editorial-internal taxonomies
   (`publicly_queryable => false`). `MetadataBuilder::candidate_taxonomies()` /
@@ -592,11 +592,12 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Server-side diagnostics** (parked, *future thought* — we will revisit):
   a read-only, in-process admin view of per-post servability, `.md` preview,
   size/token estimates, stripped/unconverted markup and unresolved internal
-  links. Removed from the active plan (July 2026); rationale, the brittle-signal
-  caveats and the MVP shape are in `docs/strategy-review-2026-07.md` →
-  *Future thoughts*. Do not promote it back to a plan without that decision. (The
-  only shipped request-side telemetry stays the count-only `.md` hit counter
-  above.)
+  links. Removed from the active plan in July 2026: `strip_tags()` cannot detect
+  all conversion loss, `url_to_postid() === 0` does not prove a link is broken,
+  and an in-process comparison cannot measure the public response through its
+  cache/proxy layers. Do not promote it back to a plan without real demand and a
+  deliberately small, read-only MVP on a separate admin page. The only shipped
+  request-side telemetry remains the count-only `.md` hit counter above.
 
 ## Product decisions (durable)
 
@@ -1190,11 +1191,14 @@ that blocks the training crawlers while allowing the user-initiated ones
 contradicting this plugin — that second group is exactly the audience the
 `.md` is for.
 
-**Test environment**: a staging site with GeneratePress/GenerateBlocks, ACF and
-WooCommerce on a recent WP / PHP 8.4, **without a persistent object cache**
-(Cache uses the transient fallback). The full zip cannot be installed remotely:
-logic is verified with the **local PHP tests** (`tests/run-tests.php`) or by
-running code at the WP level.
+**Test environments**: the pure PHP suite remains the fast CI gate. For behavior
+that needs real WordPress routing, hook order, emitted headers or a browser, use
+the connected InstaWP site and the repeatable checklist in
+`docs/staging-acceptance.md`. Run that matrix before a release or after changing
+those integration surfaces. The latest full pass was `0.41.1` on 10 August 2026
+(WordPress 7.0.3, PHP 8.4.20); it complements rather than replaces the pure
+suite. Use the safe update/rollback procedure and remove transferred packages
+and backups when finished.
 
 ### Impact on defaults
 
@@ -1233,6 +1237,13 @@ running code at the WP level.
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
 ├── DIST/                         ← build output of bin/build.sh (NOT versioned)
+├── docs/                         ← public contracts, active plans and operational notes
+│   ├── filters.md                ← developer extension API (public contract)
+│   ├── output-format.md          ← Markdown output format (public contract)
+│   ├── staging-acceptance.md     ← real-WordPress release checklist
+│   ├── cache-infrastructure-notes.md
+│   ├── exclusion-scanner-plan.md
+│   └── llms-txt-multilingual-plan.md
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries

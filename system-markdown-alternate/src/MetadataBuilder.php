@@ -231,8 +231,7 @@ class MetadataBuilder {
 	 * no auto-detection from the taxonomy registry — `public` /
 	 * `publicly_queryable` describe how WordPress routes a taxonomy, not whether
 	 * its terms belong in a machine-readable representation, and auto-detection
-	 * meant every newly registered taxonomy started publishing itself (see
-	 * docs/f3-2-taxonomy-selection-plan.md).
+	 * meant every newly registered taxonomy started publishing itself.
 	 *
 	 * With nothing selected the result is empty, so the front matter and the
 	 * cache validator that fingerprints it stay byte-identical to a site without
