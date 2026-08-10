@@ -943,7 +943,9 @@ class AdminSettings {
 		echo '<p>' . wp_kses_post( __( '<code>[sysmda_md_download]</code> — a link that saves the <code>.md</code> as a file instead of opening it.', 'system-markdown-alternate' ) ) . '<br>';
 		echo wp_kses_post( __( '<code>[sysmda_md_download text="Save it"]</code> — same link with your own label.', 'system-markdown-alternate' ) ) . '<br>';
 		echo wp_kses_post( __( '<code>[sysmda_md_download id="123"]</code> — the download link of a specific post.', 'system-markdown-alternate' ) ) . '</p>';
-		echo '<p class="description">' . esc_html__( 'Both return empty if the post does not expose a .md (type not enabled, draft, password-protected, or a non-standard post format), so they never link to a 404.', 'system-markdown-alternate' ) . '</p>';
+		echo '<p>' . wp_kses_post( __( '<code>[sysmda_md_actions]</code> — a Copy as Markdown split button with copy, new-tab view and download actions.', 'system-markdown-alternate' ) ) . '<br>';
+		echo wp_kses_post( __( '<code>[sysmda_md_actions id="123"]</code> — the same actions for a specific post.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'All three return empty if the post does not expose a .md (type not enabled, draft, password-protected, or a non-standard post format), so they never link to a 404. The actions stylesheet and script load only on pages that render that shortcode.', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
 
 		echo '<div class="sysmda-integration-card">';

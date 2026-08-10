@@ -108,10 +108,9 @@ class Shortcodes {
 	 * surrounding loop sets, and falls back to the main post outside any loop.
 	 *
 	 * Static because it depends on no instance state. It was made public in
-	 * 0.31.0 so the Markdown button could resolve its post identically; that
-	 * button is gone as of 0.34.0, but the signature is kept — the
-	 * loop-before-queried-object reasoning above is subtle enough to be worth
-	 * sharing rather than copying, and narrowing it again would buy nothing.
+	 * 0.31.0 for the removed Markdown button and is now shared by
+	 * MarkdownActions: the loop-before-queried-object reasoning above is subtle
+	 * enough to keep in one place rather than copying it into each UI shortcode.
 	 */
 	public static function resolve_post( int $id ): ?\WP_Post {
 		if ( $id > 0 ) {

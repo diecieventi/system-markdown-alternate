@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.38.2
+Stable tag: 0.39.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -32,7 +32,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
 * **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
 * **Admin panel** to choose which post types are exposed and to tune cache, exclusions and headers — no post type is exposed until you pick one.
-* **Shortcodes** `[sysmda_md_url]` (the Markdown URL) and `[sysmda_md_download]` (a link that saves the file instead of opening it).
+* **Shortcodes** `[sysmda_md_url]` (the Markdown URL), `[sysmda_md_download]` (a bare download link), and `[sysmda_md_actions]` (an opt-in Copy as Markdown split button with copy, new-tab view and download actions).
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a preamble between the H1 and the body.
   * **GenerateBlocks 2.x**: a `{{sysmda_md_url}}` Dynamic Tag, available automatically, usable in element fields (e.g. a Button URL).
@@ -85,6 +85,14 @@ The `.md` responses are sent with `X-Robots-Tag: noindex, follow` and a `Link: r
 = How do I get the Markdown URL in a button or template? =
 
 Use the `[sysmda_md_url]` shortcode. If you run GenerateBlocks 2.x, the `{{sysmda_md_url}}` Dynamic Tag is available automatically — use it in element fields such as a Button URL. When the post has no `.md`, the tag resolves to an empty value so GenerateBlocks can hide the element instead of leaving a broken link.
+
+= How do I add Copy as Markdown actions for readers? =
+
+Use `[sysmda_md_actions]`. It renders a GitHub-style split button: the main action copies the complete Markdown document, while the dropdown offers **Copy as Markdown**, **View as Markdown** in a new tab and **Download Markdown**. Use `[sysmda_md_actions id="123"]` for a specific post.
+
+The component renders only where the shortcode is placed. Its small stylesheet and dependency-free script are loaded only on pages that actually render it, including placements in templates, widgets and secondary loops. The menu automatically opens toward the side and vertical direction with available viewport space.
+
+Like the other shortcodes, it outputs nothing when the target post has no Markdown version.
 
 = How do I let readers download the .md instead of opening it? =
 
@@ -163,10 +171,16 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 1. Settings — General: pick the content types that expose a `.md` (nothing is served until at least one is ticked) and set the cache TTL. The sidebar reports the `/llms.txt` status at a glance.
 2. Settings — Markdown output: what stays out of the `.md`. Excluded shortcodes, blocks and CSS classes (leave empty for the built-in defaults), plus the custom taxonomies added to the front matter and the ACF fields.
 3. Settings — llms.txt: enable the endpoint, the enriched output and the last modified date on each entry, then add the site summary and the curated key content.
-4. Settings — Integrations: the `[sysmda_md_url]` and `[sysmda_md_download]` shortcodes, with the GenerateBlocks and ACF detection status.
+4. Settings — Integrations: the `[sysmda_md_url]`, `[sysmda_md_download]` and `[sysmda_md_actions]` shortcodes, with the GenerateBlocks and ACF detection status.
 5. Settings — Advanced: the `X-Robots-Tag` header, the opt-in LiteSpeed cache bypass rules and the `.md` hit counter, split bot vs human.
 
 == Changelog ==
+
+= 0.39.0 =
+
+* Added: `[sysmda_md_actions]` renders an opt-in GitHub-style split button. The primary action copies the complete Markdown document; its dropdown repeats the copy action and adds new-tab view and direct download actions.
+* The menu is keyboard accessible, closes on Escape/outside focus, announces copy feedback, and repositions left/right or above/below to stay inside the viewport. It is moved outside theme layout containers while open so overflow rules cannot clip it.
+* Its minimal CSS and dependency-free JavaScript load only on pages that render the shortcode, with early detection for post content and a late fallback for templates, widgets and secondary loops.
 
 = 0.38.2 =
 
@@ -178,13 +192,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed: a shortcode written inside a block — typed into a paragraph, in a Custom HTML block or in the core Shortcode block — reached the Markdown as literal `[tag]` text instead of being expanded.
 * Fixed: a shortcode *shown as an example* inside a code block or an inline code span is no longer expanded, so code samples are published as written.
 * Fixed: a section marked `md-exclude` (or `no-md`) could still be summarised into the front-matter `description` of posts with no SEO description and no excerpt, publishing text the body deliberately leaves out.
-
-= 0.38.0 =
-
-* Fixed: a code sample containing a ``` fence used to break out of its own code block and swallow the rest of the document. Fenced blocks and inline code spans now size their delimiters to the content they wrap.
-* Fixed: a paragraph whose text is a bare ``` fence is escaped instead of opening a code block that runs to the end of the document.
-* Fixed: image, table and embed captions are separated from what they caption instead of being glued to it on one line.
-* Fixed: `core/details` no longer renders its summary and body concatenated; the summary becomes a bold lead-in paragraph.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

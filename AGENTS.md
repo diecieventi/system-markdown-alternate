@@ -331,6 +331,20 @@ The v1 scope is done and widely exceeded. Implemented:
   percent-decoded, transliterated, reduced to `[A-Za-z0-9._-]`, `post-<ID>.md`
   as fallback; the charset is the safety property, tested as such rather than as
   a fixed string.
+- **Reader-facing Markdown actions** (`0.39.0`): `[sysmda_md_actions]` (+
+  `id="123"`) is an explicit GitHub-style split button. The primary action copies
+  the complete Markdown document; the dropdown repeats copy and adds new-tab
+  view plus direct download. It is fixed-scope — no automatic placement,
+  settings, item/label filters or theme-wide asset load. CSS/JS enqueue only
+  when the shortcode renders (early when it sits in the queried content, late
+  for a template/widget/secondary loop). JavaScript moves the dropdown to
+  `document.body`, positions it against the viewport, flips left/right and
+  above/below, and clamps it inside an 8 px edge inset, so theme overflow and
+  narrow columns cannot clip it. The root is hidden until setup, copy uses the
+  Safari-safe promise-backed `ClipboardItem` path with fallbacks, and a response
+  whose type is not `text/markdown` is refused rather than copied as HTML. The
+  whole shortcode is in `ShortcodeCleaner::ALWAYS_EXCLUDED`: interface chrome
+  never enters the `.md`.
 - **GenerateBlocks Dynamic Tag** `{{sysmda_md_url}}`: self-registers when GB 2.x is
   active (no toggle).
 - `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
@@ -863,7 +877,8 @@ The v1 scope is done and widely exceeded. Implemented:
   rejected: same missing request context, plus it slows every save. Queued
   events are dropped on deactivation with `wp_unschedule_hook()` — they carry a
   post-ID argument, which `wp_clear_scheduled_hook()` would not match.
-- **NO front-end Markdown button** (decided July 2026, `0.34.0` — shipped in
+- **NO automatic/configurable front-end Markdown button** (decided July 2026,
+  `0.34.0` — shipped in
   `0.31.0`, reshaped twice, removed three versions later; do not propose it again
   without a concrete request): a dropdown was the wrong answer to a real problem.
   It broke the layout on mobile, added a stylesheet and a script to the front end
@@ -879,6 +894,18 @@ The v1 scope is done and widely exceeded. Implemented:
   are gone; the options stay in `uninstall.php` as legacy keys, and
   `ShortcodeCleaner::ALWAYS_EXCLUDED` keeps stripping `[sysmda_md_button]` so a
   tag left in old content does not surface as literal text in the `.md`.
+  **Narrow exception, by concrete maintainer request (`0.39.0`):**
+  `[sysmda_md_actions]` is an explicit shortcode with exactly three fixed
+  actions (copy the document, open it in a new tab, download it). It does not
+  resurrect the old tag, automatic insertion, panel tab, options, filters or
+  twelve-property styling API. Its assets load only on pages where the
+  shortcode actually renders; the minimal white/bordered CSS has namespaced
+  classes for later theme work, and the menu escapes layout containers by
+  moving to `document.body` and using viewport-aware placement. That scope and
+  positioning are the answer to the two concrete failures above, not a reversal
+  of them. If menu opening/positioning moves toward a CSS-only implementation in
+  future, evaluate declarative popovers + CSS anchor positioning; copying to the
+  clipboard will still require JavaScript.
 - **Downloading the `.md` is client-side only, and the link stays a bare
   anchor** (decided July 2026, `0.35.0` — read together with the button decision
   above, which it deliberately does not reopen): `[sysmda_md_download]` renders
@@ -890,7 +917,7 @@ The v1 scope is done and widely exceeded. Implemented:
     an argument — bare URL sometimes, markup other times — and would break that
     usage the first time someone passed a label. Two shortcodes, two return
     types, no conditionals. `resolve_post()` is shared (it was already `public
-    static` from the button era; this is its second real caller).
+    static` from the button era, and the actions shortcode now uses it too).
   - **NO `Content-Disposition`, and no request argument to trigger one**
     (decided before release, do not propose it again without a concrete case).
     A `?download=1` argument was implemented and removed within the same PR. Two
@@ -1120,7 +1147,9 @@ running code at the WP level.
     ├── phpcs.xml.dist                  ← WPCS ruleset (dev only, excluded from the package)
     ├── vendor/                         ← NOT versioned, zip only
     ├── assets/admin-settings.css       ← panel style (loaded only there)
-    ├── assets/admin-settings.js         ← tab client-side (vanilla, progressive enhancement)
+    ├── assets/admin-settings.js        ← tab client-side (vanilla, progressive enhancement)
+    ├── assets/md-actions.css           ← minimal reader-action UI (shortcode pages only)
+    ├── assets/md-actions.js            ← copy + disclosure + viewport placement (shortcode pages only)
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
@@ -1143,6 +1172,7 @@ running code at the WP level.
         ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
         ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
         ├── Shortcodes.php          ← [sysmda_md_url] + [sysmda_md_download] (resolve_post() is shared, public static)
+        ├── MarkdownActions.php     ← [sysmda_md_actions] split button + conditional asset loading
         ├── DynamicTags.php         ← {{sysmda_md_url}} (GenerateBlocks 2.x)
         └── Cache.php               ← cache helper (object cache or transients)
 ```
@@ -1529,7 +1559,18 @@ Test posts:
     published **verbatim**, unexpanded. Both halves again on a classic-editor
     post (no block markup), which takes the other branch.
 
-15. Post with an `md-exclude` section, **no** SEO description and **no** excerpt
+15. `[sysmda_md_actions]` in ordinary content and in a template/secondary loop
+    → the primary action copies the complete `text/markdown` response; the
+    dropdown repeats copy, opens View in a new tab and downloads with the safe
+    slug filename. One CSS/JS pair only, and neither appears on a page without
+    the shortcode. Verify keyboard/Escape/outside-focus behaviour and place the
+    component near all four viewport edges at 320, 375, 768 px and desktop: the
+    menu flips/clamps without horizontal overflow or clipping by an ancestor.
+    Draft/protected/unsupported targets output nothing. The shortcode itself is
+    absent from the `.md`, including when the excluded-shortcodes filter
+    replaces the defaults.
+
+16. Post with an `md-exclude` section, **no** SEO description and **no** excerpt
     → the excluded text is absent from the body *and* from the front-matter
     `description:`. A post without any excluded class → its `description:` is
     unchanged from the previous release (the pass must be a no-op there).

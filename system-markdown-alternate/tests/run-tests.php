@@ -17,6 +17,7 @@
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'DAY_IN_SECONDS', 86400 );
 define( 'SYSMDA_VERSION', '0.0.0-test' ); // Only used by the cache-validator tests.
+define( 'SYSMDA_PLUGIN_URL', 'https://example.com/wp-content/plugins/system-markdown-alternate/' );
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', '1' );
@@ -390,6 +391,58 @@ function esc_html__( $text, $domain = 'default' ) {
 	return esc_html( $text );
 }
 
+function esc_attr__( $text, $domain = 'default' ) {
+	return esc_attr( $text );
+}
+
+/** Stub: unique IDs for multiple shortcode instances on one page. */
+function wp_unique_id( $prefix = '' ) {
+	static $id = 0;
+	++$id;
+	return $prefix . $id;
+}
+
+/** Asset stubs used by the shortcode's lazy registration path. */
+function wp_style_is( $handle, $status = 'enqueued' ) {
+	return ! empty( $GLOBALS['sysmda_test_assets']['styles'][ $handle ][ $status ] );
+}
+
+function wp_script_is( $handle, $status = 'enqueued' ) {
+	return ! empty( $GLOBALS['sysmda_test_assets']['scripts'][ $handle ][ $status ] );
+}
+
+function wp_register_style( $handle, $src, $deps = array(), $ver = false, $media = 'all' ) {
+	$GLOBALS['sysmda_test_assets']['styles'][ $handle ] = array(
+		'registered' => true,
+		'enqueued'   => false,
+		'src'        => $src,
+	);
+	return true;
+}
+
+function wp_register_script( $handle, $src, $deps = array(), $ver = false, $args = array() ) {
+	$GLOBALS['sysmda_test_assets']['scripts'][ $handle ] = array(
+		'registered' => true,
+		'enqueued'   => false,
+		'src'        => $src,
+	);
+	return true;
+}
+
+function wp_localize_script( $handle, $object_name, $l10n ) {
+	return true;
+}
+
+function wp_enqueue_style( $handle ) {
+	$GLOBALS['sysmda_test_assets']['styles'][ $handle ]['enqueued'] = true;
+	return true;
+}
+
+function wp_enqueue_script( $handle ) {
+	$GLOBALS['sysmda_test_assets']['scripts'][ $handle ]['enqueued'] = true;
+	return true;
+}
+
 /**
  * Stub: records the status codes the conditional-request logic would send, so a
  * 304 can be asserted without a real HTTP response ($GLOBALS reset per test).
@@ -493,6 +546,7 @@ require __DIR__ . '/../src/LiteSpeedCompat.php';
 require __DIR__ . '/../src/HitCounter.php';
 require __DIR__ . '/../src/AdminSettings.php';
 require __DIR__ . '/../src/Shortcodes.php';
+require __DIR__ . '/../src/MarkdownActions.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
@@ -505,6 +559,7 @@ use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
 use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
+use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
@@ -2654,6 +2709,71 @@ unset( $GLOBALS['sysmda_test_posts'][901], $GLOBALS['sysmda_test_posts'][ $sysmd
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
 unset( $GLOBALS['sysmda_test_options']['sysmda_supported_post_types'] );
 
+// ─── MarkdownActions ────────────────────────────────────────────────────────
+
+$sysmda_actions_html = MarkdownActions::build_html(
+	'https://example.com/my-post.md',
+	'my-post.md',
+	'sysmda-md-actions-menu-test'
+);
+
+check( 'actions: valid primitives produce markup', true, '' !== $sysmda_actions_html );
+check( 'actions: root starts hidden until JavaScript setup', true, false !== strpos( $sysmda_actions_html, 'class="sysmda-md-actions" data-sysmda-md-url="https://example.com/my-post.md" hidden' ) );
+check( 'actions: copy is available as primary and menu action', 2, substr_count( $sysmda_actions_html, 'data-sysmda-action="copy"' ) );
+check( 'actions: menu id is connected to the toggle', true, false !== strpos( $sysmda_actions_html, 'aria-controls="sysmda-md-actions-menu-test"' ) );
+check( 'actions: menu carries the same unique id', true, false !== strpos( $sysmda_actions_html, 'id="sysmda-md-actions-menu-test"' ) );
+check( 'actions: view opens in a new tab safely', true, false !== strpos( $sysmda_actions_html, 'target="_blank" rel="noopener noreferrer"' ) );
+check( 'actions: view announces the new tab', true, false !== strpos( $sysmda_actions_html, '(opens in new tab)' ) );
+check( 'actions: download is a native same-origin download', true, false !== strpos( $sysmda_actions_html, 'download="my-post.md"' ) );
+check( 'actions: exactly three menu rows', 3, substr_count( $sysmda_actions_html, 'class="sysmda-md-actions__row"' ) );
+check( 'actions: markup has no inline style', false, strpos( $sysmda_actions_html, 'style=' ) );
+check( 'actions: invalid URL suppresses the component', '', MarkdownActions::build_html( 'javascript:alert(1)', 'x.md', 'menu' ) );
+check( 'actions: missing filename suppresses the component', '', MarkdownActions::build_html( 'https://example.com/x.md', '', 'menu' ) );
+
+// Query-string Markdown fallbacks must be escaped once, not once per attribute.
+$sysmda_actions_plain = MarkdownActions::build_html(
+	'https://example.com/?p=123&format=markdown',
+	'post-123.md',
+	'menu-plain'
+);
+check( 'actions: query URL is escaped', true, false !== strpos( $sysmda_actions_plain, '?p=123&amp;format=markdown' ) );
+check( 'actions: query URL is not double-escaped', false, strpos( $sysmda_actions_plain, '&amp;amp;' ) );
+
+$GLOBALS['sysmda_test_options']['permalink_structure'] = '/%postname%/';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
+
+$sysmda_actions_post = $sysmda_mk_post(
+	array(
+		'ID'        => 777,
+		'post_name' => 'actions-post',
+		'permalink' => 'https://example.com/actions-post/',
+	)
+);
+$GLOBALS['sysmda_test_posts'][777] = $sysmda_actions_post;
+
+$sysmda_actions = new MarkdownActions();
+$sysmda_rendered_actions = $sysmda_actions->render_shortcode( array( 'id' => 777 ) );
+check( 'actions shortcode: explicit servable post renders', true, false !== strpos( $sysmda_rendered_actions, 'https://example.com/actions-post.md' ) );
+check( 'actions shortcode: download uses the shared filename builder', true, false !== strpos( $sysmda_rendered_actions, 'download="actions-post.md"' ) );
+check( 'actions shortcode: late render registers its stylesheet', true, wp_style_is( MarkdownActions::HANDLE, 'registered' ) );
+check( 'actions shortcode: late render registers its script', true, wp_script_is( MarkdownActions::HANDLE, 'registered' ) );
+check( 'actions shortcode: late render enqueues its stylesheet', true, wp_style_is( MarkdownActions::HANDLE, 'enqueued' ) );
+check( 'actions shortcode: late render enqueues its script', true, wp_script_is( MarkdownActions::HANDLE, 'enqueued' ) );
+
+$GLOBALS['sysmda_test_posts'][778] = $sysmda_mk_post(
+	array(
+		'ID'          => 778,
+		'post_status' => 'draft',
+		'post_name'   => 'draft-actions',
+		'permalink'   => 'https://example.com/draft-actions/',
+	)
+);
+check( 'actions shortcode: draft produces no control', '', $sysmda_actions->render_shortcode( array( 'id' => 778 ) ) );
+check( 'actions shortcode: unknown ID produces no control', '', $sysmda_actions->render_shortcode( array( 'id' => 999999 ) ) );
+
+unset( $GLOBALS['sysmda_test_posts'][777], $GLOBALS['sysmda_test_posts'][778] );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
+
 // ─── CodeFence (pure logic, no library needed) ───────────────────────────────
 
 check( 'fence: plain code gets the minimum', '```', CodeFence::block_delimiter( "a\nb" ) );
@@ -3180,7 +3300,7 @@ check( 'update: healthy write applies the transform', LiteSpeedCompat::prepend_r
 
 stream_wrapper_unregister( 'sysmdatest' );
 
-// ─── ShortcodeCleaner: the legacy button tag never reaches the Markdown ─────
+// ─── ShortcodeCleaner: front-end controls never reach the Markdown ─────────
 
 $sysmda_btn_cleaner = new ShortcodeCleaner();
 $sysmda_btn_source  = "Intro\n\n[sysmda_md_button]\n\nBody";
@@ -3204,6 +3324,21 @@ check(
 	'button exclusion: the filtered list still applies',
 	'a  b',
 	$sysmda_btn_cleaner->strip( 'a [lwptoc] b' )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] );
+
+$sysmda_actions_source = "Intro\n\n[sysmda_md_actions]\n\nBody";
+check(
+	'actions exclusion: stripped with the default list',
+	"Intro\n\n\n\nBody",
+	$sysmda_btn_cleaner->strip( $sysmda_actions_source )
+);
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] = array( 'lwptoc' );
+check(
+	'actions exclusion: stripped even when the filter drops it',
+	"Intro\n\n\n\nBody",
+	$sysmda_btn_cleaner->strip( $sysmda_actions_source )
 );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_shortcodes'] );
 

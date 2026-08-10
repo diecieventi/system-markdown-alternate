@@ -261,6 +261,9 @@ Removed **unconditionally**, whatever the filters and the panel say:
   still stripped so one left behind in old content does not surface as literal
   text, and that holds on sites that have replaced the excluded-shortcodes list
   from the settings page.
+- **`[sysmda_md_actions]`**, the current opt-in reader control. Its buttons,
+  links and icons are interface chrome, never article content, so the entire
+  shortcode is removed before the Markdown conversion.
 
 ### Unknown HTML tags are not a stable surface
 
