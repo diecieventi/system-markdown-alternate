@@ -43,7 +43,9 @@ the server.
 
 ## Cleanup and record
 
-Delete the transferred package and rollback archive after a successful run.
+Always delete the transferred package and rollback archive when testing
+finishes. After a failed run, keep them only until rollback and any required
+diagnostics are complete, then remove them as well.
 Record only the release version, date, platform versions and pass/fail outcome
 in this file; keep transient URLs, hashes and verbose diagnostics out of the
 repository.
