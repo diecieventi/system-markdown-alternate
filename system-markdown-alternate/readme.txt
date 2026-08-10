@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.40.0
+Stable tag: 0.40.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -176,6 +176,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.40.1 =
+
+* Security: authenticated `/llms.txt` requests now rebuild their visitor-context body without reading or populating the shared anonymous cache. Their response remains private and non-storable; anonymous caching is unchanged.
+* Fixed: synced patterns referenced from generic ACF source fields now participate transitively in the `.md` cache validator, so editing a pattern cannot leave a stale body or `304` behind.
+* Fixed: removing the last selected custom-taxonomy term, featured image or Rank Math description can no longer make `If-Modified-Since` trust an older post timestamp again. Selected-but-empty taxonomy state stays fingerprinted; disappearing metadata invalidates through the deferred salt.
+
 = 0.40.0 =
 
 * Changed: the three exclusion settings (shortcodes, blocks, CSS classes) now **add to** the built-in defaults instead of replacing them. Previously, typing a single tag into one of those boxes silently dropped every default in it, so a site adding one newsletter shortcode also stopped excluding Contact Form 7, Gravity Forms, WPForms, MailerLite and LuckyWP TOC. Removing a built-in default now requires the matching `sysmda_markdown_excluded_*` filter.
@@ -188,11 +194,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Added: `[sysmda_md_actions]` renders an opt-in GitHub-style split button. The primary action copies the complete Markdown document; its dropdown repeats the copy action and adds new-tab view and direct download actions.
 * The menu is keyboard accessible, closes on Escape/outside focus, announces copy feedback, and repositions left/right or above/below to stay inside the viewport. It is moved outside theme layout containers while open so overflow rules cannot clip it.
 * Its minimal CSS and dependency-free JavaScript load only on pages that render the shortcode, with early detection for post content and a late fallback for templates, widgets and secondary loops. Late placements explicitly print their stylesheet before footer scripts, so they remain styled even when first rendered after the document head.
-
-= 0.38.2 =
-
-* Fixed: the front-matter `description` still exposed the text of an excluded *block* — one excluded by name from the "Excluded blocks" setting, or through its CSS class when the saved markup does not repeat that class. 0.38.1 closed this for excluded regions marked with a class, but not for whole blocks, so the body dropped them and the description (and enriched `/llms.txt`) published them.
-* Development: the build script now checks its dependencies before it starts and only replaces the packaged zip once the build has succeeded. No effect on the plugin itself.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

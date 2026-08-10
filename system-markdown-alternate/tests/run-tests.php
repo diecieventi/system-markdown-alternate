@@ -38,6 +38,7 @@ $GLOBALS['sysmda_test_posts']       = array(); // id → WP_Post
 $GLOBALS['sysmda_test_parsed']      = array(); // content → blocks
 $GLOBALS['sysmda_test_options']     = array(); // option → value
 $GLOBALS['sysmda_test_meta']        = array(); // post ID => meta key => value
+$GLOBALS['sysmda_test_fields']      = array(); // post ID => ACF field key => value
 $GLOBALS['sysmda_test_authors']     = array(); // user ID => display name
 $GLOBALS['sysmda_test_attachments'] = array(); // attachment ID => image URL
 $GLOBALS['sysmda_test_terms']       = array(); // post ID => taxonomy => term objects
@@ -144,6 +145,13 @@ function get_post_meta( $post_id, $key, $single = false ) {
 	return isset( $GLOBALS['sysmda_test_meta'][ $post_id ][ $key ] )
 		? $GLOBALS['sysmda_test_meta'][ $post_id ][ $key ]
 		: ( $single ? '' : array() );
+}
+
+/** Stub: ACF field values, available only where a fixture sets one. */
+function get_field( $key, $post_id = false ) {
+	return isset( $GLOBALS['sysmda_test_fields'][ $post_id ][ $key ] )
+		? $GLOBALS['sysmda_test_fields'][ $post_id ][ $key ]
+		: false;
 }
 
 function has_excerpt( $post ) {
@@ -1377,12 +1385,16 @@ $GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( '
 // change on a term reassignment or rename (post_modified_gmt does not).
 $GLOBALS['sysmda_test_terms'][60]['genre'] = array( (object) array( 'name' => 'Techno' ), (object) array( 'name' => 'Dub' ) );
 check( 'taxonomies: fingerprint changes on term change', true, $sysmda_fp !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+$sysmda_terms_fp = MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post );
 
 // A taxonomy the post has no terms in (false) or an unregistered one (WP_Error).
 $GLOBALS['sysmda_test_terms'][60]['genre'] = false;
 check( 'taxonomies: no terms => omitted', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+check( 'taxonomies: selected empty state keeps a fingerprint', true, '' !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
+check( 'taxonomies: removing the last term moves the fingerprint', true, $sysmda_terms_fp !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
 $GLOBALS['sysmda_test_terms'][60]['genre'] = new WP_Error( 'invalid_taxonomy' );
 check( 'taxonomies: WP_Error => omitted', array(), MetadataBuilder::taxonomy_terms( $sysmda_tax_post ) );
+check( 'taxonomies: selected unavailable state keeps a fingerprint', true, '' !== MetadataBuilder::taxonomies_fingerprint( $sysmda_tax_post ) );
 
 // ─── Front matter with the taxonomies block ──────────────────────────
 
@@ -1615,6 +1627,54 @@ check(
 // would silently turn into the opposite case.
 unset( $GLOBALS['sysmda_test_meta'][61]['rank_math_description'] );
 
+// Generic ACF source fields join post_content before the block branch runs. A
+// synced pattern referenced there is therefore rendered exactly like one in
+// the post row, and must share the same transitive dependency fingerprint.
+$sysmda_acf_pattern_markup = '<!-- wp:block {"ref":97} /-->';
+$sysmda_acf_post           = new WP_Post(
+	array(
+		'ID'                => 64,
+		'post_type'         => 'post',
+		'post_content'      => '',
+		'permalink'         => 'https://example.com/acf-pattern/',
+		'post_modified_gmt' => '2026-07-01 08:30:00',
+	)
+);
+$GLOBALS['sysmda_test_fields'][64]['layout']            = $sysmda_acf_pattern_markup;
+$GLOBALS['sysmda_test_parsed'][ $sysmda_acf_pattern_markup ] = array(
+	array(
+		'blockName'   => 'core/block',
+		'attrs'       => array( 'ref' => 97 ),
+		'innerHTML'   => '',
+		'innerBlocks' => array(),
+	),
+);
+$GLOBALS['sysmda_test_posts'][97] = new WP_Post(
+	array(
+		'ID'                => 97,
+		'post_type'         => 'wp_block',
+		'post_content'      => 'ACF PATTERN',
+		'post_modified_gmt' => '2026-07-01 09:00:00',
+	)
+);
+$GLOBALS['sysmda_test_filters']['sysmda_acf_field_keys'] = array( 'layout' );
+
+$sysmda_acf_pattern_before = $sysmda_cv( $sysmda_acf_post );
+$GLOBALS['sysmda_test_posts'][97]->post_modified_gmt = '2026-07-04 10:00:00';
+check(
+	'cache_version: editing a pattern referenced by ACF moves the ETag',
+	true,
+	$sysmda_acf_pattern_before !== $sysmda_cv( $sysmda_acf_post )
+);
+
+unset(
+	$GLOBALS['sysmda_test_filters']['sysmda_acf_field_keys'],
+	$GLOBALS['sysmda_test_fields'][64],
+	$sysmda_acf_pattern_before,
+	$sysmda_acf_pattern_markup,
+	$sysmda_acf_post
+);
+
 // Escape hatch for output this plugin cannot fingerprint (dynamic blocks,
 // shortcodes, site filters reading options or remote data).
 $sysmda_extra_before = $sysmda_cv( $sysmda_img_post );
@@ -1728,6 +1788,16 @@ check( 'conditional: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_sta
 $GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
 check( 'conditional: IMS ignored when taxonomies are emitted', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
 check( 'conditional: no 304 sent', array(), $GLOBALS['sysmda_test_status'] );
+
+// Removing the last selected term must not make the date strong again: the
+// removal can happen outside the post row, so its timestamp may still describe
+// the old body. The selected-but-empty fingerprint preserves that history.
+$sysmda_saved_genre_terms = $GLOBALS['sysmda_test_terms'][61]['genre'];
+unset( $GLOBALS['sysmda_test_terms'][61]['genre'] );
+check( 'conditional: IMS remains ignored after the last selected term is removed', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: no stale 304 after the last selected term is removed', array(), $GLOBALS['sysmda_test_status'] );
+$GLOBALS['sysmda_test_terms'][61]['genre'] = $sysmda_saved_genre_terms;
+unset( $sysmda_saved_genre_terms );
 
 // If-None-Match still works with the block on: the ETag is taxonomy-aware, so
 // it remains a reliable validator (this is the common browser/crawler case).
@@ -2036,8 +2106,12 @@ unset( $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] );
 // keeps the full shared-cache behaviour, and only an authenticated request
 // leaves it.
 check( 'shared: an anonymous request is the public representation', true, MarkdownController::representation_is_shared() );
+$sysmda_llms_cache_method = sysmda_reflection_method( LlmsTxtController::class, 'uses_shared_body_cache' );
+check( 'llms cache: anonymous requests use the shared body cache', true, $sysmda_llms_cache_method->invoke( null, DAY_IN_SECONDS ) );
+check( 'llms cache: zero TTL disables the shared body cache', false, $sysmda_llms_cache_method->invoke( null, 0 ) );
 $GLOBALS['sysmda_test_logged_in'] = true;
 check( 'shared: an authenticated request is not', false, MarkdownController::representation_is_shared() );
+check( 'llms cache: authenticated requests bypass the shared body cache', false, $sysmda_llms_cache_method->invoke( null, DAY_IN_SECONDS ) );
 check(
 	'cache-control: the default follows the visitor',
 	'private, no-store, must-revalidate',
@@ -2339,6 +2413,27 @@ check( 'salt: unrelated and excluded options do not bump', '0', get_option( 'sys
 $sysmda_admin->maybe_bump_for_term( 11, 11, 'genre' );
 $sysmda_admin->flush_cache_salt();
 check( 'salt: a custom-taxonomy term edit does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Non-empty featured-image and Rank Math values remain represented by the
+// per-post dependency fingerprint, so their ordinary updates need no global
+// invalidation. When the last value vanishes, however, the fingerprint becomes
+// empty and the salt must preserve that invalidation history for IMS-only
+// clients whose post timestamp did not move.
+$sysmda_admin->maybe_bump_for_empty_dependency_meta( 1, 61, '_thumbnail_id', 77 );
+$sysmda_admin->maybe_bump_for_empty_dependency_meta( 2, 61, 'rank_math_description', 'Fresh summary' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: non-empty dependency meta updates do not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+$sysmda_admin->bump_for_deleted_dependency_meta( array( 2 ), 61, 'rank_math_description', 'Old summary' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: deleting the last Rank Math dependency bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->maybe_bump_for_empty_dependency_meta( 1, 61, '_thumbnail_id', 0 );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: emptying the featured-image dependency bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 
 // The rename itself: the author line of every post by that user changes.
 $GLOBALS['sysmda_test_users'][7]->display_name = 'Jamie R.';
