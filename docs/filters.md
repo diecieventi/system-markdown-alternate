@@ -479,7 +479,7 @@ respectively.
 | Kind | Defaults |
 |------|----------|
 | Block names | `gravityforms/form`, `contact-form-7/contact-form-selector`, `wpforms/form-selector`, `mailerlite/form`, `luckywp/toc` |
-| Shortcodes | `contact-form-7`, `gravityform`, `wpforms`, `mailerlite_form`, `lwptoc`, `ez-toc` |
+| Shortcodes | `contact-form-7`, `gravityform`, `wpforms`, `fluentform`, `mailerlite_form`, `mc4wp_form`, `mailpoet_form`, `newsletter_form`, `sibwp_form`, `lwptoc`, `ez-toc`, `ez-toc-widget-sticky`, `toc` |
 | CSS classes | `no-md`, `md-exclude`, `exclude-from-markdown` |
 
 The panel's three exclusion textareas **add to** these lists rather than replace

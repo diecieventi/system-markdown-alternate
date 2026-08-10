@@ -3427,20 +3427,42 @@ check(
 );
 
 /*
- * A transform that rewrites the placeholder cannot have its regions restored.
- * Falling back to the unprotected transform is the defined outcome: the
- * alternative is emitting a stray token and losing the code entirely. Neither
- * real caller can hit this — both match `[shortcode]` syntax, which never
- * matches a comment — but silent content loss is not something to leave to
- * assumption.
+ * An enclosing shortcode may rewrite, escape or discard the body it is handed,
+ * so a placeholder can legitimately fail to come back. The rule is that the
+ * transform still runs exactly once: re-running it on the unmasked string to
+ * "recover" would expand shortcodes inside the very code sample this class
+ * protects, and would repeat every wrapper side effect. Raised by Codex on
+ * PR #72 against the first version, which did exactly that.
  */
+$sysmda_cr_calls = 0;
+$sysmda_eater    = static function ( string $s ) use ( &$sysmda_cr_calls ): string {
+	++$sysmda_cr_calls;
+
+	// Stands in for a wrapper that consumed its body.
+	return (string) preg_replace( '/sysmda_code_[0-9a-f]+_\d+/', 'EATEN', $s );
+};
+
 check(
-	'code regions: a placeholder-destroying transform falls back, it does not eat the code',
-	'BEFORE <PRE>KEEP ME</PRE> AFTER',
+	'code regions: a consumed placeholder is not recovered by re-running',
+	'EATEN',
+	CodeRegions::protect( '<pre>[gallery]</pre>', $sysmda_eater )
+);
+check(
+	'code regions: the transform ran exactly once',
+	1,
+	$sysmda_cr_calls
+);
+
+// The realistic way a placeholder gets mangled is a wrapper escaping its body.
+// A word-character token survives that, so the region is restored normally
+// instead of being lost — which is why the token is not comment-shaped.
+check(
+	'code regions: an escaping transform still restores the region',
+	'&lt;b&gt;x&lt;/b&gt; <pre>[gallery]</pre>',
 	CodeRegions::protect(
-		'before <pre>keep me</pre> after',
+		'<b>x</b> <pre>[gallery]</pre>',
 		static function ( string $s ): string {
-			return strtoupper( $s );
+			return htmlspecialchars( $s, ENT_NOQUOTES );
 		}
 	)
 );
@@ -3518,26 +3540,26 @@ check(
 $sysmda_merge = sysmda_reflection_method( AdminSettings::class, 'option_to_merged_list' );
 $sysmda_admin = new AdminSettings();
 
-$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "mc4wp_form\nnewsletter";
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "acme_form\nacme_optin";
 check(
 	'exclusion option: saved lines are added to the defaults, in order',
-	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'mc4wp_form', 'newsletter' ) ),
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form', 'acme_optin' ) ),
 	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
 );
 
-$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "  \n\nmc4wp_form\n  \n";
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "  \n\nacme_form\n  \n";
 check(
 	'exclusion option: blank lines and padding are ignored',
-	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'mc4wp_form' ) ),
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form' ) ),
 	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
 );
 
 // Re-typing a default is harmless rather than a duplicate entry, which matters
 // because the panel shows the defaults right under the box.
-$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "lwptoc\nmc4wp_form";
+$GLOBALS['sysmda_test_options']['sysmda_excluded_shortcodes'] = "lwptoc\nacme_form";
 check(
 	'exclusion option: a default re-typed by hand is not duplicated',
-	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'mc4wp_form' ) ),
+	array_merge( ShortcodeCleaner::DEFAULT_EXCLUDED, array( 'acme_form' ) ),
 	$sysmda_merge->invoke( $sysmda_admin, 'sysmda_excluded_shortcodes', ShortcodeCleaner::DEFAULT_EXCLUDED )
 );
 

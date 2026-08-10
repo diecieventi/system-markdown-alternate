@@ -29,9 +29,14 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   (`ShortcodeCleaner::strip()`) runs earlier, on the raw source, and had no
   notion of code — so one rule was applied to one half of the pipeline. The
   masking now lives in `CodeRegions` and is shared by both, which is what stops
-  it being applied to one side and forgotten on the other. It also verifies its
-  placeholders survived the transform before restoring: a transform that
-  rewrote them would have destroyed the code region instead of restoring it.
+  it being applied to one side and forgotten on the other. Two properties of it
+  are load-bearing: the transform runs **at most once** — an enclosing shortcode
+  may rewrite, escape or discard the body it is handed, and re-running on the
+  unmasked string to recover a lost placeholder would expand shortcodes inside
+  the very code sample this protects and repeat every wrapper side effect — and
+  the placeholder is made of word characters only, so `esc_html()` and
+  `wptexturize()` (which turns `--` into an en dash) leave it intact where a
+  comment-shaped token would not.
 * Consequence worth stating: the code protection applies to
   `ShortcodeCleaner::ALWAYS_EXCLUDED` as well, so `[sysmda_md_button]` and
   `[sysmda_md_actions]` written inside a code sample are now shown instead of
@@ -41,7 +46,13 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
 * The panel's "View built-in defaults" lists are read from the classes that
   apply them instead of being copied into `AdminSettings`, so they cannot drift
   from what the plugin actually excludes.
-* Added `ez-toc` (Easy Table of Contents) to the default excluded shortcodes.
+* Added to the default excluded shortcodes, all verified against the plugins
+  that register them: `fluentform`; the newsletter subscription forms
+  `mc4wp_form`, `mailpoet_form`, `newsletter_form` and `sibwp_form` — the
+  category that produced the original symptom; and the tables of contents
+  `ez-toc`, `ez-toc-widget-sticky` and `toc`. Deliberately **not** added: the
+  bare `newsletter` tag, which is The Newsletter Plugin's public-page shortcode
+  and far too generic a word to claim by default.
 
 ## 0.39.0
 

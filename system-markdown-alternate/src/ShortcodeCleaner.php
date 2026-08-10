@@ -39,12 +39,26 @@ class ShortcodeCleaner {
 	 * every site that updates.
 	 */
 	const DEFAULT_EXCLUDED = array(
+		// Forms.
 		'contact-form-7',
 		'gravityform',
 		'wpforms',
+		'fluentform',
+		// Newsletter subscription forms. This is the category that produced the
+		// symptom the rule above is written against: a label, a submit button
+		// and a GDPR consent paragraph landing in the middle of an article.
 		'mailerlite_form',
-		'lwptoc',  // LuckyWP Table of Contents: navigation, not content.
-		'ez-toc',  // Easy Table of Contents: same, and a different plugin.
+		'mc4wp_form',
+		'mailpoet_form',
+		'newsletter_form', // The Newsletter Plugin. NOT the bare `newsletter`
+							// tag, which is its public-page shortcode and far
+							// too generic a word to claim by default.
+		'sibwp_form',      // Brevo (formerly Sendinblue).
+		// Tables of contents: navigation, not content.
+		'lwptoc',               // LuckyWP.
+		'ez-toc',               // Easy Table of Contents…
+		'ez-toc-widget-sticky', // …and its sticky widget.
+		'toc',                  // Registered by Easy TOC as well.
 	);
 
 	/**

@@ -181,7 +181,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Changed: the three exclusion settings (shortcodes, blocks, CSS classes) now **add to** the built-in defaults instead of replacing them. Previously, typing a single tag into one of those boxes silently dropped every default in it, so a site adding one newsletter shortcode also stopped excluding Contact Form 7, Gravity Forms, WPForms, MailerLite and LuckyWP TOC. Removing a built-in default now requires the matching `sysmda_markdown_excluded_*` filter.
 * Fixed: an excluded shortcode written inside a code block or an inline code span was deleted from it. An article documenting `[contact-form-7 id="42"]` had the tag removed from its own example, publishing `echo do_shortcode('');`. Expansion had been protected since 0.38.1; removal had not, so the rule applied to one half of the pipeline only.
 * Note: this also applies to the plugin's own `[sysmda_md_actions]` tag — written inside a code sample it is now shown as documentation, while a bare one is still removed and neither ever renders into the Markdown.
-* Added: `ez-toc` (Easy Table of Contents) to the default excluded shortcodes.
+* Added to the default excluded shortcodes: `fluentform`, the newsletter forms `mc4wp_form`, `mailpoet_form`, `newsletter_form` and `sibwp_form`, and the tables of contents `ez-toc`, `ez-toc-widget-sticky` and `toc`.
 
 = 0.39.0 =
 

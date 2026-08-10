@@ -198,10 +198,26 @@ The v1 scope is done and widely exceeded. Implemented:
     pipeline, one of them missing. The masking therefore lives in a shared class
     used by both passes, which is the point: a helper cannot be applied on one
     side and forgotten on the other, whereas two copies of a regex demonstrably
-    can. It also verifies its placeholders survived the transform before
-    restoring — a transform that rewrote them would silently *destroy* the code
-    region rather than restore it, so the check turns content loss into the
-    documented unprotected fallback.
+    can. Two properties of that helper are load-bearing and were both got wrong
+    first time round (caught by Codex on PR #72 and by a test):
+    - **The transform runs at most once.** An enclosing shortcode may rewrite,
+      escape or discard the body it is handed, so a placeholder can legitimately
+      fail to come back. The first version answered that by re-running the
+      transform on the *unmasked* string, which is worse than the problem twice
+      over: it expands `[gallery]` inside the very code sample the class exists
+      to protect, and it repeats every wrapper's side effects. Surviving regions
+      are restored, a consumed one stays consumed — that is the wrapper's
+      decision, not this helper's to undo. `strtr()` leaves absent keys alone, so
+      the partial restore needs no extra pass. The single exception is a
+      *masking* failure, where nothing was masked and the transform has not run
+      at all.
+    - **The placeholder is `[A-Za-z0-9_]` only.** It is handed to arbitrary
+      shortcode callbacks, and the things they routinely do to their own body are
+      exactly what would mangle a livelier token: `esc_html()` rewrites an
+      HTML-comment-shaped one, and `wptexturize()` — reached through any callback
+      that runs `the_content` — turns `--` into an en dash. A word-character
+      token survives both and is restored normally, which removes the most
+      plausible way for a region to go missing instead of handling it afterwards.
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so

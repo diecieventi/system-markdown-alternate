@@ -34,12 +34,22 @@ final class CodeRegions {
 	 * Applies $transform to $html, leaving the content of `<pre>` and `<code>`
 	 * elements untouched.
 	 *
-	 * On a masking failure (a PCRE limit on pathological input) the transform is
-	 * applied to the unprotected string rather than skipped. That is deliberate
-	 * and matches what each caller did before this class existed: skipping would
-	 * mean publishing a raw shortcode tag on the expansion side, and publishing
-	 * excluded chrome on the removal side. A damaged code sample is the milder
-	 * of the two failures, and the input that triggers it is pathological.
+	 * **The transform runs at most once.** An enclosing shortcode is entitled to
+	 * rewrite, escape or discard the body it is handed, so a placeholder can
+	 * legitimately fail to come back — and re-running the transform on the
+	 * unmasked string to "recover" would be worse than the problem twice over:
+	 * it would expand `[gallery]` inside the very code sample this class exists
+	 * to protect, and it would run every wrapper's side effects a second time.
+	 * Regions whose placeholder survives are restored; one that a wrapper
+	 * consumed stays consumed, which is that wrapper's decision, not this
+	 * helper's to undo.
+	 *
+	 * The one exception is a masking failure (a PCRE limit on pathological
+	 * input): nothing was masked and the transform has not run at all, so
+	 * running it unprotected is a first attempt rather than a repeat. That is
+	 * what each caller did before this class existed — skipping would publish a
+	 * raw shortcode tag on the expansion side and excluded chrome on the removal
+	 * side, both worse than a damaged sample on input nobody writes by hand.
 	 *
 	 * @param string   $html      Markup to transform.
 	 * @param callable $transform Receives the masked string, returns the result.
@@ -51,7 +61,7 @@ final class CodeRegions {
 		$masked = preg_replace_callback(
 			'#<(pre|code)\b[^>]*>.*?</\1\s*>#is',
 			static function ( $matches ) use ( &$stash, $token ) {
-				$key = $token . count( $stash ) . '-->';
+				$key = $token . count( $stash );
 
 				$stash[ $key ] = $matches[0];
 
@@ -64,33 +74,29 @@ final class CodeRegions {
 			return (string) $transform( $html );
 		}
 
-		$transformed = (string) $transform( $masked );
-
-		// A transform that rewrites the placeholders leaves nothing for strtr()
-		// to match, and the masked regions would then be *lost* rather than
-		// restored — the code sample replaced by a stray comment-shaped token.
-		// Neither caller does this (both rewrite `[shortcode]` syntax, which
-		// cannot match a comment), but the failure would be silent and would
-		// destroy content, so it is checked rather than assumed.
-		foreach ( $stash as $key => $unused ) {
-			if ( false === strpos( $transformed, $key ) ) {
-				return (string) $transform( $html );
-			}
-		}
-
-		return strtr( $transformed, $stash );
+		// strtr() leaves an absent key alone, so this is already the partial
+		// restore described above: no separate "did they all survive?" pass, and
+		// nothing to decide when one did not.
+		return strtr( (string) $transform( $masked ), $stash );
 	}
 
 	/**
 	 * Prefix for the placeholders standing in for code regions, guaranteed not
 	 * to occur in the string it is used on.
 	 *
-	 * Shaped like an HTML comment so a placeholder that somehow survived
-	 * restoration would be invisible rather than printed as stray text.
+	 * Deliberately `[A-Za-z0-9_]` only — no angle brackets, no ampersand, and no
+	 * `--`. The placeholder is handed to arbitrary shortcode callbacks, and the
+	 * transformations they routinely apply to their own body are exactly the
+	 * ones that would mangle a livelier token: `esc_html()` would rewrite an
+	 * HTML-comment-shaped one, and `wptexturize()` (reached through any callback
+	 * that runs `the_content`) turns `--` into an en dash. A token made of word
+	 * characters passes through both untouched and is restored normally, which
+	 * removes the most plausible way for a region to go missing rather than
+	 * handling it after the fact.
 	 */
 	private static function token( string $html ): string {
 		do {
-			$token = '<!--sysmda-code-' . md5( uniqid( '', true ) ) . '-';
+			$token = 'sysmda_code_' . md5( uniqid( '', true ) ) . '_';
 		} while ( false !== strpos( $html, $token ) );
 
 		return $token;
