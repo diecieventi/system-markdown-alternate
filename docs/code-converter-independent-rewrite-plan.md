@@ -1,9 +1,10 @@
 # Plan: independent rewrite of the code-element converters
 
-> **Status: proposed; implementation blocked.** This document is planning only.
-> Do not modify runtime code, tests, versions or release notes until the parallel
-> code review has finished and its findings have been reconciled in the review
-> gate below. The plan may change materially at that point.
+> **Status: review gate closed with split prerequisites; implementation blocked.**
+> The parallel code review was reconciled on 10 August 2026. It did not change
+> the converter design, but the cache/security prerequisite PR recorded below
+> must land before converter implementation starts. This document remains
+> planning only until that prerequisite is merged.
 
 ## Executive decision
 
@@ -383,23 +384,37 @@ do not add a claim that upstream copyright has disappeared from the dependency.
 
 ## Review reconciliation gate (mandatory before coding)
 
-When the parallel code review finishes, create a short matrix in the PR or a
-revision of this plan:
+The parallel review completed against `0.40.0`. The maintainer closed this gate
+on 10 August 2026 with the outcome **Split prerequisites**.
 
 | Review finding | Converter relevance | Plan impact | Decision |
 |---|---|---|---|
-| ID / summary | direct / indirect / none | block / amend / none | accepted / deferred / rejected |
+| Authenticated `/llms.txt` can populate the shared anonymous body cache | none | prerequisite | accepted; fix before converter Phase 1 |
+| Synced patterns reached through generic ACF source fields are absent from the dependency fingerprint | none | prerequisite | accepted; fix before converter Phase 1 |
+| Removing the last external dependency can make `If-Modified-Since` strong again without moving the post date | none | prerequisite | accepted; fix before converter Phase 1 |
+| Non-canonical singular aliases may negotiate before WordPress redirects them | none | none | accepted; separate routing-hardening PR |
+| A Markdown actions shortcode rendered after footer scripts were printed can remain hidden | none | none | accepted; separate UI-hardening PR |
+| The one-time `.htaccess` backup is stored under the public document root | none | none | accepted; separate filesystem-hardening PR |
+| No real-WordPress routing/header integration suite | indirect | none | accepted coverage gap; track separately, not a converter prerequisite |
+| No browser execution of `md-actions.js` | none | none | accepted coverage gap; track with the UI-hardening work |
+| HTTP/output/filter documentation drift and two non-English comments | none | none | accepted cleanup; separate documentation change |
 
-The gate must explicitly answer:
+Gate answers:
 
-1. Did the review find another correctness or security defect in code/pre
-   conversion?
-2. Did it challenge `ElementInterface::getValue()` as the right public input?
-3. Did it find output drift that changes the compatibility budget?
-4. Did it recommend a broader converter/engine change that would make this work
-   duplicate or temporary?
-5. Did it find missing integration coverage that must land first?
-6. Did it change the release scope or version classification?
+1. **No.** The review found no additional correctness or security defect in
+   `<code>` / `<pre>` conversion.
+2. **No.** It did not challenge `ElementInterface::getValue()` as the public
+   input. The real-`HtmlConverter` characterization test remains mandatory.
+3. **No.** It found no converter output drift and did not change the existing
+   byte-compatibility budget.
+4. **No.** It did not recommend a broader converter or block-native engine.
+5. **Yes, outside conversion.** Three cache/security defects must land first so
+   the converter PR is not built on known validator or representation-isolation
+   faults. The WordPress and browser coverage gaps remain important but do not
+   block the converter's pure and real-library characterization tests.
+6. **No.** The converter release classification remains conditional: a
+   byte-identical independent rewrite is a patch; an approved output correction
+   is a minor release under this pre-1.0 policy.
 
 Outcomes:
 
@@ -408,7 +423,10 @@ Outcomes:
 - **Split prerequisites** — another fix must land first.
 - **Cancel/supersede** — review supports a different architecture.
 
-Only the user/maintainer closes this gate.
+Closing decision: **Split prerequisites.** The converter architecture and test
+plan proceed unchanged after the three cache/security fixes above are merged.
+The routing, UI, filesystem and documentation work remains intentionally split
+so it cannot blur the converter's provenance or compatibility review.
 
 ## Test plan
 
