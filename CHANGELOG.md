@@ -9,6 +9,34 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.38.1
+
+* **Shortcodes inside blocks are expanded.** `render_block()` does not expand
+  them — on the front end that is `the_content`'s job, and this pipeline skips
+  `the_content` by design so that injected related/CTA content never enters the
+  Markdown. Nothing took over the expansion, so a shortcode typed into a
+  paragraph, written in a Custom HTML block or placed in the core Shortcode
+  block reached the converter as literal text and was published as an escaped
+  `\[tag\]`. Classic (non-block) content was unaffected: it had always called
+  `do_shortcode()`.
+* **Shortcodes shown as examples inside code are no longer expanded.** The
+  expansion `do_shortcode()` performs is a plain regex over the whole string
+  with no notion of markup, so a code sample containing `[gallery]` was
+  expanded like the real thing and the sample was silently rewritten into
+  whatever the shortcode renders. Code regions (`<pre>` and `<code>`, in either
+  content branch) are now masked for the duration of the expansion. This was a
+  pre-existing defect of the classic-content branch; fixing it in one place
+  covers both, so the block branch never inherited it.
+* **`md-exclude` sections no longer leak into the front-matter `description`.**
+  When a post has neither an SEO description nor an excerpt, the description
+  falls back to the post text — read from the post content rather than from the
+  rendered body, deliberately, because the same code builds every entry of
+  `/llms.txt` and rendering each listed post there would be prohibitive. The
+  exclusion rules are applied by the render pipeline, so that shortcut summarised
+  a section the body promises never to publish. The fallback now runs the same
+  exclusion pass first; content carrying no excluded class is untouched, and its
+  description is byte-identical to before.
+
 ## 0.38.0
 
 * **Code samples can no longer break out of their own code block.** The

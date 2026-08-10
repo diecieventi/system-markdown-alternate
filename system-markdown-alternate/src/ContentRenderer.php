@@ -62,9 +62,11 @@ class ContentRenderer {
 			foreach ( $blocks as $block ) {
 				$html .= render_block( $block );
 			}
+
+			$html = $this->expand_shortcodes( $html );
 		} else {
 			// Classic content: skip the_content to avoid injected related content/CTAs.
-			$html = wpautop( do_shortcode( $content ) );
+			$html = wpautop( $this->expand_shortcodes( $content ) );
 		}
 
 		// 3-5. DOM pass: normalize code blocks, remove excluded classes, absolutize URLs.
@@ -82,9 +84,135 @@ class ContentRenderer {
 	 */
 	public function render_fragment( string $html, \WP_Post $post ): string {
 		$html = $this->shortcodes->strip( $html );
-		$html = wpautop( do_shortcode( $html ) );
+		$html = wpautop( $this->expand_shortcodes( $html ) );
 
 		return $this->process_dom( $html, (string) get_permalink( $post ) );
+	}
+
+	/**
+	 * Expands shortcodes, leaving the inside of `<pre>` and `<code>` untouched.
+	 *
+	 * Both source branches go through here, and each had one half of the
+	 * problem:
+	 *
+	 * - **Blocks were never expanded at all.** `render_block()` does not expand
+	 *   shortcodes; on the front end that job belongs to `the_content`, which
+	 *   this pipeline skips by design (see render()). So a shortcode typed into
+	 *   a paragraph, a Custom HTML block or the core Shortcode block reached the
+	 *   converter as literal text and was published as an escaped `\[tag\]`.
+	 * - **Classic content expanded too much.** It has always called
+	 *   `do_shortcode()`, which is a plain regex over the whole string with no
+	 *   notion of markup: a code sample *showing* `[gallery]` was expanded like
+	 *   the real thing, silently rewriting the sample into whatever the
+	 *   shortcode renders.
+	 *
+	 * Masking the code regions before the expansion fixes the second for both
+	 * branches at once. Only the inside of a code region is hidden, so a
+	 * shortcode wrapping one still runs. WordPress's own escape (`[[tag]]`)
+	 * stays the way to keep literal brackets outside code.
+	 *
+	 * If the masking pass fails (a PCRE limit on pathological input), the
+	 * shortcodes are expanded unprotected rather than skipped: that is the
+	 * behaviour classic content has always had, and leaving them unexpanded
+	 * would publish the raw tag in its place.
+	 */
+	private function expand_shortcodes( string $html ): string {
+		// No bracket, no shortcode: do_shortcode() short-circuits on the same
+		// test, so this only skips the masking work.
+		if ( false === strpos( $html, '[' ) ) {
+			return $html;
+		}
+
+		$stash = array();
+		$token = $this->stash_token( $html );
+
+		$masked = preg_replace_callback(
+			'#<(pre|code)\b[^>]*>.*?</\1\s*>#is',
+			static function ( $matches ) use ( &$stash, $token ) {
+				$key = $token . count( $stash ) . '-->';
+
+				$stash[ $key ] = $matches[0];
+
+				return $key;
+			},
+			$html
+		);
+
+		if ( null === $masked ) {
+			return do_shortcode( $html );
+		}
+
+		return strtr( do_shortcode( $masked ), $stash );
+	}
+
+	/**
+	 * Prefix for the placeholders that stand in for code regions, guaranteed not
+	 * to occur in the content it is used on.
+	 *
+	 * Shaped like an HTML comment so that a placeholder which somehow survived
+	 * restoration would be invisible rather than printed as stray text.
+	 */
+	private function stash_token( string $html ): string {
+		do {
+			$token = '<!--sysmda-code-' . md5( uniqid( '', true ) ) . '-';
+		} while ( false !== strpos( $html, $token ) );
+
+		return $token;
+	}
+
+	/**
+	 * Removes the regions marked for exclusion from a fragment, running none of
+	 * the rest of the pipeline.
+	 *
+	 * Exists for the `description` front-matter fallback, which derives its text
+	 * from the post content directly rather than from the rendered body — so
+	 * without this a section the body promises never to publish came straight
+	 * back out in the front matter. It handles the class-marked regions, which
+	 * is what that rule is written in terms of; blocks excluded by name are
+	 * dynamic and contribute no text to the source content anyway, and excluded
+	 * shortcodes are already gone by the time this runs.
+	 *
+	 * Returns the input unchanged when no exclusion matched, so content that has
+	 * none is never round-tripped through the DOM — neither for the cost nor for
+	 * the serialization differences a round trip would introduce.
+	 */
+	public function strip_excluded_content( string $html ): string {
+		$classes = $this->excluded_classes();
+
+		if ( ! $this->mentions_class( $html, $classes ) ) {
+			return $html;
+		}
+
+		$dom = $this->load_fragment( $html );
+
+		if ( null === $dom ) {
+			return $html;
+		}
+
+		if ( 0 === $this->remove_excluded_nodes( $dom, $classes ) ) {
+			return $html;
+		}
+
+		return $this->serialize_fragment( $dom );
+	}
+
+	/**
+	 * Whether any excluded class name occurs anywhere in the string.
+	 *
+	 * A cheap substring test whose only job is to decide whether the DOM pass is
+	 * worth running. A false positive costs one parse and nothing else: the
+	 * class attribute itself is matched properly in remove_excluded_nodes().
+	 *
+	 * @param array $classes Excluded class names, already resolved.
+	 */
+	private function mentions_class( string $html, array $classes ): bool {
+		foreach ( $classes as $class ) {
+			if ( is_string( $class ) && '' !== $class && false !== strpos( $html, $class ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -97,21 +225,13 @@ class ContentRenderer {
 			return $html;
 		}
 
-		$previous = libxml_use_internal_errors( true );
+		$dom = $this->load_fragment( $html );
 
-		$dom     = new \DOMDocument( '1.0', 'UTF-8' );
-		$wrapped = '<?xml encoding="UTF-8"?><' . self::ROOT_TAG . '>' . $html . '</' . self::ROOT_TAG . '>';
-		$dom->loadHTML( $wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
-
-		libxml_clear_errors();
-		libxml_use_internal_errors( $previous );
-
-		$root = $dom->getElementsByTagName( self::ROOT_TAG )->item( 0 );
-		if ( ! $root instanceof \DOMElement ) {
+		if ( null === $dom ) {
 			return $html;
 		}
 
-		$removed = $this->remove_excluded_nodes( $dom );
+		$removed = $this->remove_excluded_nodes( $dom, $this->excluded_classes() );
 		$this->flatten_definition_lists( $dom );
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
@@ -119,10 +239,7 @@ class ContentRenderer {
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
 
-		$out = '';
-		foreach ( iterator_to_array( $root->childNodes ) as $child ) {
-			$out .= $dom->saveHTML( $child );
-		}
+		$out = $this->serialize_fragment( $dom );
 
 		// Non-empty input that comes back empty means the parse went wrong, and
 		// the unprocessed HTML is a better answer than nothing. Skipped when an
@@ -136,15 +253,62 @@ class ContentRenderer {
 	}
 
 	/**
+	 * Parses an HTML fragment into a document wrapped in ROOT_TAG.
+	 *
+	 * @return \DOMDocument|null Null when the wrapper did not survive the parse.
+	 */
+	private function load_fragment( string $html ): ?\DOMDocument {
+		$previous = libxml_use_internal_errors( true );
+
+		$dom     = new \DOMDocument( '1.0', 'UTF-8' );
+		$wrapped = '<?xml encoding="UTF-8"?><' . self::ROOT_TAG . '>' . $html . '</' . self::ROOT_TAG . '>';
+		$dom->loadHTML( $wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
+
+		libxml_clear_errors();
+		libxml_use_internal_errors( $previous );
+
+		return $dom->getElementsByTagName( self::ROOT_TAG )->item( 0 ) instanceof \DOMElement ? $dom : null;
+	}
+
+	/**
+	 * Serializes the children of the ROOT_TAG wrapper back to HTML.
+	 */
+	private function serialize_fragment( \DOMDocument $dom ): string {
+		$root = $dom->getElementsByTagName( self::ROOT_TAG )->item( 0 );
+
+		if ( ! $root instanceof \DOMElement ) {
+			return '';
+		}
+
+		$out = '';
+		foreach ( iterator_to_array( $root->childNodes ) as $child ) {
+			$out .= $dom->saveHTML( $child );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Filterable list of CSS classes whose content is excluded from Markdown.
+	 *
+	 * Resolved by the caller and passed down, so a pass that needs the list
+	 * before deciding whether to parse at all does not run the filter twice.
+	 *
+	 * @return array
+	 */
+	private function excluded_classes(): array {
+		/** Filters CSS classes whose elements are removed from Markdown output. */
+		return (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+	}
+
+	/**
 	 * Removes DOM elements carrying an excluded class (including nested elements).
 	 *
+	 * @param array $excluded_classes Excluded class names, already resolved.
 	 * @return int Number of removed elements.
 	 */
-	private function remove_excluded_nodes( \DOMDocument $dom ): int {
+	private function remove_excluded_nodes( \DOMDocument $dom, array $excluded_classes ): int {
 		$xpath = new \DOMXPath( $dom );
-
-		/** Filters CSS classes whose elements are removed from Markdown output. */
-		$excluded_classes = (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
 
 		$removed = 0;
 
