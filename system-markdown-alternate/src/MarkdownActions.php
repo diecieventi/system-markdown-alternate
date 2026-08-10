@@ -119,6 +119,17 @@ class MarkdownActions {
 		}
 
 		/*
+		 * Core normally prints this footer handle at wp_footer priority 20. Once
+		 * wp_print_footer_scripts has begun, print this handle immediately instead
+		 * of depending on whether that normal pass is still ahead or already over.
+		 * An explicit handle also prints a footer-group script and preserves its
+		 * localized data.
+		 */
+		if ( did_action( 'wp_print_footer_scripts' ) ) {
+			self::print_late_script();
+		}
+
+		/*
 		 * A template/widget/secondary-loop shortcode may first render after
 		 * wp_print_styles has already emptied the head queue. Scripts have a
 		 * native footer queue; styles do not, so explicitly print this one before
@@ -142,6 +153,15 @@ class MarkdownActions {
 	public static function print_late_styles(): void {
 		if ( wp_style_is( self::HANDLE, 'enqueued' ) && ! wp_style_is( self::HANDLE, 'done' ) ) {
 			wp_print_styles( self::HANDLE );
+		}
+	}
+
+	/**
+	 * Prints the script once the normal footer-scripts action has begun.
+	 */
+	private static function print_late_script(): void {
+		if ( wp_script_is( self::HANDLE, 'enqueued' ) && ! wp_script_is( self::HANDLE, 'done' ) ) {
+			wp_print_scripts( self::HANDLE );
 		}
 	}
 

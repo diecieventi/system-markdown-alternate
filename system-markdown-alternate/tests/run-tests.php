@@ -466,6 +466,31 @@ function add_action( $hook_name, $callback, $priority = 10, $accepted_args = 1 )
 	return true;
 }
 
+/** Stub: dispatches registered callbacks by priority and tracks nested hooks. */
+function do_action( $hook_name, ...$args ) {
+	$GLOBALS['sysmda_test_did_actions'][ $hook_name ] = did_action( $hook_name ) + 1;
+
+	$had_previous = array_key_exists( 'sysmda_test_doing_action', $GLOBALS );
+	$previous     = $had_previous ? $GLOBALS['sysmda_test_doing_action'] : null;
+	$GLOBALS['sysmda_test_doing_action'] = $hook_name;
+
+	if ( isset( $GLOBALS['sysmda_test_actions'][ $hook_name ] ) ) {
+		ksort( $GLOBALS['sysmda_test_actions'][ $hook_name ], SORT_NUMERIC );
+
+		foreach ( $GLOBALS['sysmda_test_actions'][ $hook_name ] as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				call_user_func_array( $callback, $args );
+			}
+		}
+	}
+
+	if ( $had_previous ) {
+		$GLOBALS['sysmda_test_doing_action'] = $previous;
+	} else {
+		unset( $GLOBALS['sysmda_test_doing_action'] );
+	}
+}
+
 function wp_print_styles( $handles = false ) {
 	$handles = is_array( $handles ) ? $handles : array( $handles );
 
@@ -480,6 +505,22 @@ function wp_print_styles( $handles = false ) {
 	}
 
 	return array();
+}
+
+function wp_print_scripts( $handles = false ) {
+	$handles = is_array( $handles ) ? $handles : array( $handles );
+
+	foreach ( $handles as $handle ) {
+		if ( isset( $GLOBALS['sysmda_test_assets']['scripts'][ $handle ] ) ) {
+			$GLOBALS['sysmda_test_assets']['scripts'][ $handle ]['done'] = true;
+			$GLOBALS['sysmda_test_assets']['scripts'][ $handle ]['print_count'] =
+				isset( $GLOBALS['sysmda_test_assets']['scripts'][ $handle ]['print_count'] )
+					? $GLOBALS['sysmda_test_assets']['scripts'][ $handle ]['print_count'] + 1
+					: 1;
+		}
+	}
+
+	return $handles;
 }
 
 /**
@@ -2885,6 +2926,28 @@ $GLOBALS['sysmda_test_posts'][777] = $sysmda_actions_post;
 
 $sysmda_actions = new MarkdownActions();
 $GLOBALS['sysmda_test_did_actions']['wp_print_styles'] = 1;
+
+// Model core's normal wp_footer priority-20 script pass in both scenarios.
+$sysmda_register_footer_printer = static function () {
+	add_action(
+		'wp_footer',
+		static function () {
+			do_action( 'wp_print_footer_scripts' );
+		},
+		20
+	);
+	add_action(
+		'wp_print_footer_scripts',
+		static function () {
+			if ( wp_script_is( MarkdownActions::HANDLE, 'enqueued' ) && ! wp_script_is( MarkdownActions::HANDLE, 'done' ) ) {
+				wp_print_scripts( MarkdownActions::HANDLE );
+			}
+		},
+		20
+	);
+};
+$sysmda_register_footer_printer();
+
 $sysmda_rendered_actions = $sysmda_actions->render_shortcode( array( 'id' => 777 ) );
 check( 'actions shortcode: explicit servable post renders', true, false !== strpos( $sysmda_rendered_actions, 'https://example.com/actions-post.md' ) );
 check( 'actions shortcode: download uses the shared filename builder', true, false !== strpos( $sysmda_rendered_actions, 'download="actions-post.md"' ) );
@@ -2892,12 +2955,40 @@ check( 'actions shortcode: late render registers its stylesheet', true, wp_style
 check( 'actions shortcode: late render registers its script', true, wp_script_is( MarkdownActions::HANDLE, 'registered' ) );
 check( 'actions shortcode: late render enqueues its stylesheet', true, wp_style_is( MarkdownActions::HANDLE, 'enqueued' ) );
 check( 'actions shortcode: late render enqueues its script', true, wp_script_is( MarkdownActions::HANDLE, 'enqueued' ) );
+check( 'actions shortcode: script stays queued before the footer pass', false, wp_script_is( MarkdownActions::HANDLE, 'done' ) );
 check( 'actions shortcode: late render schedules a footer style printer', 1, count( $GLOBALS['sysmda_test_actions']['wp_footer'][0] ) );
 
-call_user_func( $GLOBALS['sysmda_test_actions']['wp_footer'][0][0] );
-call_user_func( $GLOBALS['sysmda_test_actions']['wp_footer'][0][0] );
+do_action( 'wp_footer' );
 check( 'actions shortcode: late stylesheet is marked done', true, wp_style_is( MarkdownActions::HANDLE, 'done' ) );
 check( 'actions shortcode: late stylesheet prints once', 1, $GLOBALS['sysmda_test_assets']['styles'][ MarkdownActions::HANDLE ]['print_count'] );
+check( 'actions shortcode: pre-footer script uses the normal printer', 1, $GLOBALS['sysmda_test_assets']['scripts'][ MarkdownActions::HANDLE ]['print_count'] );
+
+// Reset the observable request state, then render the first actions shortcode
+// from a wp_footer callback after core's normal printer at priority 20.
+unset(
+	$GLOBALS['sysmda_test_assets']['styles'][ MarkdownActions::HANDLE ],
+	$GLOBALS['sysmda_test_assets']['scripts'][ MarkdownActions::HANDLE ],
+	$GLOBALS['sysmda_test_actions']['wp_footer'],
+	$GLOBALS['sysmda_test_actions']['wp_print_footer_scripts'],
+	$GLOBALS['sysmda_test_did_actions']['wp_footer'],
+	$GLOBALS['sysmda_test_did_actions']['wp_print_footer_scripts']
+);
+
+$sysmda_register_footer_printer();
+add_action(
+	'wp_footer',
+	static function () use ( $sysmda_actions ) {
+		$sysmda_actions->render_shortcode( array( 'id' => 777 ) );
+	},
+	25
+);
+
+do_action( 'wp_footer' );
+check( 'actions shortcode: post-footer script is marked done', true, wp_script_is( MarkdownActions::HANDLE, 'done' ) );
+check( 'actions shortcode: post-footer script prints immediately', 1, $GLOBALS['sysmda_test_assets']['scripts'][ MarkdownActions::HANDLE ]['print_count'] );
+
+MarkdownActions::enqueue_assets();
+check( 'actions shortcode: post-footer script still prints once', 1, $GLOBALS['sysmda_test_assets']['scripts'][ MarkdownActions::HANDLE ]['print_count'] );
 
 $GLOBALS['sysmda_test_posts'][778] = $sysmda_mk_post(
 	array(
@@ -2912,7 +3003,10 @@ check( 'actions shortcode: unknown ID produces no control', '', $sysmda_actions-
 
 unset( $GLOBALS['sysmda_test_posts'][777], $GLOBALS['sysmda_test_posts'][778] );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] );
-unset( $GLOBALS['sysmda_test_did_actions']['wp_print_styles'] );
+unset( $GLOBALS['sysmda_test_did_actions']['wp_print_styles'], $GLOBALS['sysmda_test_did_actions']['wp_print_footer_scripts'], $GLOBALS['sysmda_test_did_actions']['wp_footer'] );
+unset( $GLOBALS['sysmda_test_actions']['wp_footer'], $GLOBALS['sysmda_test_actions']['wp_print_footer_scripts'] );
+unset( $GLOBALS['sysmda_test_doing_action'] );
+unset( $sysmda_register_footer_printer );
 
 // ─── CodeFence (pure logic, no library needed) ───────────────────────────────
 

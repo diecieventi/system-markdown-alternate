@@ -394,7 +394,11 @@ The v1 scope is done and widely exceeded. Implemented:
   when the shortcode renders (early when it sits in the queried content, late
   for a template/widget/secondary loop). A late render after `wp_head` explicitly
   prints the enqueued stylesheet at the start of `wp_footer`; unlike scripts,
-  WordPress has no automatic footer queue for styles. JavaScript moves the
+  WordPress has no automatic footer queue for styles. Scripts use WordPress's
+  native footer queue until its normal printer runs; since `0.41.1`, a first
+  render after `wp_print_footer_scripts` prints only this handle immediately
+  through the scripts API, because merely enqueueing it after the consumed pass
+  leaves the component permanently hidden. JavaScript moves the
   dropdown to `document.body`, positions it against the viewport, flips
   left/right and above/below, and clamps it inside an 8 px edge inset, so theme
   overflow and narrow columns cannot clip it. The root is hidden until setup, copy uses the
