@@ -380,11 +380,30 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`): the
-  only implementation plan still open. Greenlit, **not started**, and gated on
-  the WPML/Polylang staging reconnaissance described inside — the current
-  plan's central query assumption is not reliable and must be verified against
-  real plugin behaviour before any code is written.
+- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`):
+  greenlit, **not started**, and gated on the WPML/Polylang staging
+  reconnaissance described inside — the current plan's central query assumption
+  is not reliable and must be verified against real plugin behaviour before any
+  code is written.
+- **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): greenlit, **not
+  started**. An admin page that inventories the shortcode tags and block names
+  actually present in the servable corpus, so the three exclusion lists can be
+  filled in from evidence instead of guesswork. Greenlit by a measurement rather
+  than an idea: `0.38.1` made a registered shortcode inside block content expand
+  in full into every `.md` that contains it, and a staging reproduction on
+  10 August 2026 confirmed it end to end (a newsletter form's label, button and
+  GDPR paragraph landing in the middle of the prose). What that measurement
+  cannot say is whether any real corpus *contains* such a shortcode — which is
+  exactly what the scanner exists to answer, and why it is the cheapest
+  available instrument rather than a feature looking for a use. The design is
+  fixed and its constraints are all blocking; two are easy to get wrong and are
+  called out here as well: applying a suggestion must write **the current
+  effective list plus the new tag** (a non-empty option *replaces* the defaults,
+  see `AdminSettings::option_to_list()`), and the results option must be
+  **excluded from the settings-save cache-salt bump**, like the hit-counter
+  buckets, or every scan invalidates the whole cache. It informs and never
+  applies on its own — the same line as "never auto-detect which taxonomies to
+  emit".
 
 ### To check next time (not urgent, parked here)
 
