@@ -466,6 +466,33 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
+- **Documentation site** (`docs-site/`): **started August 2026, MVP in
+  progress.** A WordPress knowledge base in the Perfmatters shape — a `doc`
+  content type, one category per section, one article per topic — rather than a
+  static site or a hosted docs platform. The reason is not preference: the
+  plugin is active on that site, so every article has its own `.md` and
+  `/llms.txt` lists the set, which makes the documentation its own live
+  demonstration. A hosted platform (Mintlify & co.) sells those same two
+  features as a product, so documenting this plugin there would mean buying
+  elsewhere exactly what it provides.
+  **Audience split, and it is the anti-drift rule applied**: the site carries
+  *user* documentation (getting started, settings reference, troubleshooting,
+  integrations); `docs/filters.md` and `docs/output-format.md` stay in the repo,
+  versioned with the code they describe, and the site **links** to them instead
+  of restating them. Do not copy a contract onto the site.
+  Structure and the first 10 articles are live on the InstaWP staging site
+  (6 categories, `/docs/`, `.md` and `/llms.txt` verified end to end). Remaining
+  for the MVP: the rest of the settings reference and troubleshooting entries,
+  a `/docs/` index template with the category cards, and screenshots. Sizing
+  against the real surface — 17 panel fields, 32 filters, 3 shortcodes,
+  2 endpoints — the full build is ≈ 53 articles; the MVP is ≈ 16, and the rest
+  should follow real support questions rather than being written up front.
+  Two traps are recorded in `docs-site/README.md` because both fail silently:
+  the taxonomy must be registered **before** the post type (the post type's
+  attachment rewrite rule otherwise swallows every category archive), and
+  content written programmatically must go through `wp_slash()` (`wp_insert_post()`
+  unslashes, so `"\n"` in a code sample is stored as `"n"` — documentation is
+  mostly code samples, so this corrupts at scale).
 ### To check next time (not urgent, parked here)
 
 - **The caching contract is done; the `304` is a host property, not a gap.**
@@ -1244,6 +1271,9 @@ and backups when finished.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   └── llms-txt-multilingual-plan.md
+├── docs-site/                    ← documentation-site scaffolding (site code, NOT shipped)
+│   ├── README.md                 ← what it is, how to install, the two silent traps
+│   └── mu-plugins/smadocs-site.php  ← `doc` post type + `doc_category` taxonomy
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
