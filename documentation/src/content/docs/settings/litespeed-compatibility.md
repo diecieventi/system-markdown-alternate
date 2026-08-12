@@ -45,4 +45,4 @@ Nothing here applies, but the underlying situation can. Behind a CDN, either add
 
 And the answer that works everywhere without configuration: **use the `.md` URL.** It is its own cache key, so no cache can confuse it with the HTML page.
 
-See [Markdown negotiation returns HTML](../troubleshooting/negotiation-returns-html.md) for how to confirm what your host is actually doing.
+See [Markdown negotiation returns HTML](/troubleshooting/negotiation-returns-html/) for how to confirm what your host is actually doing.

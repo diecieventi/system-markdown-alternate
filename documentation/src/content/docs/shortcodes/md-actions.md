@@ -42,7 +42,7 @@ Minimal white-and-bordered by default, with namespaced classes so a theme can re
 
 An earlier version of this plugin shipped a configurable, automatically-inserted Markdown button. It broke layouts on mobile, loaded assets for every visitor including the majority who never used it, and each round of feedback bought another round of CSS fighting an unknown theme. It was removed. This shortcode is the narrow version that survived: explicit placement, three actions, assets only where used.
 
-If you want something else entirely, [`[sysmda_md_url]`](./md-url.md) gives you the URL and your theme does the rest.
+If you want something else entirely, [`[sysmda_md_url]`](/shortcodes/md-url/) gives you the URL and your theme does the rest.
 
 ## Requirements
 

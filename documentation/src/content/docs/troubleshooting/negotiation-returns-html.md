@@ -26,7 +26,7 @@ curl -sI https://example.com/my-post.md
 
 - The first should be `text/html` and carry `vary: accept`.
 - The second should be `text/markdown`. If it is HTML, a cache is serving the stored HTML variant.
-- The third must always be `text/markdown`. If it is not, this is not a negotiation problem — see [Nothing is served at the .md URL](./nothing-served-at-the-md-url.md).
+- The third must always be `text/markdown`. If it is not, this is not a negotiation problem — see [Nothing is served at the .md URL](/troubleshooting/nothing-served-at-the-md-url/).
 
 Look for a cache-status header in the response (`x-litespeed-cache`, `x-cache`, `cf-cache-status`, `x-runcache-status`). A hit on the second request is the confirmation.
 
@@ -42,7 +42,7 @@ Worth being precise, because the two directions are not equally serious.
 
 **Use the .md URL.** It is its own cache key, so it can never be confused with the HTML page, and it works on every host without configuration. If you are publishing a Markdown address for agents to use, this is the one to publish.
 
-**On LiteSpeed**, tick [*LiteSpeed cache compatibility*](../settings/litespeed-compatibility.md) under **Advanced**. It adds a small `.htaccess` block making requests that negotiate Markdown bypass the page cache, so PHP always decides. Normal browser traffic stays fully cached, and on any other server the rules are inert. Purge the LiteSpeed cache afterwards.
+**On LiteSpeed**, tick [*LiteSpeed cache compatibility*](/settings/litespeed-compatibility/) under **Advanced**. It adds a small `.htaccess` block making requests that negotiate Markdown bypass the page cache, so PHP always decides. Normal browser traffic stays fully cached, and on any other server the rules are inert. Purge the LiteSpeed cache afterwards.
 
 Whether a given LiteSpeed host honours `Vary` cannot be detected automatically, so if you are unsure, enabling is the safe choice — on a host that already honours it the rules are simply redundant.
 

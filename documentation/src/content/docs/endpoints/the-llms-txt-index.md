@@ -51,7 +51,7 @@ Leave it off and the output is the plain list above, unchanged.
 
 ## What is never listed
 
-The index and the `.md` endpoint apply the same eligibility rules, so the file can never advertise a URL that answers 404. Password-protected posts, drafts, non-standard post formats and disabled content types are all absent. See [Enabled content types](../settings/enabled-content-types.md).
+The index and the `.md` endpoint apply the same eligibility rules, so the file can never advertise a URL that answers 404. Password-protected posts, drafts, non-standard post formats and disabled content types are all absent. See [Enabled content types](/settings/enabled-content-types/).
 
 ## Caching
 

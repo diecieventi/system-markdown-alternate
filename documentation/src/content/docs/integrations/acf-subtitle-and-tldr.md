@@ -53,4 +53,4 @@ add_filter( 'sysmda_acf_field_keys', function ( array $keys ) {
 } );
 ```
 
-Those values join the block source before rendering, so a synced pattern referenced from an ACF field is followed like any other. See [Extending the plugin with filters](../developers/extending-with-filters.md).
+Those values join the block source before rendering, so a synced pattern referenced from an ACF field is followed like any other. See [Extending the plugin with filters](/developers/extending-with-filters/).

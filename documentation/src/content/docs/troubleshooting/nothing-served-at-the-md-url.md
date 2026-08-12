@@ -51,4 +51,4 @@ For `/llms.txt` specifically, a real file in the site root always wins: the web 
 
 ## Still nothing?
 
-If the URL returns HTML rather than 404, the problem is different and usually a cache — see [Markdown negotiation returns HTML](./negotiation-returns-html.md).
+If the URL returns HTML rather than 404, the problem is different and usually a cache — see [Markdown negotiation returns HTML](/troubleshooting/negotiation-returns-html/).

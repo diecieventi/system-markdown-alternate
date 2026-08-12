@@ -18,7 +18,7 @@ Every published post of that type, subject to the eligibility rules below, gains
 - a `.md` URL, and content negotiation on its normal permalink;
 - an `alternate` link in the page head and in the HTTP response headers;
 - an entry in `/llms.txt`;
-- working output from the [shortcodes](../shortcodes/md-url.md) and the [GenerateBlocks dynamic tag](../integrations/generateblocks-dynamic-tag.md).
+- working output from the [shortcodes](/shortcodes/md-url/) and the [GenerateBlocks dynamic tag](/integrations/generateblocks-dynamic-tag/).
 
 ## Which types appear in the list
 
@@ -56,4 +56,4 @@ add_filter( 'sysmda_markdown_supported_post_types', function ( array $types ) {
 } );
 ```
 
-To exclude individual posts rather than whole types, use `sysmda_post_is_servable` — see [Extending the plugin with filters](../developers/extending-with-filters.md).
+To exclude individual posts rather than whole types, use `sysmda_post_is_servable` — see [Extending the plugin with filters](/developers/extending-with-filters/).

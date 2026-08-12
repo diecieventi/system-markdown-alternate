@@ -12,7 +12,7 @@ https://example.com/my-post/      → HTML, for people
 https://example.com/my-post.md    → Markdown, for machines
 ```
 
-Nothing about the HTML page changes. The Markdown is an additional representation of the same content, generated on request and [cached](../settings/cache-ttl.md), so there is no second copy of your articles to keep in sync.
+Nothing about the HTML page changes. The Markdown is an additional representation of the same content, generated on request and [cached](/settings/cache-ttl/), so there is no second copy of your articles to keep in sync.
 
 ## What the Markdown looks like
 
@@ -36,21 +36,21 @@ description: "Why lazy loading matters and how to switch it on."
 The body follows here, converted to clean Markdown.
 ```
 
-The keys are emitted in a fixed order and the format is a stable contract — see [The .md endpoint](../endpoints/the-md-endpoint.md) for the full picture.
+The keys are emitted in a fixed order and the format is a stable contract — see [The .md endpoint](/endpoints/the-md-endpoint/) for the full picture.
 
 ## Who reads it
 
 - **AI assistants fetching a page on a reader's behalf.** When someone asks an assistant about one of your articles, the assistant fetches the URL. Given the choice, it gets the text instead of a page of navigation, cookie banners and related-post widgets.
 - **Agents and scripts** that need your content as text without writing a scraper for your theme.
 - **Retrieval pipelines** building an index over your site, where clean structure matters more than styling.
-- **Readers**, when you add a [copy or download control](../shortcodes/md-actions.md) to your template.
+- **Readers**, when you add a [copy or download control](/shortcodes/md-actions/) to your template.
 
 ## How the Markdown is produced
 
 The plugin does not scrape the rendered page. It renders your *blocks* and converts those, which is why the result is clean by construction rather than by cleanup:
 
 - Content injected into `the_content` by other plugins — related posts, calls to action, share buttons — never enters the pipeline, because that filter is skipped.
-- Navigation blocks, forms and anything you list under the exclusion settings are removed. See [Excluding content from the Markdown](../settings/excluding-content.md).
+- Navigation blocks, forms and anything you list under the exclusion settings are removed. See [Excluding content from the Markdown](/settings/excluding-content/).
 - Relative links and images are resolved to absolute URLs, so the document still works when it is read somewhere else entirely.
 - Code blocks keep their language and their formatting, including code that contains Markdown syntax of its own.
 
@@ -62,5 +62,5 @@ The plugin does not scrape the rendered page. It renders your *blocks* and conve
 
 ## Next
 
-- [Serving your first Markdown file](./serving-your-first-markdown-file.md)
-- [Enabled content types](../settings/enabled-content-types.md) — the one setting the plugin cannot work without
+- [Serving your first Markdown file](/getting-started/serving-your-first-markdown-file/)
+- [Enabled content types](/settings/enabled-content-types/) — the one setting the plugin cannot work without

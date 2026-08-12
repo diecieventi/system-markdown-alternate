@@ -30,7 +30,7 @@ Because that is what makes it safe to drop anywhere a URL is expected:
 <a href="[sysmda_md_url]">Read as Markdown</a>
 ```
 
-If this shortcode could also return markup — given a label, say — that usage would break the first time someone passed one. It returns a URL, always, so you can build whatever you want around it. For a ready-made link, use [`[sysmda_md_download]`](./md-download.md) or [`[sysmda_md_actions]`](./md-actions.md) instead.
+If this shortcode could also return markup — given a label, say — that usage would break the first time someone passed one. It returns a URL, always, so you can build whatever you want around it. For a ready-made link, use [`[sysmda_md_download]`](/shortcodes/md-download/) or [`[sysmda_md_actions]`](/shortcodes/md-actions/) instead.
 
 ## It never links to a 404
 
@@ -47,7 +47,7 @@ if ( '' !== $url ) {
 
 ## On plain permalinks
 
-If your site uses plain permalinks (`?p=123`) there is no path to append `.md` to, so the shortcode returns the `?format=markdown` form of the URL instead. It still works; it is just less tidy. See [Serving your first Markdown file](../getting-started/serving-your-first-markdown-file.md).
+If your site uses plain permalinks (`?p=123`) there is no path to append `.md` to, so the shortcode returns the `?format=markdown` form of the URL instead. It still works; it is just less tidy. See [Serving your first Markdown file](/getting-started/serving-your-first-markdown-file/).
 
 ## In the Markdown itself
 

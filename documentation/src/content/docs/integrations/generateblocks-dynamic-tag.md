@@ -33,7 +33,7 @@ This is worth setting up even if every post on your site currently qualifies: th
 
 Shortcodes are expanded in content. GenerateBlocks templates work with dynamic data at render time, and its own fields do not run shortcodes — so `[sysmda_md_url]` typed into a URL field would be published literally. The dynamic tag is the same value in the form that context can consume.
 
-Both exist because both contexts exist. In post content, use [`[sysmda_md_url]`](../shortcodes/md-url.md); in a GenerateBlocks field, use the tag.
+Both exist because both contexts exist. In post content, use [`[sysmda_md_url]`](/shortcodes/md-url/); in a GenerateBlocks field, use the tag.
 
 ## GeneratePress without GenerateBlocks
 

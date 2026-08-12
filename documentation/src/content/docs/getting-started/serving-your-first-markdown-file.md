@@ -39,7 +39,7 @@ cache-control: public, max-age=0, must-revalidate
 etag: W/"…"
 ```
 
-If a firewall or CDN sits in front of the site, some block command-line user agents outright. A redirect to a block page instead of Markdown is not a plugin problem — see [Nothing is served at the .md URL](../troubleshooting/nothing-served-at-the-md-url.md).
+If a firewall or CDN sits in front of the site, some block command-line user agents outright. A redirect to a block page instead of Markdown is not a plugin problem — see [Nothing is served at the .md URL](/troubleshooting/nothing-served-at-the-md-url/).
 
 ## What you get automatically
 
@@ -47,7 +47,7 @@ With that one setting saved, three things are already in place:
 
 - **Discovery.** Each HTML page now advertises its Markdown twin, both in the document head and as an HTTP `Link` header, so a client can find it without guessing the URL.
 - **Content negotiation.** A client that explicitly asks for `text/markdown` on the normal permalink gets Markdown, without needing the `.md` suffix at all.
-- **An index.** `/llms.txt` lists the content you just enabled, so an agent can discover the whole site from one file. See [The /llms.txt index](../endpoints/the-llms-txt-index.md).
+- **An index.** `/llms.txt` lists the content you just enabled, so an agent can discover the whole site from one file. See [The /llms.txt index](/endpoints/the-llms-txt-index/).
 
 ## A note on permalinks
 
@@ -55,5 +55,5 @@ The `.md` suffix needs pretty permalinks. If your site still uses plain permalin
 
 ## Next
 
-- [Excluding content from the Markdown](../settings/excluding-content.md) — forms, tables of contents and other page furniture
-- [The .md endpoint and content negotiation](../endpoints/the-md-endpoint.md)
+- [Excluding content from the Markdown](/settings/excluding-content/) — forms, tables of contents and other page furniture
+- [The .md endpoint and content negotiation](/endpoints/the-md-endpoint/)

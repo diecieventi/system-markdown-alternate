@@ -72,4 +72,4 @@ Not every host forwards conditional headers to PHP. Some reverse proxies strip t
 
 When Markdown is served on the shared permalink, the response is sent with `no-store`. Honouring `Vary: Accept` is a per-host property — some page caches key on the URL alone — and a cache that ignores it would happily serve the Markdown variant to the next browser that asks for the page. Refusing storage on that route removes the possibility.
 
-The `.md` URL has no such problem: it is its own cache key, so it stays fully cacheable. One more reason to prefer it when handing out a link. If negotiation on the permalink returns HTML on your host, see [Markdown negotiation returns HTML](../troubleshooting/negotiation-returns-html.md).
+The `.md` URL has no such problem: it is its own cache key, so it stays fully cacheable. One more reason to prefer it when handing out a link. If negotiation on the permalink returns HTML on your host, see [Markdown negotiation returns HTML](/troubleshooting/negotiation-returns-html/).
