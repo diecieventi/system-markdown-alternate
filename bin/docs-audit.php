@@ -10,12 +10,16 @@
  * agent asked to) to decide what the documentation should say; nothing here
  * knows that.
  *
- * WHAT IT CANNOT SEE, and this is the important limit: a behaviour change that
- * moves no symbol. `0.40.0` turned the exclusion lists from "replace the
- * defaults" into "add to the defaults" — same filter, same field, same names,
- * and the article about them became false in silence. No symbol diff finds
- * that, which is why the last section prints recent changelog entries: they are
- * the only record of intent, and they have to be read.
+ * STEP ZERO, NOT THE CHECK. It answers one narrow question — is there a filter,
+ * panel field or shortcode named nowhere at all — because that is the gap a
+ * human reading diffs can miss entirely. Judging whether a change altered how
+ * the plugin is used needs the diff read, and that is what the "check the
+ * documentation" procedure in AGENTS.md is for.
+ *
+ * So a clean run does NOT mean the documentation is current. `0.40.0` turned
+ * the exclusion lists from "replace the defaults" into "add to the defaults" —
+ * same filter, same field, same names — and this script would have said
+ * nothing at all.
  *
  * @package Diecieventi\SystemMarkdownAlternate
  */
@@ -27,16 +31,8 @@ $src       = $root . '/system-markdown-alternate/src';
 $user_docs = $root . '/documentation/src/content/docs';
 $filters   = $root . '/docs/filters.md';
 $output    = $root . '/docs/output-format.md';
-$changelog = $root . '/CHANGELOG.md';
 
-$entries = 3;
-foreach ( array_slice( $argv, 1 ) as $i => $arg ) {
-	if ( '--changelog' === $arg && isset( $argv[ $i + 2 ] ) ) {
-		$entries = max( 0, (int) $argv[ $i + 2 ] );
-	}
-}
-
-foreach ( array( $src, $user_docs, $filters, $output, $changelog ) as $path ) {
+foreach ( array( $src, $user_docs, $filters, $output ) as $path ) {
 	if ( ! file_exists( $path ) ) {
 		fwrite( STDERR, "Missing: {$path}\n" );
 		exit( 2 );
@@ -132,15 +128,8 @@ $findings += report(
 echo "\n";
 
 if ( 0 === $findings ) {
-	echo "No gaps found in what can be checked mechanically.\n";
-}
-
-if ( $entries > 0 ) {
-	echo "\n";
-	echo "Recent changelog entries — read these for behaviour changes that moved no symbol,\n";
-	echo "which is the class of drift nothing above can detect:\n\n";
-
-	echo trim( recent_changelog( file_get_contents( $changelog ), $entries ) ) . "\n";
+	echo "No symbol is missing or stale.\n";
+	echo "This is step zero only — see \"check the documentation\" in AGENTS.md for the rest.\n";
 }
 
 exit( $findings > 0 ? 1 : 0 );
@@ -197,21 +186,3 @@ function report( string $title, array $items, string $advice ): int {
 	return count( $items );
 }
 
-/**
- * The most recent `## X.Y.Z` sections of the changelog.
- */
-function recent_changelog( string $changelog, int $count ): string {
-	$parts = preg_split( '/^(## \d+\.\d+\.\d+.*)$/m', $changelog, -1, PREG_SPLIT_DELIM_CAPTURE );
-
-	if ( ! is_array( $parts ) || count( $parts ) < 3 ) {
-		return '(could not parse CHANGELOG.md)';
-	}
-
-	$text = '';
-
-	for ( $i = 1; $i < count( $parts ) && $count > 0; $i += 2, $count-- ) {
-		$text .= $parts[ $i ] . "\n" . rtrim( $parts[ $i + 1 ] ?? '' ) . "\n\n";
-	}
-
-	return $text;
-}
