@@ -53,6 +53,22 @@ link: <https://example.com/my-post.md>; rel="alternate"; type="text/markdown"
 
 The two `noindex`/`canonical` headers together tell search engines exactly one thing: index the HTML page, not this. That is why the plugin creates no SEO risk, and why it deliberately ships no sitemap of `.md` URLs.
 
+### If you are logged in, you will see something else
+
+Worth knowing before you test, because it looks like a fault and is not. The table above describes the **anonymous** response — which is the only one that matters, since it is what every reader, crawler and agent gets.
+
+A request from a logged-in visitor is answered differently on purpose:
+
+```
+cache-control: private, no-store, must-revalidate
+```
+
+with **no `ETag` and no `Last-Modified`**, and never a `304`.
+
+The reason is that the document is assembled by rendering your blocks and shortcodes, and those run in the caller's context. A dynamic block that reads the current user renders differently for you than for everyone else, so an authenticated request is rebuilt rather than served from — or written into — the cache shared by all anonymous readers. Sending validators for that response would describe a body that is not the one you were given.
+
+**Test in a private window**, or with `curl`, to see the headers your visitors actually receive.
+
 ## Conditional requests
 
 A client holding a current copy can revalidate instead of re-downloading:

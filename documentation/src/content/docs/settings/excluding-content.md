@@ -47,7 +47,9 @@ The exclusion also applies to the front matter `description`, so an excluded sec
 
 An article that *documents* a shortcode is not the same as an article that *uses* one. Text inside a code block or an inline `code` span is never expanded and never stripped, so writing about `[contact-form-7]` in a tutorial leaves the example intact even though the tag is on the exclusion list.
 
-Outside code, an unrecognised shortcode is expanded normally, exactly as it is on the HTML page.
+Outside code, a shortcode you have *not* excluded is expanded normally, exactly as it is on the HTML page.
+
+One case that looks like a bug and is not: a shortcode whose tag is **not registered by any active plugin** is left in the text as literal `[foo]`, because that is what WordPress itself does. If you find a bare tag in your Markdown, check whether the plugin that provides it is still active before adding it to an exclusion list — the HTML page shows the same literal text.
 
 ## Finding what to exclude
 

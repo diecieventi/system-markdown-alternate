@@ -7,7 +7,7 @@ sidebar:
 
 **Settings → Markdown Alternate → Markdown output**
 
-Categories and tags are always in the front matter under their own keys. Any *other* taxonomy — a genre, a topic, a product line — is added only if you tick it here.
+Categories and tags have built-in front-matter keys of their own, emitted whenever the post has terms in them. Any *other* taxonomy — a genre, a topic, a product line — is added only if you tick it here.
 
 **Default:** nothing selected. With nothing ticked the output is byte-identical to a site that has never seen this setting.
 
