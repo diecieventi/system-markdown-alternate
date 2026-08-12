@@ -1,0 +1,41 @@
+---
+/**
+ * Starlight's page title, with the Markdown actions beside it.
+ *
+ * Overriding PageTitle rather than injecting into the content puts the control
+ * where GitHub puts its equivalent — level with the heading, above the prose —
+ * and keeps it out of the article body, which is what gets copied.
+ */
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+import MarkdownActions from './MarkdownActions.astro';
+
+const path = Astro.url.pathname.replace(/\/$/, '');
+const markdownUrl = `${path}.md`;
+const filename = `${path.split('/').pop() || 'index'}.md`;
+---
+
+<div class="sysmda-page-title">
+	<Default />
+	<MarkdownActions url={markdownUrl} filename={filename} />
+</div>
+
+<style>
+	.sysmda-page-title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem 1rem;
+	}
+
+	/* The heading brings its own top margin; keep the row aligned on it. */
+	.sysmda-page-title :global(h1) {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.sysmda-page-title :global(.sysmda-md-actions) {
+		flex: 0 0 auto;
+		margin-top: 1rem;
+	}
+</style>

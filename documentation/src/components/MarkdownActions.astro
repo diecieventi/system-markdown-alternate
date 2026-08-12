@@ -1,0 +1,637 @@
+---
+/**
+ * Copy / view / download the Markdown twin of the current page.
+ *
+ * A port of the plugin's own `[sysmda_md_actions]` shortcode. The behaviour is
+ * deliberately identical — split button, dropdown moved to the end of the
+ * document and positioned against the viewport — because that shape is the
+ * outcome of two rounds of real fixes, not a fresh design. What changed is the
+ * styling, which uses Starlight's tokens instead of the plugin's defensive
+ * white-and-bordered look: there the theme is unknown, here it is ours.
+ */
+const { url, filename } = Astro.props;
+const menuId = `md-actions-${Math.random().toString(36).slice(2, 10)}`;
+---
+
+<div class="sysmda-md-actions" data-sysmda-md-url={url} hidden>
+	<div class="sysmda-md-actions__group">
+		<button type="button" class="sysmda-md-actions__copy" data-sysmda-action="copy" hidden>
+			<svg class="sysmda-md-actions__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>
+			<span class="sysmda-md-actions__label">Copy as Markdown</span>
+		</button>
+		<button type="button" class="sysmda-md-actions__toggle" aria-expanded="false" aria-controls={menuId} hidden>
+			<span class="sysmda-md-actions__sr-only">More Markdown options</span>
+			<svg class="sysmda-md-actions__icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M12.78 6.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 7.28a.75.75 0 0 1 1.06-1.06L8 9.94l3.72-3.72a.75.75 0 0 1 1.06 0Z"></path></svg>
+		</button>
+	</div>
+
+	<ul class="sysmda-md-actions__menu" id={menuId} aria-label="Markdown actions" hidden>
+		<li class="sysmda-md-actions__row">
+			<button type="button" class="sysmda-md-actions__item" data-sysmda-action="copy" hidden>
+				<svg class="sysmda-md-actions__icon sysmda-md-actions__icon--leading" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>
+				<span class="sysmda-md-actions__label">Copy as Markdown</span>
+			</button>
+		</li>
+		<li class="sysmda-md-actions__row">
+			<a class="sysmda-md-actions__item" href={url} target="_blank" rel="noopener noreferrer">
+				<svg class="sysmda-md-actions__icon sysmda-md-actions__icon--leading" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path></svg>
+				<span class="sysmda-md-actions__label">View as Markdown<span class="sysmda-md-actions__sr-only"> (opens in new tab)</span></span>
+				<svg class="sysmda-md-actions__icon sysmda-md-actions__icon--trailing" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M3.75 2h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-3.5a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25v-8.5C2 2.784 2.784 2 3.75 2Zm6.854-1h3.146a.25.25 0 0 1 .25.25v3.146a.25.25 0 0 1-.427.177L12.427 3.48 9.03 6.878a.75.75 0 0 1-1.06-1.06l3.397-3.398-1.093-1.093A.25.25 0 0 1 10.604 1Z"></path></svg>
+			</a>
+		</li>
+		<li class="sysmda-md-actions__row">
+			<a class="sysmda-md-actions__item" href={url} download={filename}>
+				<svg class="sysmda-md-actions__icon sysmda-md-actions__icon--leading" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M7.47 10.78a.75.75 0 0 0 1.06 0l3.75-3.75a.75.75 0 0 0-1.06-1.06L8.75 8.44V1.75a.75.75 0 0 0-1.5 0v6.69L4.78 5.97a.75.75 0 0 0-1.06 1.06ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5Z"></path></svg>
+				<span class="sysmda-md-actions__label">Download Markdown</span>
+			</a>
+		</li>
+	</ul>
+
+	<span class="sysmda-md-actions__status" role="status" aria-live="polite"></span>
+</div>
+
+<style>
+	.sysmda-md-actions[hidden],
+	.sysmda-md-actions [hidden],
+	.sysmda-md-actions__menu[hidden] {
+		display: none !important;
+	}
+
+	.sysmda-md-actions {
+		display: inline-flex;
+		vertical-align: middle;
+	}
+
+	.sysmda-md-actions__group {
+		display: inline-flex;
+		align-items: stretch;
+	}
+
+	.sysmda-md-actions__copy,
+	.sysmda-md-actions__toggle {
+		box-sizing: border-box;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.125rem;
+		margin: 0;
+		font-size: var(--sl-text-sm);
+		font-weight: 600;
+		line-height: 1.2;
+		color: var(--sl-color-white);
+		background: var(--sl-color-black);
+		border: 1px solid var(--sl-color-gray-5);
+		cursor: pointer;
+		appearance: none;
+	}
+
+	.sysmda-md-actions__copy {
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		border-radius: 0.375rem 0 0 0.375rem;
+	}
+
+	.sysmda-md-actions__toggle {
+		min-width: 2.125rem;
+		padding: 0.375rem 0.5rem;
+		margin-inline-start: -1px;
+		border-radius: 0 0.375rem 0.375rem 0;
+	}
+
+	.sysmda-md-actions--no-copy .sysmda-md-actions__toggle {
+		margin-inline-start: 0;
+		border-radius: 0.375rem;
+	}
+
+	.sysmda-md-actions__copy:hover,
+	.sysmda-md-actions__toggle:hover,
+	.sysmda-md-actions__copy:focus-visible,
+	.sysmda-md-actions__toggle:focus-visible {
+		background: var(--sl-color-gray-6);
+	}
+
+	.sysmda-md-actions__copy:focus-visible,
+	.sysmda-md-actions__toggle:focus-visible {
+		position: relative;
+		z-index: 1;
+		outline: 2px solid var(--sl-color-accent-high);
+		outline-offset: 2px;
+	}
+
+	.sysmda-md-actions__copy:disabled {
+		opacity: 0.65;
+		cursor: wait;
+	}
+
+	.sysmda-md-actions__icon {
+		flex: 0 0 auto;
+		display: block;
+	}
+
+	.sysmda-md-actions__sr-only,
+	.sysmda-md-actions__status {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>
+
+<style is:global>
+	/*
+	 * The menu is moved to document.body at setup, so it is no longer a
+	 * descendant of this component and scoped styles would not reach it.
+	 */
+	.sysmda-md-actions__menu {
+		position: fixed;
+		z-index: 100;
+		box-sizing: border-box;
+		width: 15.625rem;
+		max-width: calc(100vw - 1rem);
+		max-height: calc(100vh - 1rem);
+		margin: 0;
+		padding: 0.375rem;
+		overflow: auto;
+		list-style: none;
+		color: var(--sl-color-white);
+		background: var(--sl-color-black);
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		box-shadow: var(--sl-shadow-md);
+	}
+
+	.sysmda-md-actions__menu[hidden] {
+		display: none !important;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__row {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__item {
+		box-sizing: border-box;
+		display: grid;
+		grid-template-columns: 1rem minmax(0, 1fr) 1rem;
+		gap: 0.5rem;
+		align-items: center;
+		width: 100%;
+		min-height: 2.375rem;
+		margin: 0;
+		padding: 0.5rem;
+		font-size: var(--sl-text-sm);
+		font-weight: 500;
+		line-height: 1.25;
+		color: var(--sl-color-white);
+		text-align: start;
+		text-decoration: none;
+		background: transparent;
+		border: 0;
+		border-radius: 0.375rem;
+		cursor: pointer;
+		appearance: none;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__item:hover,
+	.sysmda-md-actions__menu .sysmda-md-actions__item:focus-visible {
+		text-decoration: none;
+		background: var(--sl-color-gray-6);
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__item:focus-visible {
+		outline: 2px solid var(--sl-color-accent-high);
+		outline-offset: -2px;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__item:disabled {
+		opacity: 0.65;
+		cursor: wait;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__icon {
+		flex: 0 0 auto;
+		display: block;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__icon--leading {
+		grid-column: 1;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__label {
+		grid-column: 2;
+		min-width: 0;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__icon--trailing {
+		grid-column: 3;
+	}
+
+	.sysmda-md-actions__menu .sysmda-md-actions__sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>
+
+<script>
+	// Ported from the plugin's assets/md-actions.js. Two changes only, both
+	// noted where they occur; everything else is deliberately identical.
+	(function () {
+		'use strict';
+
+		var COPIED = 'Copied!';
+		var COPYING = 'Copying…';
+		var FAILED = 'Copy failed';
+		var FEEDBACK_MS = 2000;
+		var VIEWPORT_GAP = 8;
+		var MENU_GAP = 6;
+
+		function canCopyMarkdown() {
+			var clipboard = window.navigator && navigator.clipboard;
+			var nativeCopy = clipboard && (clipboard.write || clipboard.writeText);
+			var legacyCopy = document.queryCommandSupported && document.queryCommandSupported('copy');
+
+			return !!(window.fetch && window.Promise && (nativeCopy || legacyCopy));
+		}
+
+		function copyText(text) {
+			if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+				return navigator.clipboard.writeText(text);
+			}
+
+			return new Promise(function (resolve, reject) {
+				var area = document.createElement('textarea');
+				var copied = false;
+
+				area.value = text;
+				area.setAttribute('readonly', 'readonly');
+				area.style.position = 'fixed';
+				area.style.top = '-9999px';
+				area.style.opacity = '0';
+				document.body.appendChild(area);
+				area.select();
+
+				try {
+					copied = document.execCommand('copy');
+				} catch (error) {
+					copied = false;
+				}
+
+				document.body.removeChild(area);
+
+				if (copied) {
+					resolve();
+				} else {
+					reject(new Error('Copy failed'));
+				}
+			});
+		}
+
+		function fetchMarkdown(url) {
+			return fetch(url, {
+				credentials: 'omit',
+				headers: { Accept: 'text/markdown' },
+			}).then(function (response) {
+				var type = (response.headers.get('content-type') || '').toLowerCase();
+
+				// CHANGE 1. The plugin requires `text/markdown`, because it controls
+				// the header. Static hosts label `.md` however they like — GitHub
+				// Pages, Netlify and Cloudflare Pages do not agree — so the check is
+				// inverted to its actual purpose: never paste a page of markup. HTML
+				// coming back means something answered with the page instead of the
+				// document, which is the failure worth refusing.
+				if (!response.ok || type.indexOf('text/html') !== -1) {
+					throw new Error('Invalid Markdown response');
+				}
+
+				return response.text();
+			});
+		}
+
+		function copyMarkdown(url) {
+			var pending = fetchMarkdown(url);
+
+			if (window.isSecureContext && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+				var blob = pending.then(function (text) {
+					return new Blob([text], { type: 'text/plain' });
+				});
+
+				return navigator.clipboard
+					.write([new ClipboardItem({ 'text/plain': blob })])
+					.catch(function () {
+						return pending.then(copyText);
+					});
+			}
+
+			return pending.then(copyText);
+		}
+
+		function setup(root) {
+			if (root.getAttribute('data-sysmda-initialized') === 'true') {
+				return;
+			}
+
+			var copyButton = root.querySelector('.sysmda-md-actions__copy');
+			var toggle = root.querySelector('.sysmda-md-actions__toggle');
+			var menu = root.querySelector('.sysmda-md-actions__menu');
+			var menuCopy = menu ? menu.querySelector('[data-sysmda-action="copy"]') : null;
+			var status = root.querySelector('.sysmda-md-actions__status');
+			var url = root.getAttribute('data-sysmda-md-url');
+			var copyActions = [copyButton, menuCopy].filter(Boolean);
+			var copyable = canCopyMarkdown();
+			var busy = false;
+			var scheduled = false;
+
+			if (!toggle || !menu || !url) {
+				return;
+			}
+
+			root.setAttribute('data-sysmda-initialized', 'true');
+			root.classList.add('sysmda-md-actions--js');
+
+			function labelFor(action) {
+				var label = action.querySelector('.sysmda-md-actions__label');
+				return label ? label.textContent : '';
+			}
+
+			if (copyable) {
+				copyActions.forEach(function (action) {
+					action.removeAttribute('hidden');
+					action.setAttribute('data-sysmda-label', labelFor(action));
+				});
+			} else {
+				root.classList.add('sysmda-md-actions--no-copy');
+			}
+
+			toggle.removeAttribute('hidden');
+			menu.hidden = true;
+			document.body.appendChild(menu);
+			root.removeAttribute('hidden');
+
+			function setLabel(action, text) {
+				var label = action.querySelector('.sysmda-md-actions__label');
+
+				if (label) {
+					label.textContent = text;
+				}
+			}
+
+			function announce(message) {
+				if (status) {
+					status.textContent = message;
+				}
+			}
+
+			function isOpen() {
+				return toggle.getAttribute('aria-expanded') === 'true';
+			}
+
+			function positionMenu() {
+				if (!isOpen()) {
+					return;
+				}
+
+				var anchor = toggle.getBoundingClientRect();
+				var box = menu.getBoundingClientRect();
+				var maxLeft = Math.max(VIEWPORT_GAP, window.innerWidth - box.width - VIEWPORT_GAP);
+				var maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - box.height - VIEWPORT_GAP);
+				var left = anchor.left;
+				var top = anchor.bottom + MENU_GAP;
+				var horizontal = 'right';
+				var vertical = 'bottom';
+
+				if (left + box.width > window.innerWidth - VIEWPORT_GAP) {
+					left = anchor.right - box.width;
+					horizontal = 'left';
+				}
+
+				left = Math.min(Math.max(VIEWPORT_GAP, left), maxLeft);
+
+				if (top + box.height > window.innerHeight - VIEWPORT_GAP && anchor.top - box.height - MENU_GAP >= VIEWPORT_GAP) {
+					top = anchor.top - box.height - MENU_GAP;
+					vertical = 'top';
+				}
+
+				top = Math.min(Math.max(VIEWPORT_GAP, top), maxTop);
+
+				menu.style.left = Math.round(left) + 'px';
+				menu.style.top = Math.round(top) + 'px';
+				menu.setAttribute('data-sysmda-placement', vertical + '-' + horizontal);
+			}
+
+			function schedulePosition() {
+				if (scheduled || !isOpen()) {
+					return;
+				}
+
+				scheduled = true;
+				window.requestAnimationFrame(function () {
+					scheduled = false;
+					positionMenu();
+				});
+			}
+
+			function open() {
+				if (isOpen()) {
+					return;
+				}
+
+				menu.style.visibility = 'hidden';
+				menu.removeAttribute('hidden');
+				root.classList.add('is-open');
+				toggle.setAttribute('aria-expanded', 'true');
+				positionMenu();
+				menu.style.visibility = '';
+			}
+
+			function close(refocus) {
+				if (!isOpen()) {
+					return;
+				}
+
+				menu.setAttribute('hidden', 'hidden');
+				root.classList.remove('is-open');
+				toggle.setAttribute('aria-expanded', 'false');
+
+				if (refocus) {
+					toggle.focus();
+				}
+			}
+
+			function items() {
+				return Array.prototype.slice.call(menu.querySelectorAll('.sysmda-md-actions__item:not([hidden])'));
+			}
+
+			function focusItem(index) {
+				var all = items();
+
+				if (!all.length) {
+					return;
+				}
+
+				all[(index + all.length) % all.length].focus();
+			}
+
+			function restoreLabel(action) {
+				setLabel(action, action.getAttribute('data-sysmda-label') || 'Copy as Markdown');
+			}
+
+			function feedback(action, message) {
+				setLabel(action, message);
+				announce(message);
+
+				if (action.sysmdaTimer) {
+					window.clearTimeout(action.sysmdaTimer);
+				}
+
+				action.sysmdaTimer = window.setTimeout(function () {
+					restoreLabel(action);
+				}, FEEDBACK_MS);
+			}
+
+			function runCopy(action) {
+				if (busy || !copyable) {
+					return;
+				}
+
+				busy = true;
+				copyActions.forEach(function (item) {
+					item.disabled = true;
+				});
+				setLabel(action, COPYING);
+				announce(COPYING);
+
+				copyMarkdown(url)
+					.then(
+						function () {
+							feedback(action, COPIED);
+						},
+						function () {
+							feedback(action, FAILED);
+						}
+					)
+					.then(function () {
+						busy = false;
+						copyActions.forEach(function (item) {
+							item.disabled = false;
+						});
+					});
+			}
+
+			if (copyButton) {
+				copyButton.addEventListener('click', function () {
+					runCopy(copyButton);
+				});
+			}
+
+			toggle.addEventListener('click', function (event) {
+				event.preventDefault();
+
+				if (isOpen()) {
+					close(false);
+				} else {
+					open();
+				}
+			});
+
+			toggle.addEventListener('keydown', function (event) {
+				if (event.key === 'ArrowDown' || event.key === 'Down') {
+					event.preventDefault();
+					open();
+					focusItem(0);
+				}
+			});
+
+			menu.addEventListener('click', function (event) {
+				var copy = event.target.closest ? event.target.closest('[data-sysmda-action="copy"]') : null;
+				var item = event.target.closest ? event.target.closest('.sysmda-md-actions__item') : null;
+
+				if (copy) {
+					event.preventDefault();
+					runCopy(copy);
+				} else if (item) {
+					close(false);
+				}
+			});
+
+			menu.addEventListener('keydown', function (event) {
+				var all = items();
+				var index = all.indexOf(document.activeElement);
+
+				if (event.key === 'Escape' || event.key === 'Esc') {
+					event.preventDefault();
+					close(true);
+				} else if (event.key === 'ArrowDown' || event.key === 'Down') {
+					event.preventDefault();
+					focusItem(index + 1);
+				} else if (event.key === 'ArrowUp' || event.key === 'Up') {
+					event.preventDefault();
+					focusItem(index - 1);
+				} else if (event.key === 'Home') {
+					event.preventDefault();
+					focusItem(0);
+				} else if (event.key === 'End') {
+					event.preventDefault();
+					focusItem(all.length - 1);
+				}
+			});
+
+			root.addEventListener('keydown', function (event) {
+				if (event.key === 'Escape' || event.key === 'Esc') {
+					event.preventDefault();
+					close(true);
+				}
+			});
+
+			document.addEventListener('click', function (event) {
+				if (isOpen() && !root.contains(event.target) && !menu.contains(event.target)) {
+					close(false);
+				}
+			});
+
+			document.addEventListener('focusin', function (event) {
+				if (isOpen() && !root.contains(event.target) && !menu.contains(event.target)) {
+					close(false);
+				}
+			});
+
+			window.addEventListener('resize', schedulePosition);
+			document.addEventListener('scroll', schedulePosition, true);
+		}
+
+		function init() {
+			// CHANGE 2. Menus from a previous page are removed first. They live on
+			// document.body, so Starlight's client router would otherwise leave one
+			// behind on every navigation — the plugin never had this problem because
+			// a WordPress page load starts from a clean document.
+			document.querySelectorAll('body > .sysmda-md-actions__menu').forEach(function (stale) {
+				// aria-controls lives on the toggle button, not on the root.
+				if (!document.querySelector('.sysmda-md-actions__toggle[aria-controls="' + stale.id + '"]')) {
+					stale.remove();
+				}
+			});
+
+			document.querySelectorAll('.sysmda-md-actions').forEach(setup);
+		}
+
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', init);
+		} else {
+			init();
+		}
+
+		document.addEventListener('astro:page-load', init);
+	})();
+</script>
