@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { remarkBasePaths } from './remark-base-paths.mjs';
+import { markdownRoutes } from './integrations/markdown-routes.mjs';
 
 // GitHub Pages serves the site from a subpath of the user domain. Both values
 // have to agree with where it is actually published, or every internal link and
@@ -22,6 +23,9 @@ export default defineConfig({
 		remarkPlugins: [remarkBasePaths({ base: BASE })],
 	},
 	integrations: [
+		// Emits `/section/article.md` next to each built page. Static hosting
+		// cannot negotiate on Accept, so the dedicated URL is the whole mechanism.
+		markdownRoutes({ base: BASE }),
 		starlight({
 			title: 'System Markdown Alternate',
 			// The plugin's own icon, shared with the wordpress.org listing.
@@ -34,6 +38,10 @@ export default defineConfig({
 				baseUrl: `${REPO}/edit/main/documentation/`,
 			},
 			lastUpdated: true,
+			// Adds the copy / view / download control beside the page heading.
+			components: {
+				PageTitle: './src/components/PageTitle.astro',
+			},
 			// A group carries the label; the autogenerate config goes inside its
 			// `items`. Putting `autogenerate` next to `label` was the shape until
 			// Starlight 0.39.0 and is now a build error, not a warning.
