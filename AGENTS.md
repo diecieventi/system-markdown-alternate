@@ -1230,6 +1230,7 @@ and backups when finished.
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
+├── .github/workflows/docs-site.yml    ← builds documentation/ and deploys it to GitHub Pages
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
 ├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (live: secrets configured; validates the tag before staging)
@@ -1244,6 +1245,11 @@ and backups when finished.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   └── llms-txt-multilingual-plan.md
+├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
+│   ├── README.md                 ← audience split, link rules, how to write an article
+│   ├── astro.config.mjs          ← sidebar, site + base path, favicon
+│   ├── remark-base-paths.mjs     ← applies `base` to root-relative Markdown links
+│   └── src/content/docs/<section>/<article>.md  ← 19 articles + index.md (splash)
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1287,6 +1293,57 @@ and backups when finished.
 - **Constant/hook/option prefix:** `sysmda_` / `SYSMDA_` (≥ 4 chars and
   distinctive, per the wordpress.org prefixing guideline; also used with a dash
   for slugs/handles: `sysmda-settings`, `sysmda-admin-settings`).
+
+### User documentation (`documentation/`)
+
+The plugin's user-facing documentation — installation, every panel field, the
+endpoints, the shortcodes, the integrations, troubleshooting. Nineteen articles
+plus a landing page, built with **Astro Starlight** and published to GitHub
+Pages at `https://diecieventi.github.io/system-markdown-alternate/` by
+`.github/workflows/docs-site.yml` on any push to `main` that touches
+`documentation/`. Never shipped (root folders sit outside the plugin directory,
+which is all `bin/build.sh` packages), so keeping it out of the package needs no
+configuration.
+
+**It lives in this repository for one reason, and that reason is the whole
+maintenance strategy** (decided August 2026, after the alternative was tried and
+abandoned): a change to the plugin and the change to its documentation travel in
+the **same pull request**, reviewed and merged together. A PR that alters a
+filter, a panel field or a shortcode and touches nothing under `documentation/`
+is visible as such in review.
+
+The rejected alternative was a separate repository, which is what makes the
+rule worth stating rather than assuming. It needed a mechanism to connect the
+two — a scheduled surface diff, a trigger, cross-repo pull requests, and a rule
+in this file telling agents the other repository existed at all. Every one of
+those pieces existed only to bridge the gap; in one repository there is no gap,
+and none of them are needed. Do not reintroduce synchronisation tooling: there
+are not two places to keep in step.
+
+**The audience split is binding, and it is the anti-drift rule applied.**
+`documentation/` is for site owners; `docs/filters.md` and
+`docs/output-format.md` are contracts for developers, versioned with the code
+and **linked, never restated**. Articles link them as full GitHub URLs, not
+relative paths — a relative path resolves while browsing the repository and
+breaks on a published site, where the contracts are not part of the content
+collection.
+
+**Two build details that fail silently, both verified rather than assumed:**
+- **Astro rewrites nothing in Markdown link targets.** Tested against 7.2.1 with
+  four forms (relative `.md`, relative directory, root-relative, root-relative
+  already carrying the base): all four reach the HTML byte-for-byte as written,
+  and the build succeeds regardless. Articles therefore link each other as
+  `/section/article/` with no base, and `remark-base-paths.mjs` applies the base
+  at build time. Writing the base into the files instead would hardcode one
+  deployment into the portable source and make a custom domain a
+  find-and-replace rather than `base: '/'`. Front matter never reaches that
+  pass, so the landing page's hero actions use plain relative links.
+- **`docs-site.yml` has a `paths:` filter, and that is only safe because it is
+  not a required check.** Branch protection gates on the three CI checks, and
+  `ci.yml` deliberately has no path filters — so a documentation-only PR still
+  gets them and can be merged. Adding a path filter to a *required* check would
+  leave it permanently pending and block every PR that does not touch the
+  filtered paths. Do not add one to `ci.yml`.
 
 ## Code conventions
 
