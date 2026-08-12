@@ -1446,6 +1446,37 @@ Two things about it are load-bearing:
 - After changes: `php -l` on the touched files and
   `php system-markdown-alternate/tests/run-tests.php` (pure-logic tests, no WP;
   CI runs them on PHP 7.4 and 8.4).
+- **A guard is not done until it has been seen to fire** (August 2026, written
+  after three of these in a single day). When what you wrote is itself a check,
+  a guard, an exclusion, a cleanup or a conditional branch, construct the input
+  it is supposed to catch, run it, **watch it fail**, and only then fix and
+  ship. Not "read it again carefully" — actually execute the case.
+
+  The reason this needs a rule of its own: **a guard that never fires produces
+  no symptom.** Ordinary code announces its bugs; a check that does not check
+  looks exactly like one that works, and the tests pass, and the build is
+  green, and review sees a plausible-looking condition. It is the one category
+  where "it seems fine" carries no information at all.
+
+  All three were found in review, none by the author, and all three had the
+  same shape — the branch that mattered was never executed:
+  - `usort()` inside a `get_terms` filter, with a comparator returning `0` for
+    non-objects. The comparator was irrelevant: `usort()` reindexes regardless,
+    so the `id=>parent` shape would have had its term IDs replaced by `0,1,2…`.
+    The guard was in a place where it could not do its job.
+  - Dismissal and repositioning listeners registered per component instance
+    instead of once, leaking a set per navigation. Unreachable today because
+    the client router is off — and therefore untested, in code written
+    specifically for the day it is switched on.
+  - `bin/docs-audit.php` collecting only quoted hook names, so the shortcode
+    registered as `add_shortcode( self::TAG, … )` was absent from its list.
+    Deleting that article outright left the audit reporting success. Proving it
+    took thirty seconds *after* the review comment; those thirty seconds
+    belonged before the PR.
+
+  Corollary for anything whose whole purpose is verification — an audit, a
+  linter, a test helper: it gets the treatment first and hardest, because there
+  its silence is the *expected* output.
 - **Coding standards (PHPCS + WPCS)**: `composer phpcs` from the plugin folder;
   `composer phpcbf` auto-fixes the mechanical ones. Config in
   `system-markdown-alternate/phpcs.xml.dist` — `WordPress-Core` +
