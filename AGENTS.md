@@ -1237,6 +1237,7 @@ and backups when finished.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
+├── bin/docs-audit.php            ← on-demand report of where the documentation lags the plugin
 ├── DIST/                         ← build output of bin/build.sh (NOT versioned)
 ├── docs/                         ← public contracts, active plans and operational notes
 │   ├── filters.md                ← developer extension API (public contract)
@@ -1327,6 +1328,29 @@ and **linked, never restated**. Articles link them as full GitHub URLs, not
 relative paths — a relative path resolves while browsing the repository and
 breaks on a published site, where the contracts are not part of the content
 collection.
+
+**Checking whether it has fallen behind**: `php bin/docs-audit.php`. Run on
+demand — before a release, or when picking documentation work back up. Reads
+local files only; no network, nothing scheduled. It reports filters absent from
+`docs/filters.md`, panel fields and shortcodes absent from `documentation/`, and
+names the documentation still explains that the source no longer contains. Exit
+`1` when it finds something, so it can be wired into CI later; it informs and
+never writes.
+
+Two things about it are load-bearing:
+- **It probes panel fields by their LABEL, not their option name.** The first
+  version matched the field id and reported all sixteen fields as undocumented,
+  every one a false positive: user documentation speaks in the words on the
+  screen ("Cache TTL"), not in option keys, and rightly so. Sixteen findings
+  that are all noise is worse than no tool, because nobody reads the
+  seventeenth run. `*_notice` rows are skipped by naming convention — they
+  render an explanation, not a control.
+- **It cannot see a behaviour change that moves no symbol**, which is the drift
+  that actually hurts. `0.40.0` turned the exclusion lists from "replace the
+  defaults" into "add to the defaults" — same filter, same field, same names,
+  and the article became false in silence. Nothing mechanical finds that, which
+  is why the run ends by printing recent `CHANGELOG.md` entries: they are the
+  only record of intent, and they have to be read.
 
 **Two build details that fail silently, both verified rather than assumed:**
 - **Astro rewrites nothing in Markdown link targets.** Tested against 7.2.1 with
