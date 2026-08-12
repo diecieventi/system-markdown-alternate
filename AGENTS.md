@@ -1244,6 +1244,9 @@ and backups when finished.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   └── llms-txt-multilingual-plan.md
+├── documentation/                ← user documentation, 19 articles (NOT shipped)
+│   ├── README.md                 ← audience split, how to write an article
+│   └── src/content/docs/<section>/<article>.md
 └── system-markdown-alternate/    ← THE PLUGIN
     ├── system-markdown-alternate.php   ← header + bootstrap (Composer autoloader)
     ├── readme.txt                      ← wordpress.org format + the 3 most recent changelog entries
@@ -1287,6 +1290,38 @@ and backups when finished.
 - **Constant/hook/option prefix:** `sysmda_` / `SYSMDA_` (≥ 4 chars and
   distinctive, per the wordpress.org prefixing guideline; also used with a dash
   for slugs/handles: `sysmda-settings`, `sysmda-admin-settings`).
+
+### User documentation (`documentation/`)
+
+The plugin's user-facing documentation — installation, every panel field, the
+endpoints, the shortcodes, the integrations, troubleshooting. Markdown sources
+laid out for Astro Starlight, with no site published yet: where they get
+published is a later decision that does not change the files. Never shipped
+(root folders sit outside the plugin directory, which is all `bin/build.sh`
+packages), so keeping it out of the package needs no configuration.
+
+**It lives in this repository for one reason, and that reason is the whole
+maintenance strategy** (decided August 2026, after the alternative was tried and
+abandoned): a change to the plugin and the change to its documentation travel in
+the **same pull request**, reviewed and merged together. A PR that alters a
+filter, a panel field or a shortcode and touches nothing under `documentation/`
+is visible as such in review.
+
+The rejected alternative was a separate repository, which is what makes the
+rule worth stating rather than assuming. It needed a mechanism to connect the
+two — a scheduled surface diff, a trigger, cross-repo pull requests, and a rule
+in this file telling agents the other repository existed at all. Every one of
+those pieces existed only to bridge the gap; in one repository there is no gap,
+and none of them are needed. Do not reintroduce synchronisation tooling: there
+are not two places to keep in step.
+
+**The audience split is binding, and it is the anti-drift rule applied.**
+`documentation/` is for site owners; `docs/filters.md` and
+`docs/output-format.md` are contracts for developers, versioned with the code
+and **linked, never restated**. Articles link them as full GitHub URLs, not
+relative paths — a relative path resolves while browsing the repository and
+breaks on a published site, where the contracts are not part of the content
+collection.
 
 ## Code conventions
 
