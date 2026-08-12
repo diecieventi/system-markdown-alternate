@@ -1145,6 +1145,61 @@ The v1 scope is done and widely exceeded. Implemented:
   If `main` moves while a PR is open, rebase the branch on `origin/main` and
   push with `--force-with-lease`. The user still syncs their Mac with a single
   `git pull origin main`, unchanged.
+- **Every PR answers one question about the documentation, before it is
+  opened** (decided August 2026 — this is the whole maintenance mechanism, and
+  it applies to Claude Code, Codex and anything else):
+
+  > **Would a user who read the documentation yesterday do something different
+  > today?**
+
+  If yes, the change to `documentation/` goes **in the same PR** as the code.
+  Not a follow-up, not an issue: the same diff, reviewed and merged together.
+  That is the entire reason the documentation lives in this repository, and a
+  PR that alters user-facing behaviour while touching nothing under
+  `documentation/` is visible as such in review.
+
+  | Answer is yes | Answer is no |
+  |---|---|
+  | A new panel field, or a default that changes | Internal refactors |
+  | A new shortcode or dynamic tag, or different attributes | Bug fixes restoring already-documented behaviour |
+  | A change to what gets served: types, eligibility, default exclusions | Performance work |
+  | A change to observable behaviour: output shape, response headers, when a 404 is returned | Build, CI, release tooling |
+  | A new integration | A new filter → `docs/filters.md`, not the site |
+
+  Worked examples from real releases: `0.42.0` added default exclusions, so the
+  *Excluding content* article had to change — what lands in a `.md` moved.
+  `0.41.0` rewrote a converter and `0.41.1` fixed a script-printing bug;
+  neither changes how anybody uses the plugin, so neither touches the site.
+  **Most PRs answer no, and that is correct** — the changelog is not the
+  documentation.
+
+  A new filter is documented in `docs/filters.md` (the developer contract) and
+  reaches `documentation/` only when the *setting* behind it changed too.
+- **On-demand catch-up: "check the documentation".** The rule above is the
+  mechanism; this is the net for when it was skipped. When the user asks for a
+  documentation check, in those words or any others:
+  1. `php bin/docs-audit.php` — half a second, and it catches the one thing
+     reading diffs can miss entirely: a filter, field or shortcode that is
+     named nowhere at all. It is step zero, not the check itself.
+  2. Find the window: `git log -1 --format=%H origin/main -- documentation/`.
+     Everything merged after that commit has never been considered for
+     documentation impact.
+  3. List it: `git log --oneline <that-commit>..origin/main`. Squash-merge
+     means one line per PR, with its number in the subject.
+  4. Read each one's diff and apply the question above. Reading the subject is
+     not enough — a commit titled as a fix can move a default.
+  5. Open **one** PR with the updates, and state in its body **which PRs were
+     covered and which were skipped, with the reason for each skip.** The
+     skips are the part worth reviewing: they are a judgement call the user is
+     entitled to check, and burying them makes the whole thing unauditable.
+
+  **Why the window is "since the documentation last changed"** rather than a
+  number of PRs or the last release tag: it needs no bookkeeping and resets
+  itself. The known imprecision is that fixing a typo in an article also resets
+  it, so a code PR merged just before could go unexamined — accepted, because
+  the alternative is a marker file to keep in step, which is the class of thing
+  this whole design exists to avoid. If precision ever matters more, the last
+  release tag is the stricter anchor.
 
 ### Agent-specific notes (Claude Code web, Codex, …)
 
@@ -1237,6 +1292,7 @@ and backups when finished.
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, 5 screenshots)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
+├── bin/docs-audit.php            ← on-demand report of where the documentation lags the plugin
 ├── DIST/                         ← build output of bin/build.sh (NOT versioned)
 ├── docs/                         ← public contracts, active plans and operational notes
 │   ├── filters.md                ← developer extension API (public contract)
@@ -1327,6 +1383,40 @@ and **linked, never restated**. Articles link them as full GitHub URLs, not
 relative paths — a relative path resolves while browsing the repository and
 breaks on a published site, where the contracts are not part of the content
 collection.
+
+**Keeping it current** is the rule in "Identity, versioning, workflow": every PR
+asks whether a user who read the documentation yesterday would do something
+different today, and if so the article changes in the same PR. The on-demand
+catch-up procedure is documented there too. Both live with the git workflow
+because that is where an agent is when the question arises.
+
+`php bin/docs-audit.php` is **step zero of that procedure, not the procedure**.
+It answers one narrow question mechanically — is there a filter, panel field or
+shortcode that is named nowhere at all — and reports names the documentation
+still explains that the source no longer contains. Reads local files only; no
+network, nothing scheduled. Exit `1` when it finds something, so it can be wired
+into CI later; it informs and never writes.
+
+What it cannot do is the actual job, which is judging whether a change altered
+how the plugin is used. That needs the diff read. Do not mistake a clean run for
+a documentation that is up to date: `0.40.0` turned the exclusion lists from
+"replace the defaults" into "add to the defaults" — same filter, same field,
+same names — and this script would have said nothing.
+
+Two things about it are load-bearing:
+- **It probes panel fields by their LABEL, not their option name.** The first
+  version matched the field id and reported all sixteen fields as undocumented,
+  every one a false positive: user documentation speaks in the words on the
+  screen ("Cache TTL"), not in option keys, and rightly so. Sixteen findings
+  that are all noise is worse than no tool, because nobody reads the
+  seventeenth run. `*_notice` rows are skipped by naming convention — they
+  render an explanation, not a control.
+- **It cannot see a behaviour change that moves no symbol**, which is the drift
+  that actually hurts. `0.40.0` turned the exclusion lists from "replace the
+  defaults" into "add to the defaults" — same filter, same field, same names,
+  and the article became false in silence. Nothing mechanical finds that, which
+  is why the run ends by printing recent `CHANGELOG.md` entries: they are the
+  only record of intent, and they have to be read.
 
 **Two build details that fail silently, both verified rather than assumed:**
 - **Astro rewrites nothing in Markdown link targets.** Tested against 7.2.1 with

@@ -35,7 +35,7 @@ jobs:
 
       - name: Lint PHP
         run: |
-          find system-markdown-alternate -name '*.php' -not -path '*/vendor/*' -print0 \
+          find system-markdown-alternate bin -name '*.php' -not -path '*/vendor/*' -print0 \
             | xargs -0 -n1 php -l > /dev/null
 
       # The Markdown conversion tests exercise league/html-to-markdown itself
