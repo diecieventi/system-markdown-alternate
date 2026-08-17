@@ -1,8 +1,8 @@
 # System Markdown Alternate
 
-A WordPress plugin that exposes a **clean Markdown version** of your content —
-readable by LLMs, AI agents and technical scraping tools. Every published post
-of the enabled types becomes available by appending `.md` to its permalink.
+A WordPress plugin that publishes a clean **Markdown representation** of your
+content — generated from the post's own blocks and shortcodes, not from the
+rendered page. Readable by LLMs, AI agents and technical tools.
 
 ```
 https://example.com/my-post/      → HTML
@@ -12,52 +12,116 @@ https://example.com/my-post.md    → Markdown (front matter + content)
 It is not a generic SEO plugin: it is a technical feature designed to make
 content consumable by tools that prefer Markdown over rendered HTML.
 
+## How it works
+
+The Markdown is built from the post content itself, through a pipeline the
+plugin controls end to end:
+
+```text
+post content (blocks, shortcodes, ACF fields)
+      ↓
+cleaning — excluded blocks, shortcodes and CSS classes removed
+      ↓
+render_block() on the cleaned blocks — not the_content
+      ↓
+HTML normalization — tables, code fences, absolute URLs
+      ↓
+Markdown conversion
+```
+
+Two consequences worth knowing:
+
+- **`the_content` is skipped by design.** That filter chain is where themes and
+  plugins inject related-posts blocks, CTAs and share widgets on the frontend.
+  None of it reaches the Markdown.
+- **No HTTP request back to the site is involved.** The conversion runs
+  in-process, so the output does not depend on the theme's markup, on CSS
+  selectors, or on the site being able to reach itself.
+
 ## Features
 
-- **`.md` endpoint** for every published, public, non-protected post of the enabled types.
-- **Content negotiation** (RFC 9110): the same Markdown is served for `Accept: text/markdown` or `?format=markdown`. The `Accept` header is parsed with q-values: Markdown is served only when explicitly preferred, so a client that prefers HTML (higher q) or sends a wildcard (`*/*`) still gets HTML.
-- **`Vary: Accept`** on negotiable URLs, so caches and CDNs that honour it keep the HTML and Markdown representations of the same address apart. Because some page caches key by URL only and ignore `Vary`, the negotiated Markdown (and `406`) responses are additionally sent as non-cacheable — safety never depends on `Vary` alone.
-- Optional **`406 Not Acceptable`** when the client accepts neither HTML nor Markdown (`sysmda_markdown_strict_406` filter, on by default; real clients are never affected).
-- **Markdown discovery in HTML and HTTP**: supported canonical pages advertise the representation with both `<link rel="alternate" type="text/markdown">` in the document head and `Link: <…>; rel="alternate"; type="text/markdown"` in the response headers. The HTTP form is also present on `HEAD` responses.
-- **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`), `Link: rel="canonical"` back to the HTML.
-- **Clean conversion**: Gutenberg blocks rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes removed, fenced code blocks, absolute URLs.
-- **`/llms.txt` endpoint** (optional): an index of your content for LLMs and agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
-- **LiteSpeed cache compatibility**: negotiated Markdown responses are marked non-cacheable for URL-keyed page caches (`X-LiteSpeed-Cache-Control: no-cache`, `DONOTCACHEPAGE`), and an opt-in setting adds `.htaccess` rules (inert outside LiteSpeed) so Markdown-negotiating requests bypass the LiteSpeed page cache on servers that ignore `Vary: Accept`.
-- **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are appended as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically — a taxonomy registered by another plugin shows up in the panel unticked, and internal taxonomies (no public term archive) are labelled as such. Categories and tags keep their own keys.
-- **Object cache** with proactive invalidation (post edit, plugin update, settings save): a persistent object cache is used when one is available, falling back to transients otherwise.
-- **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals — no IPs, no user-agent strings, no per-visitor data, no cookies, no external calls.
-- **Admin panel** to choose which content types are exposed and to tune cache, exclusions and headers. No type is exposed until you pick one.
-- **Shortcodes**: `[sysmda_md_url]` prints the `.md` URL anywhere; `[sysmda_md_download]` renders a bare, theme-styled download link; and `[sysmda_md_actions]` renders an opt-in GitHub-style split button that copies the complete Markdown document, opens it in a new tab or downloads it. The actions CSS and JavaScript load only on pages that render the shortcode. Every shortcode accepts `id="123"` for a specific post and returns empty when that post has no Markdown representation.
-- **Optional integrations**, shown only when the related plugin is active:
-  - **Advanced Custom Fields**: subtitle and TL;DR (from ACF fields) as a preamble between the H1 and the body.
-  - **GenerateBlocks 2.x**: auto-registered `{{sysmda_md_url}}` Dynamic Tag, usable in element fields (e.g. a Button URL).
+### Rendering and conversion
+
+- Gutenberg blocks rendered individually; synced patterns expanded and cleaned
+  with them.
+- Shortcodes expanded on block and classic content alike — never inside a code
+  sample, which is shown verbatim rather than executed or stripped.
+- Excluded blocks, shortcodes and CSS classes, with defaults for contact forms
+  and tables of contents that the panel adds to.
+- Code fences sized to their content, GFM tables, definition lists, and URLs
+  made absolute against the post's own permalink.
+- **Advanced Custom Fields** (when active): a subtitle and a TL;DR as a
+  preamble between the H1 and the body.
+
+### HTTP and representations
+
+- **`.md` endpoint** for every published, public, non-protected post of the
+  enabled types.
+- **Content negotiation** (RFC 9110): the same Markdown for
+  `Accept: text/markdown` or `?format=markdown`, with q-values honoured — a
+  wildcard or a browser's `text/html` still gets HTML.
+- **`Vary: Accept`** on negotiable URLs, plus non-cacheable handling for page
+  caches that key by URL only: safety never depends on `Vary` alone.
+- Optional **`406 Not Acceptable`** when a client accepts neither
+  representation (`sysmda_markdown_strict_406`, on by default).
+- `Content-Type: text/markdown`, `X-Robots-Tag: noindex, follow`, and a
+  `Link: rel="canonical"` back to the HTML.
+- Weak `ETag` + `Last-Modified` with `304` support on the anonymous
+  representation.
+
+### Discovery
+
+- `<link rel="alternate" type="text/markdown">` in the document head, and the
+  same relation as a typed HTTP `Link` header (also on `HEAD`).
+- **`/llms.txt`** (optional): a content index for LLMs and agents, with an
+  optional enriched mode (site summary, curated "Key content", per-entry
+  descriptions) and optional last-modified dates. Both off by default.
+- **Shortcodes** `[sysmda_md_url]`, `[sysmda_md_download]` and
+  `[sysmda_md_actions]` — the last an opt-in split button that copies, opens or
+  downloads the document, whose assets load only where it renders. All accept
+  `id="123"`.
+- **GenerateBlocks 2.x** (when active): a `{{sysmda_md_url}}` Dynamic Tag.
+
+### Control and safety
+
+- No post type is exposed until you enable it, and no taxonomy reaches the
+  front matter until you tick it — nothing is ever inferred.
+- Logged-in requests are rebuilt in the visitor's own context: they never touch
+  the shared cache and are never answered `304`.
+- Object cache when a persistent one is available (transients otherwise),
+  invalidated on post edits, plugin updates and settings changes.
+- **LiteSpeed compatibility**: no-cache signals on the negotiated responses,
+  plus opt-in `.htaccess` rules for servers that ignore `Vary: Accept`.
+- Optional **hit counter** (off by default): aggregate daily bot/human totals
+  only — no IPs, no user-agent strings, no cookies, no external calls.
 
 ## Usage
 
-After activating the plugin, open **Settings → Markdown Alternate** and
-enable at least one content type (nothing is exposed until you do). From then on,
-the Markdown version of any published post of that type can be reached in three
+After activating the plugin, open **Settings → Markdown Alternate** and enable
+at least one content type (nothing is exposed until you do). From then on, the
+Markdown version of any published post of that type can be reached in three
 ways:
 
 1. **`.md` suffix** — append `.md` to the permalink:
-   `https://example.com/my-post.md`. This always returns Markdown, regardless of
-   the `Accept` header.
+   `https://example.com/my-post.md`. Always returns Markdown, whatever the
+   `Accept` header says.
 2. **Content negotiation** — request the normal permalink with an
-   `Accept: text/markdown` header. Markdown is served only when it is preferred
-   over HTML (q-values are honoured); a browser sending `text/html` or a wildcard
-   still gets HTML.
-3. **Query parameter** — append `?format=markdown` to the permalink, for clients
-   that cannot send custom headers (and for posts with plain permalinks, where
-   the `.md` suffix does not apply).
+   `Accept: text/markdown` header. Markdown is served only when preferred over
+   HTML (q-values are honoured).
+3. **Query parameter** — append `?format=markdown`, for clients that cannot
+   send custom headers (and for plain permalinks, where `.md` does not apply).
 
 The optional content index for LLMs and agents lives at
 `https://example.com/llms.txt` (enable it from the same settings page).
 
+Full user documentation — every setting, endpoint, shortcode and integration —
+is published at
+**[diecieventi.github.io/system-markdown-alternate](https://diecieventi.github.io/system-markdown-alternate/)**.
+
 ## Extending via filters
 
 Everything the settings page controls — and more — is exposed as WordPress
-filters, so the plugin can be customized from a theme or site plugin. A couple
-of examples:
+filters, so the plugin can be customized from a theme or site plugin:
 
 ```php
 // Append a custom footer to every Markdown output.
@@ -71,18 +135,8 @@ add_filter( 'sysmda_markdown_excluded_classes', function ( $classes ) {
     return $classes;
 } );
 
-// Serve every post format again, including asides and statuses.
-add_filter( 'sysmda_markdown_excluded_post_formats', function () {
-    return array();
-} );
-
 // Serve the body without the YAML front matter (document starts at the H1).
 add_filter( 'sysmda_front_matter_enabled', '__return_false' );
-
-// Rebuild a post's Markdown cache in the background after each save, so the
-// first reader after an edit does not pay for the conversion.
-add_filter( 'sysmda_markdown_prewarm', '__return_true' );
-
 ```
 
 The complete developer extension API — every filter, its default value, what
@@ -90,15 +144,21 @@ changing it does and **how much compatibility it promises** — is documented in
 **[`docs/filters.md`](docs/filters.md)**. Hooks are labelled *Stable* (anchored
 to a setting or to a domain concept; changes go through deprecation) or
 *Advanced* (anchored to a stage of the current implementation, and free to
-evolve while the plugin is pre-1.0). The `.md` output format is a separate and
-stronger contract — see below.
+evolve while the plugin is pre-1.0).
 
 ## Output format
 
 The shape of the Markdown response — the front-matter keys, their order, the
 escaping rules and the body conversion — is documented as a stable, versioned
 contract in [`docs/output-format.md`](docs/output-format.md), backed by golden
-conformance tests in `system-markdown-alternate/tests/run-tests.php`.
+conformance tests in `system-markdown-alternate/tests/run-tests.php`. It is a
+separate and stronger contract than the PHP hooks above: the format is read by
+crawlers that cannot pin a version, the hooks by code that can.
+
+## Requirements
+
+- WordPress ≥ 6.1
+- PHP ≥ 7.4
 
 ## Repository structure
 
@@ -114,6 +174,7 @@ conformance tests in `system-markdown-alternate/tests/run-tests.php`.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   └── llms-txt-multilingual-plan.md
+├── documentation/                ← user documentation site (Astro Starlight, not shipped)
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
 ├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
@@ -161,11 +222,6 @@ The ruleset lives in [`system-markdown-alternate/phpcs.xml.dist`](system-markdow
 — `WordPress-Core` + `WordPress-Extra` plus `PHPCompatibilityWP` — where every
 deliberately disabled sniff carries its rationale inline. CI runs PHPCS on every
 pull request and fails on errors; warnings are reported as annotations.
-
-## Requirements
-
-- WordPress ≥ 6.1
-- PHP ≥ 7.4
 
 ## License
 

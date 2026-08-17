@@ -19,6 +19,8 @@ System Markdown Alternate publishes a clean, machine-readable Markdown represent
 
 It is built for the era of AI assistants, agents and technical scrapers that prefer plain Markdown over rendered HTML. It is **not** a generic SEO plugin.
 
+**[Read the full documentation](https://diecieventi.github.io/system-markdown-alternate/)** — installation, every setting in the panel, the endpoints, the shortcodes, the integrations and troubleshooting.
+
 = Key features =
 
 * **`.md` endpoint** for every supported, published, public post.
@@ -66,7 +68,7 @@ Markdown is also never served for URL *variants* of a post — its feed, its oEm
 
 = What does the Markdown output look like? =
 
-Each `.md` response is a UTF-8 document with a YAML front-matter block (title, URL, Markdown URL, published/modified dates, and — when available — author, featured image, categories, tags and a description), followed by the `# Title` heading and the post body converted to clean Markdown. The exact keys, their order and the escaping rules are documented as a stable contract, with conformance tests, in `docs/output-format.md` in the source repository.
+Each `.md` response is a UTF-8 document with a YAML front-matter block (title, URL, Markdown URL, published/modified dates, and — when available — author, featured image, categories, tags and a description), followed by the `# Title` heading and the post body converted to clean Markdown. The exact keys, their order and the escaping rules are documented as a stable contract, with conformance tests, in the [Markdown output format](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/output-format.md) reference.
 
 = Can I include my custom taxonomies? =
 
