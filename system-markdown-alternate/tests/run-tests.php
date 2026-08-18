@@ -2633,6 +2633,50 @@ check(
 	'<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>The quoted text.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote></figure>',
 	$sysmda_dom( '<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>The quoted text.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote></figure>' )
 );
+// …and it is left alone because the anchor already carries the address into the
+// document, frame or no frame — not because text outranks the URL.
+check(
+	'dom: quoted tweet keeps its text and its own link',
+	'<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>Quoted.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote><iframe src="https://platform.twitter.com/embed/1"></iframe></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>Quoted.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote><iframe src="https://platform.twitter.com/embed/1"></iframe></figure>' )
+);
+// When the address lives ONLY in the frame, bailing out would lose it to
+// remove_nodes a step later — the very defect this pass exists to fix. The
+// frame alone is replaced, so the text and the address both survive.
+check(
+	'dom: framed embed beside real text keeps both',
+	'<figure class="wp-block-embed"><div><p><a href="https://player.example.com/v/1">https://player.example.com/v/1</a></p><span>Watch the video</span></div></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div><iframe src="https://player.example.com/v/1"></iframe><span>Watch the video</span></div></figure>' )
+);
+// A frame is not covered by absolutize_urls() (which only sees `a` and `img`)
+// and is removed before anything else could resolve it, so its reference is
+// resolved here — including the protocol-relative form, which is a working link
+// in a browser and useless in a document read anywhere else.
+check(
+	'dom: protocol-relative frame takes the permalink scheme',
+	'<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><p><a href="https://player.example.com/v/9">https://player.example.com/v/9</a></p></div><p>Intro</p></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><iframe src="//player.example.com/v/9"></iframe></div><p>Intro</p></figure>' )
+);
+check(
+	'dom: root-relative frame resolved against the permalink',
+	'<p><a href="https://example.com/video/123">https://example.com/video/123</a></p>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div><iframe src="/video/123"></iframe></div></figure>' )
+);
+// The stored URL is read per text node, never from a flattened textContent:
+// a wrapper followed by a sibling paragraph reads as ".../v/1Note", which
+// passes for a URL, is not one, and would take the paragraph down with it.
+// The same flattening would also hand the element a URL it does not have and
+// let it outrank the frame, which is where the address is actually kept.
+check(
+	'dom: a fabricated URL does not outrank the frame',
+	'<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1<p><a href="https://player.example.com/v/1">https://player.example.com/v/1</a></p></div><p>Note</p></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1<iframe src="https://player.example.com/v/1"></iframe></div><p>Note</p></figure>' )
+);
+check(
+	'dom: text glued across elements is not read as a URL',
+	'<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><p>Note</p></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><p>Note</p></figure>' )
+);
 // Only the embed construct is claimed: a bare frame elsewhere in the content is
 // not an embed block, and the converter still removes it.
 check(
@@ -3548,10 +3592,20 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><iframe src="https://player.vimeo.com/video/123"></iframe></div></figure>' )
 	);
 
+
 	check(
 		'e2e: embed caption follows the link as prose',
 		"<https://example.com/v/1>\n\nMy caption\n",
 		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><figcaption>My caption</figcaption></figure>' )
+	);
+
+	// The link replacing a frame is a paragraph, not a bare anchor: emitted
+	// flush against its inline siblings it came out as
+	// "<https://…>Watch the video" on one line.
+	check(
+		'e2e: framed embed beside text keeps both, separated',
+		"<https://player.example.com/v/1>\n\nWatch the video\n",
+		$sysmda_e2e( '<figure class="wp-block-embed"><div><iframe src="https://player.example.com/v/1"></iframe><span>Watch the video</span></div></figure>' )
 	);
 
 	// The whole point of the fence fix, stated as the property that matters:

@@ -53,7 +53,7 @@ The plugin does not scrape the rendered page. It renders your *blocks* and conve
 - Navigation blocks, forms and anything you list under the exclusion settings are removed. See [Excluding content from the Markdown](/settings/excluding-content/).
 - Relative links and images are resolved to absolute URLs, so the document still works when it is read somewhere else entirely.
 - Code blocks keep their language and their formatting, including code that contains Markdown syntax of its own.
-- Embedded videos, tweets and tracks become a link to what they embed. A player is markup a text document cannot carry, so what survives is the address — the part a reader or an assistant can actually follow. A caption keeps its own line underneath.
+- Embedded videos, tweets and tracks leave a link to what they embed. A player is markup a text document cannot carry, so what survives is the address — the part a reader or an assistant can actually follow. Captions keep their own line underneath, and an embed that shows real text of its own (a quoted post, for instance) keeps that text as well as the link.
 
 ## What it is not
 

@@ -219,7 +219,7 @@ class ContentRenderer {
 		$this->flatten_definition_lists( $dom );
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
-		$this->link_embeds( $dom );
+		$this->link_embeds( $dom, $base );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
@@ -481,7 +481,7 @@ class ContentRenderer {
 	}
 
 	/**
-	 * Replaces an embed block with a link to the resource it embeds.
+	 * Makes sure an embed leaves a usable address behind.
 	 *
 	 * `render_block()` returns the saved markup of a `core/embed` block, and
 	 * what that markup holds depends on whether anything resolved the embed:
@@ -496,17 +496,34 @@ class ContentRenderer {
 	 *   is in the converter's `remove_nodes`, so where a video had been the
 	 *   reader was left nothing at all — not even the address to fetch.
 	 *
-	 * Both become the one thing a Markdown reader can act on: a link, which the
-	 * library then emits as an autolink because the text equals the target. The
-	 * caption keeps its own paragraph — promote_figcaptions() has already moved
-	 * it out of the figure, which is why this pass runs after it.
+	 * The rule is not "replace the embed" but "keep the text and keep the
+	 * address", which are only in tension if the pass insists on replacing the
+	 * whole element:
+	 *
+	 * - the element says nothing but its URL (the stored address, an
+	 *   iframe-only player, a fallback link with no text) → it becomes a
+	 *   paragraph holding that link, which the library emits as an autolink
+	 *   because the text equals the target;
+	 * - it carries real text **and** a link that already names the resource (a
+	 *   quoted tweet, a provider's fallback markup) → left alone; the converter
+	 *   keeps links, so the address is in the document either way;
+	 * - it carries real text and the address lives **only in the frame** → the
+	 *   frame alone is replaced by the link, in place. Bailing out here would
+	 *   lose the address to `remove_nodes` a step later, which is the defect
+	 *   this pass exists to fix; replacing the whole element would discard the
+	 *   text. Neither is necessary.
+	 *
+	 * The caption keeps its own paragraph — promote_figcaptions() has already
+	 * moved it out of the figure, which is why this pass runs after it.
 	 *
 	 * Only `wp-block-embed` elements are rewritten. A bare `<iframe>` elsewhere
 	 * in the content is not an embed block and is left to the converter, which
 	 * still removes it: this pass resolves a known construct, it does not
 	 * salvage arbitrary framed markup.
+	 *
+	 * @param string $base Base URL (post permalink) for resolving relative URLs.
 	 */
-	private function link_embeds( \DOMDocument $dom ): void {
+	private function link_embeds( \DOMDocument $dom, string $base ): void {
 		$xpath = new \DOMXPath( $dom );
 		$nodes = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " wp-block-embed ")]' );
 
@@ -519,63 +536,145 @@ class ContentRenderer {
 				continue;
 			}
 
-			$url = $this->embed_url( $embed );
+			$texts = $this->text_nodes( $xpath, $embed );
+			$link  = $this->embed_candidate( $embed, 'a', 'href', $base );
+			$frame = $this->embed_candidate( $embed, 'iframe', 'src', $base );
 
-			if ( '' === $url ) {
+			// The stored address is the element's only text. Read per text node
+			// rather than from `textContent`, which flattens the subtree and
+			// glues neighbours together: a wrapper holding the URL followed by a
+			// sibling paragraph reads as "https://example.com/v/1Note", a string
+			// that passes for a URL and is not one.
+			$stored = 1 === count( $texts ) ? $texts[0] : '';
+
+			// Ordered by how close each candidate is to the resource itself: the
+			// stored source URL, then a link in the provider's fallback markup
+			// (which points at the original tweet, post or track), then the
+			// player frame — its `src` is an embed endpoint, not the address a
+			// reader would visit.
+			if ( $this->is_http_url( $stored ) ) {
+				$url        = $stored;
+				$from_frame = false;
+			} elseif ( null !== $link ) {
+				$url        = $link['url'];
+				$from_frame = false;
+			} elseif ( null !== $frame ) {
+				$url        = $frame['url'];
+				$from_frame = true;
+			} else {
 				continue;
 			}
 
-			// Anything the element says beyond the URL is content, and replacing
-			// the element would discard it: the text of a quoted tweet, a
-			// provider's fallback paragraph. Those keep the behaviour they had —
-			// their text is published and their frame, if any, still goes.
-			if ( '' !== trim( str_replace( $url, '', $embed->textContent ) ) ) {
+			if ( array() === $texts || array( $url ) === $texts ) {
+				$embed->parentNode->replaceChild( $this->url_paragraph( $dom, $url ), $embed );
 				continue;
 			}
 
-			$link = $dom->createElement( 'a' );
-			$link->setAttribute( 'href', $url );
-			$link->appendChild( $dom->createTextNode( $url ) );
+			// Real text, and the address is not the frame's to lose: it is
+			// already written into the document as a link or as the text itself.
+			if ( null === $frame || ! $from_frame || ! $frame['node']->parentNode ) {
+				continue;
+			}
 
-			$paragraph = $dom->createElement( 'p' );
-			$paragraph->appendChild( $link );
-
-			$embed->parentNode->replaceChild( $paragraph, $embed );
+			$frame['node']->parentNode->replaceChild( $this->url_paragraph( $dom, $url ), $frame['node'] );
 		}
 	}
 
 	/**
-	 * The URL an embed element points at, or an empty string when it names none.
+	 * The element's own text, one trimmed entry per non-empty text node.
 	 *
-	 * Ordered by how close each candidate is to the resource itself: the stored
-	 * source URL first, then a link in the provider's fallback markup (which
-	 * points at the original tweet, post or track), and the player frame last —
-	 * its `src` is an embed endpoint, not the address a reader would visit.
+	 * @return string[]
 	 */
-	private function embed_url( \DOMElement $embed ): string {
-		$text = trim( $embed->textContent );
+	private function text_nodes( \DOMXPath $xpath, \DOMElement $element ): array {
+		$nodes = $xpath->query( './/text()', $element );
 
-		if ( $this->is_http_url( $text ) ) {
-			return $text;
+		if ( ! $nodes instanceof \DOMNodeList ) {
+			return array();
 		}
 
-		foreach ( $embed->getElementsByTagName( 'a' ) as $link ) {
-			$href = trim( $link->getAttribute( 'href' ) );
+		$texts = array();
 
-			if ( $this->is_http_url( $href ) ) {
-				return $href;
+		foreach ( $nodes as $node ) {
+			$text = trim( $node->textContent );
+
+			if ( '' !== $text ) {
+				$texts[] = $text;
 			}
 		}
 
-		foreach ( $embed->getElementsByTagName( 'iframe' ) as $frame ) {
-			$src = trim( $frame->getAttribute( 'src' ) );
+		return $texts;
+	}
 
-			if ( $this->is_http_url( $src ) ) {
-				return $src;
+	/**
+	 * First descendant of $embed whose $attribute resolves to an http(s) URL.
+	 *
+	 * Resolved against the permalink here rather than left to absolutize_urls():
+	 * that pass runs later and only covers `a` and `img`, so a frame carrying a
+	 * root-relative or protocol-relative `src` — ordinary output from a plugin
+	 * building its own embed markup — would be rejected as a candidate and then
+	 * removed with the rest of the frames, address and all.
+	 *
+	 * @return array{node: \DOMElement, url: string}|null
+	 */
+	private function embed_candidate( \DOMElement $embed, string $tag, string $attribute, string $base ): ?array {
+		foreach ( $embed->getElementsByTagName( $tag ) as $node ) {
+			$url = $this->embed_reference( $node->getAttribute( $attribute ), $base );
+
+			if ( '' !== $url ) {
+				return array(
+					'node' => $node,
+					'url'  => $url,
+				);
 			}
 		}
 
-		return '';
+		return null;
+	}
+
+	/**
+	 * Resolves one embed reference, or an empty string when it is not usable.
+	 *
+	 * A protocol-relative reference survives absolutize() unchanged, which is
+	 * right for a link a browser resolves against the page it sits in and
+	 * useless in a document read anywhere else, so the permalink's scheme
+	 * completes it here. Nothing else about absolutize() changes: the general
+	 * rule for links in the body is a stable part of the output format.
+	 */
+	private function embed_reference( string $value, string $base ): string {
+		$value = trim( $value );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		$value = $this->absolutize( $value, $base );
+
+		if ( 0 === strpos( $value, '//' ) ) {
+			$scheme = wp_parse_url( $base, PHP_URL_SCHEME );
+			$value  = ( is_string( $scheme ) && '' !== $scheme ? $scheme : 'https' ) . ':' . $value;
+		}
+
+		return $this->is_http_url( $value ) ? $value : '';
+	}
+
+	/**
+	 * A paragraph holding one link whose text is its target, which the library
+	 * emits as an autolink.
+	 *
+	 * A paragraph rather than a bare anchor because it also replaces a frame
+	 * *inside* an element, among ordinary inline siblings: emitted flush against
+	 * them the autolink came out as "<https://…>Watch the video" on one line —
+	 * the defect promote_figcaptions() exists to prevent for captions.
+	 */
+	private function url_paragraph( \DOMDocument $dom, string $url ): \DOMElement {
+		$link = $dom->createElement( 'a' );
+		$link->setAttribute( 'href', $url );
+		$link->appendChild( $dom->createTextNode( $url ) );
+
+		$paragraph = $dom->createElement( 'p' );
+		$paragraph->appendChild( $link );
+
+		return $paragraph;
 	}
 
 	/**

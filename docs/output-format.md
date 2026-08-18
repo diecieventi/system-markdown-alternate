@@ -223,34 +223,38 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
 | `<pre>` from a syntax highlighter | fenced block, with the `language-*` class preserved as the info string and line breaks reconstructed when the highlighter relies on CSS for them |
 | `<figcaption>` (image, table or embed caption) | its own paragraph, following the element it captions |
-| `wp-block-embed` (an embed block, since `0.43.0`) | a paragraph holding a link to the embedded resource — see below |
+| `wp-block-embed` (an embed block, since `0.43.0`) | a link to the embedded resource, replacing the element or just its player frame — see below |
 | `<details>` / `<summary>` | `**Summary**` as its own paragraph, followed by the disclosure body as ordinary content |
 
-### Embeds become a link to the resource
+### Embeds keep their text and their address
 
-Since `0.43.0`, an element carrying the `wp-block-embed` class is replaced by a
-paragraph containing a link to what it embeds, which the converter emits as an
-autolink (`<https://…>`) because the link text equals its target. Any caption
-keeps its own paragraph after it.
+Since `0.43.0`, an element carrying the `wp-block-embed` class is guaranteed to
+leave a usable address behind. Before it, a resolved embed left nothing at all:
+`iframe` is among the removed nodes, so where a video had been the reader got
+neither the player nor its URL.
 
-The URL is taken from the first of these the element provides: the address
+The address is taken from the first of these the element provides: the URL
 stored in the block (the shape a `core/embed` block has when nothing resolved
 it, since `the_content` — where WordPress resolves embeds — is deliberately not
 part of this pipeline); then a link inside the provider's fallback markup, which
-points at the original post, tweet or track; then the `src` of the player frame,
-which is an embed endpoint rather than a page a reader would visit.
+points at the original post, tweet or track; then the `src` of the player frame.
+References are resolved against the permalink, so a root-relative or
+protocol-relative frame counts as an address like any other.
 
-Two cases are deliberately left as they were:
+What happens to the element depends on what else it says:
 
-- An embed whose markup says **more than the URL** — the text of a quoted tweet,
-  a provider's fallback paragraph — keeps that text. Replacing the element would
-  discard content in order to keep an address.
-- A bare `<iframe>` that is **not** inside an embed block is not this construct
-  and is still removed with the other unknown markup (see below).
+| The element | Emitted as |
+|---|---|
+| says nothing but the URL — the stored address, a player frame alone, a fallback link with no text | one paragraph holding that link, which becomes an autolink (`<https://…>`) because the link text equals its target |
+| carries text **and** a link that already names the resource (a quoted tweet, a provider's fallback markup) | left as it is; the text converts normally and the link goes with it |
+| carries text and keeps the address **only in the frame** | the frame alone becomes the link, in place; the text around it is untouched |
 
-Before `0.43.0` a resolved embed left nothing at all in the document: `iframe`
-is among the removed nodes, so where a video had been the reader got neither the
-player nor its address.
+Keeping the text and keeping the address are never in tension, so the format
+does not trade one for the other. A caption keeps its own paragraph after the
+element in every case.
+
+A bare `<iframe>` that is **not** inside an embed block is not this construct and
+is still removed with the other unknown markup (see below).
 
 ### Code delimiters are sized to their content
 

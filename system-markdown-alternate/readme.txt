@@ -180,7 +180,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 = 0.43.0 =
 
-* Fixed: an embedded video, tweet or track no longer disappears from the Markdown. Embed blocks are now replaced by a link to the resource they embed — taken from the address stored in the block, then from the provider's fallback link, then from the player frame — and captions keep their own paragraph. An embed whose markup carries real text (a quoted tweet) is left alone, and a bare `<iframe>` outside an embed block is still removed.
+* Fixed: an embedded video, tweet or track no longer disappears from the Markdown. An embed now always leaves a usable address behind — the element becomes a link when it says nothing but its URL, keeps its own link when it carries real text (a quoted tweet), and has just its player frame replaced by the link when the address lives only there. Captions keep their own paragraph, relative and protocol-relative frame addresses are resolved against the permalink, and a bare `<iframe>` outside an embed block is still removed.
 
 = 0.42.0 =
 
