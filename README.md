@@ -52,6 +52,9 @@ Two consequences worth knowing:
   made absolute against the post's own permalink.
 - Embeds always leave a usable address: the element becomes a link to what it
   embeds, or just its player frame does when the embed shows text of its own.
+- Links that render nothing — the invisible overlay anchor a clickable card is
+  built from — take the accessible name their markup declares, instead of
+  converting to a link with no text.
 - **Advanced Custom Fields** (when active): a subtitle and a TL;DR as a
   preamble between the H1 and the body.
 

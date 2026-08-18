@@ -54,6 +54,7 @@ The plugin does not scrape the rendered page. It renders your *blocks* and conve
 - Relative links and images are resolved to absolute URLs, so the document still works when it is read somewhere else entirely.
 - Code blocks keep their language and their formatting, including code that contains Markdown syntax of its own.
 - Embedded videos, tweets and tracks leave a link to what they embed. A player is markup a text document cannot carry, so what survives is the address — the part a reader or an assistant can actually follow. Captions keep their own line underneath, and an embed that shows real text of its own (a quoted post, for instance) keeps that text as well as the link.
+- Link cards arrive with their name attached. Many card and link-preview plugins make the whole card clickable by laying an invisible link over it, with the title sitting in a separate element underneath — which used to convert to a link with no text at all, and a title floating a paragraph away from it. The link now takes the name the card already declares, so what it points at is readable again.
 
 ## What it is not
 

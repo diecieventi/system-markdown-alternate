@@ -2697,6 +2697,72 @@ check(
 	$sysmda_dom( '<figure class="wp-block-embed-youtube"><div>https://example.com/v/2</div></figure>' )
 );
 
+// Named links (0.44.0): a card whose whole surface is clickable is built as an
+// empty overlay anchor with the text in sibling elements — the "stretched link"
+// idiom, and a common one. The converter emitted `[](url "Name")`: a link with
+// no text at all, while the name the markup does carry sat in a paragraph of
+// its own further down, so nothing tied the name to the address. An anchor that
+// renders nothing still has to declare an accessible name, and HTML has exactly
+// two places for it, so that name becomes the link text.
+check(
+	'dom: empty anchor takes its title as link text',
+	'<a href="https://example.com/x">The Name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="The Name"></a>' )
+);
+// The consumed attribute goes: the library emits `title` as a Markdown link
+// title, so leaving it would produce `[The Name](url "The Name")`.
+check(
+	'dom: aria-label outranks title, which is left to the library',
+	'<a href="https://example.com/x" aria-label="Accessible name" title="Tooltip">Accessible name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" aria-label="Accessible name" title="Tooltip"></a>' )
+);
+check(
+	'dom: whitespace-only anchor counts as empty',
+	'<a href="https://example.com/x">The Name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="The Name">   </a>' )
+);
+// Emptiness is about what the anchor renders, not about text: an image names
+// the link through its own alt, and that shape already converts correctly.
+check(
+	'dom: anchor wrapping an image is not empty',
+	'<a href="https://example.com/x" title="Tip"><img src="https://example.com/a.png" alt="Alt"></a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="Tip"><img src="/a.png" alt="Alt"/></a>' )
+);
+check(
+	'dom: anchor carrying real text is left alone',
+	'<a href="https://example.com/x" title="Tip">Real text</a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="Tip">Real text</a>' )
+);
+// No declared name means the markup says nothing about the link, and inventing
+// one from the href would turn decorative anchors — "#top", JS hooks, skip
+// links — into visible URLs in documents that read cleanly today.
+check(
+	'dom: nameless empty anchor is left exactly as it was',
+	'<a href="https://example.com/x"></a>',
+	$sysmda_dom( '<a href="https://example.com/x"></a>' )
+);
+// Code is quoted, never rewritten — the same rule the exclusion passes follow.
+// A <pre> is already reduced to its own text by normalize_code_blocks, so the
+// empty anchor leaves nothing behind either way; what this pins is that the
+// name is not injected first, which would publish "The Name" into the sample.
+check(
+	'dom: empty anchor inside <pre> contributes no text',
+	'<pre><code></code></pre>',
+	$sysmda_dom( '<pre><code><a href="https://example.com/x" title="The Name"></a></code></pre>' )
+);
+check(
+	'dom: empty anchor inside an inline code span untouched',
+	'<p><code><a href="https://example.com/x" title="The Name"></a></code></p>',
+	$sysmda_dom( '<p><code><a href="https://example.com/x" title="The Name"></a></code></p>' )
+);
+// The shape this pass was written for, as a link-preview plugin emits it: the
+// anchor is an overlay covering the card, and every visible part is a sibling.
+check(
+	'dom: stretched-link card keeps name and address together',
+	'<div class="card"><a href="https://example.com/post/">Post title</a><div class="card-title">Post title</div><div class="card-summary">A summary.</div></div>',
+	$sysmda_dom( '<div class="card"><a href="https://example.com/post/" title="Post title"></a><div class="card-title">Post title</div><div class="card-summary">A summary.</div></div>' )
+);
+
 // Disclosures (0.38.0): core/details came out as "MoreHidden body" — summary
 // and body concatenated with nothing between them.
 check(
@@ -3597,6 +3663,27 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'e2e: embed caption follows the link as prose',
 		"<https://example.com/v/1>\n\nMy caption\n",
 		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><figcaption>My caption</figcaption></figure>' )
+	);
+
+	// The point of naming empty anchors: the link arrives with a name instead of
+	// `[](url "Name")`, which is what a stretched-link card used to convert to.
+	check(
+		'e2e: overlay anchor converts to a named link',
+		"[The Name](https://example.com/x)\n",
+		$sysmda_e2e( '<a href="https://example.com/x" title="The Name"></a>' )
+	);
+	check(
+		'e2e: nameless overlay anchor is not invented a name',
+		"[](https://example.com/x)\n",
+		$sysmda_e2e( '<a href="https://example.com/x"></a>' )
+	);
+	// The real shape, as a link-preview plugin renders it on a live site: the
+	// card's heading and summary stay where they are, and the address arrives
+	// carrying the name instead of `[](url "Target Post Title")`.
+	check(
+		'e2e: a link-preview card links its title',
+		"[Target Post Title](https://example.com/target/)![](https://example.com/img.jpg)\n\nTarget Post Title\n\nA short summary of the target post.\n",
+		$sysmda_e2e( '<div class="vlp-link-container vlp-layout-basic"><a href="https://example.com/target/" class="vlp-link" title="Target Post Title"></a><div class="vlp-layout-zone-side"><div class="vlp-link-image"><img src="/img.jpg" class="attachment-150x999" alt="" /></div></div><div class="vlp-layout-zone-main"><div class="vlp-link-title">Target Post Title</div><div class="vlp-link-summary">A short summary of the target post.</div></div></div>' )
 	);
 
 	// The link replacing a frame is a paragraph, not a bare anchor: emitted

@@ -39,6 +39,11 @@ the server.
   Worth doing here specifically: whether the player is already resolved when
   the pipeline sees it varies per provider and per caching setup, and only one
   of the two shapes can be reproduced offline.
+- A clickable link card — a link-preview or related-posts block, whichever the
+  site actually uses — converts to a link carrying the card's name rather than
+  `[](url "Name")`. Worth doing here specifically: whether such a card renders
+  as an overlay anchor with sibling text, or nests its title inside the link,
+  is the plugin's own choice and only the real one can settle it.
 - `/llms.txt` is healthy and excludes ineligible content.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).
