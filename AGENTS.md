@@ -1213,6 +1213,34 @@ The v1 scope is done and widely exceeded. Implemented:
 
   A new filter is documented in `docs/filters.md` (the developer contract) and
   reaches `documentation/` only when the *setting* behind it changed too.
+
+  **When the answer is yes, it is yes for every surface that describes the
+  behaviour — not for the first one that comes to mind** (added August 2026,
+  after `0.43.0` shipped its embed change to the output-format contract and one
+  article while three other files went on describing the old behaviour by
+  omission). "Check the documentation" is not a reliable instruction to oneself;
+  a list of places is. Walk it:
+
+  | Surface | Carries |
+  |---|---|
+  | `documentation/src/content/docs/` | how the plugin is used, per article |
+  | `system-markdown-alternate/readme.txt` — Key features, FAQ | the wordpress.org listing, read before installing |
+  | `README.md` — Features | the same summary for GitHub |
+  | `docs/output-format.md` / `docs/filters.md` | the two public contracts |
+  | `docs/staging-acceptance.md` | the matrix a release is actually run from |
+  | `AGENTS.md` | invariants, decisions, the acceptance list |
+
+  Most entries stay untouched in most PRs; the point is that skipping one is a
+  decision, not an oversight. **State both halves in the PR body: which
+  surfaces were updated, and which were considered and deliberately skipped,
+  with the reason.** That is the same discipline the catch-up procedure below
+  already requires, and for the same reason — the skips are the judgement call
+  worth reviewing.
+
+  Ask before opening the PR only when a surface's answer is genuinely
+  uncertain; a routine confirmation round on every PR would cost a round trip
+  on the majority that change no documentation at all. Uncertainty is a
+  question, not a habit.
 - **On-demand catch-up: "check the documentation".** The rule above is the
   mechanism; this is the net for when it was skipped. When the user asks for a
   documentation check, in those words or any others:
