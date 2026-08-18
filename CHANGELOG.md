@@ -9,6 +9,29 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.43.0
+
+* **An embedded video, tweet or track now leaves a link behind instead of
+  nothing.** `iframe` is among the nodes the converter removes, so once anything
+  had resolved an embed — a cached oEmbed result, a plugin filtering
+  `render_block`, an embed block shipped by another plugin — the player was
+  stripped and the document was left with no trace of it at all, not even the
+  address. An element carrying the `wp-block-embed` class is now replaced by a
+  paragraph linking the resource it embeds, which converts to an autolink. The
+  same pass gives the unresolved shape a link too: a `core/embed` block stores
+  the bare URL and WordPress resolves it inside `the_content`, which this
+  pipeline skips by design, so that address used to reach the reader as loose
+  text.
+* The URL is taken from the address stored in the block, then from a link in the
+  provider's fallback markup (which points at the original post rather than at a
+  player), then from the frame's `src` as a last resort. An embed whose markup
+  says more than the URL — the text of a quoted tweet, a provider's fallback
+  paragraph — is deliberately left alone: replacing it would discard content to
+  keep an address. A bare `<iframe>` outside an embed block is not this construct
+  and is still removed.
+* Documented in `docs/output-format.md` (a new section and a row in the
+  conversion table) and in the user documentation.
+
 ## 0.42.0
 
 * Added to the default exclusions, each verified against the plugin's own

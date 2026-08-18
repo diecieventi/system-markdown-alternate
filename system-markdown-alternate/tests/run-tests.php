@@ -2598,6 +2598,61 @@ check(
 	$sysmda_dom( '<figure><img src="/a.png" alt="x"/><figcaption></figcaption></figure>' )
 );
 
+// Embeds (0.43.0): what a core/embed block renders to depends on whether
+// anything resolved it. Unresolved, it is the stored URL as loose text; once
+// resolved it is the provider's frame, and `iframe` is in the converter's
+// remove_nodes — so an embedded video used to leave nothing at all behind it.
+// Both shapes become a link to the resource.
+check(
+	'dom: unresolved embed becomes a link to its source URL',
+	'<p><a href="https://www.youtube.com/watch?v=abc">https://www.youtube.com/watch?v=abc</a></p>',
+	$sysmda_dom( '<figure class="wp-block-embed is-type-video wp-block-embed-youtube"><div class="wp-block-embed__wrapper">' . "\n" . 'https://www.youtube.com/watch?v=abc' . "\n" . '</div></figure>' )
+);
+check(
+	'dom: framed embed keeps its address instead of vanishing',
+	'<p><a href="https://player.vimeo.com/video/123">https://player.vimeo.com/video/123</a></p>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><iframe src="https://player.vimeo.com/video/123" width="640" height="360"></iframe></div></figure>' )
+);
+// The fallback markup of a rich embed carries the resource's own link, which is
+// closer to the resource than the player frame is.
+check(
+	'dom: rich embed prefers the resource link over the frame',
+	'<p><a href="https://example.social/@a/1">https://example.social/@a/1</a></p>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><a href="https://example.social/@a/1"></a><iframe src="https://example.social/embed/1"></iframe></div></figure>' )
+);
+check(
+	'dom: embed caption survives as its own paragraph',
+	'<p><a href="https://example.com/v/1">https://example.com/v/1</a></p><p>Cap</p>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><figcaption>Cap</figcaption></figure>' )
+);
+// Replacing the element is only safe while the URL is all it says. A quoted
+// tweet's text is the content, and dropping it to keep the link would be a
+// worse answer than the one this pass exists to fix.
+check(
+	'dom: embed carrying real text is left alone',
+	'<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>The quoted text.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><blockquote class="twitter-tweet"><p>The quoted text.</p><a href="https://twitter.com/a/status/1">Original</a></blockquote></figure>' )
+);
+// Only the embed construct is claimed: a bare frame elsewhere in the content is
+// not an embed block, and the converter still removes it.
+check(
+	'dom: bare iframe outside an embed block untouched',
+	'<p>a</p><iframe src="https://example.com/x"></iframe><p>b</p>',
+	$sysmda_dom( '<p>a</p><iframe src="https://example.com/x"></iframe><p>b</p>' )
+);
+check(
+	'dom: embed naming no URL at all is left alone',
+	'<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"></div></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"></div></figure>' )
+);
+// The class is matched as a whole token: the provider suffix classes core adds
+// alongside it must not be mistaken for it.
+check(
+	'dom: provider suffix class alone is not an embed',
+	'<figure class="wp-block-embed-youtube"><div>https://example.com/v/2</div></figure>',
+	$sysmda_dom( '<figure class="wp-block-embed-youtube"><div>https://example.com/v/2</div></figure>' )
+);
+
 // Disclosures (0.38.0): core/details came out as "MoreHidden body" — summary
 // and body concatenated with nothing between them.
 check(
@@ -3482,6 +3537,21 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'e2e: details renders as a bold lead-in plus its body',
 		"**More**\n\nHidden body\n",
 		$sysmda_e2e( '<details class="wp-block-details"><summary>More</summary><p>Hidden body</p></details>' )
+	);
+
+	// The whole point of the embed pass: the address survives the conversion.
+	// Text equal to the target makes the library emit an autolink, which is
+	// unambiguous in every Markdown dialect (a bare URL is not).
+	check(
+		'e2e: embedded video converts to an autolink',
+		"<https://player.vimeo.com/video/123>\n",
+		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><iframe src="https://player.vimeo.com/video/123"></iframe></div></figure>' )
+	);
+
+	check(
+		'e2e: embed caption follows the link as prose',
+		"<https://example.com/v/1>\n\nMy caption\n",
+		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><figcaption>My caption</figcaption></figure>' )
 	);
 
 	// The whole point of the fence fix, stated as the property that matters:

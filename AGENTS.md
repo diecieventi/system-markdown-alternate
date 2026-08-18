@@ -167,6 +167,21 @@ The v1 scope is done and widely exceeded. Implemented:
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
+  - **an embed leaves a link, never nothing** (`0.43.0`, `link_embeds()`).
+    `iframe` is in the converter's `remove_nodes`, so a resolved embed — a
+    cached oEmbed result, a plugin filtering `render_block`, an embed block from
+    another plugin — was stripped whole and the document kept no trace of it,
+    the address included. An element carrying the `wp-block-embed` class is
+    replaced by a paragraph linking the resource, which the library emits as an
+    autolink because the text equals the target. Three properties are
+    load-bearing: the pass runs **after `promote_figcaptions()`**, so the
+    caption is already a sibling and survives the replacement; the class is
+    matched as a **whole token**, or core's `wp-block-embed-youtube` provider
+    suffix would be swept in; and an element whose text says **more than the
+    URL** (a quoted tweet, a provider's fallback paragraph) is left alone,
+    because replacing it would discard content to keep an address. Scope is the
+    embed construct only — a bare `<iframe>` elsewhere is still removed, and
+    widening this to arbitrary framed markup is a different decision.
   - **the exclusion lists in the panel ADD to the built-in defaults; they do
     not replace them** (`0.40.0`). The old semantics were a trap with no visible
     symptom: `AdminSettings::option_to_list()` returned the defaults only while
@@ -581,9 +596,12 @@ The v1 scope is done and widely exceeded. Implemented:
   **What would reopen it**: a census of real content showing a large share of
   the corpus inside blocks whose *meaning* — not merely layout — is lost through
   `render_block()`. Layout wrappers do not count: their children already convert
-  correctly. The single genuinely block-aware idea worth keeping is
+  correctly. The single genuinely block-aware idea worth keeping was
   `core/embed` → the canonical URL rather than the rendered oEmbed markup, and
-  that is one converter, not an engine.
+  **that shipped in `0.43.0`** — as one DOM pass keyed on the `wp-block-embed`
+  class, not as a block renderer, so it covers embed blocks from other plugins
+  and already-resolved markup for free. Nothing of the engine proposal survives
+  it.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -1867,6 +1885,15 @@ Test posts:
     → the excluded text is absent from the body *and* from the front-matter
     `description:`. A post without any excluded class → its `description:` is
     unchanged from the previous release (the pass must be a no-op there).
+
+17. Post with a **YouTube/Vimeo embed block**, one with a caption, and a
+    **tweet/Mastodon embed** whose fallback markup carries the quoted text →
+    each video embed becomes an autolink to its address (never nothing, which is
+    what a resolved embed used to leave), the caption follows as its own
+    paragraph, and the quoted text is still published. Worth doing on staging
+    specifically: which of the two shapes reaches the pipeline depends on
+    whether anything resolved the embed, and that varies per provider and per
+    caching setup.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

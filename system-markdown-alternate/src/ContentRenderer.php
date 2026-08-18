@@ -219,6 +219,7 @@ class ContentRenderer {
 		$this->flatten_definition_lists( $dom );
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
+		$this->link_embeds( $dom );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
@@ -477,6 +478,111 @@ class ContentRenderer {
 				$anchor = $paragraph;
 			}
 		}
+	}
+
+	/**
+	 * Replaces an embed block with a link to the resource it embeds.
+	 *
+	 * `render_block()` returns the saved markup of a `core/embed` block, and
+	 * what that markup holds depends on whether anything resolved the embed:
+	 *
+	 * - **The bare source URL**, which is what the block stores. Nothing
+	 *   resolves it on this route — `$wp_embed->autoembed()` runs inside
+	 *   `the_content`, which the pipeline skips by design (see render()) — so
+	 *   the address reached the converter as loose text in a wrapper `<div>`.
+	 * - **The provider's player**, when something did resolve it (a cached
+	 *   oEmbed result, a plugin filtering `render_block`, an embed block from
+	 *   another plugin). That shape used to disappear without a trace: `iframe`
+	 *   is in the converter's `remove_nodes`, so where a video had been the
+	 *   reader was left nothing at all — not even the address to fetch.
+	 *
+	 * Both become the one thing a Markdown reader can act on: a link, which the
+	 * library then emits as an autolink because the text equals the target. The
+	 * caption keeps its own paragraph — promote_figcaptions() has already moved
+	 * it out of the figure, which is why this pass runs after it.
+	 *
+	 * Only `wp-block-embed` elements are rewritten. A bare `<iframe>` elsewhere
+	 * in the content is not an embed block and is left to the converter, which
+	 * still removes it: this pass resolves a known construct, it does not
+	 * salvage arbitrary framed markup.
+	 */
+	private function link_embeds( \DOMDocument $dom ): void {
+		$xpath = new \DOMXPath( $dom );
+		$nodes = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " wp-block-embed ")]' );
+
+		if ( ! $nodes instanceof \DOMNodeList ) {
+			return;
+		}
+
+		foreach ( iterator_to_array( $nodes ) as $embed ) {
+			if ( ! $embed instanceof \DOMElement || ! $embed->parentNode ) {
+				continue;
+			}
+
+			$url = $this->embed_url( $embed );
+
+			if ( '' === $url ) {
+				continue;
+			}
+
+			// Anything the element says beyond the URL is content, and replacing
+			// the element would discard it: the text of a quoted tweet, a
+			// provider's fallback paragraph. Those keep the behaviour they had —
+			// their text is published and their frame, if any, still goes.
+			if ( '' !== trim( str_replace( $url, '', $embed->textContent ) ) ) {
+				continue;
+			}
+
+			$link = $dom->createElement( 'a' );
+			$link->setAttribute( 'href', $url );
+			$link->appendChild( $dom->createTextNode( $url ) );
+
+			$paragraph = $dom->createElement( 'p' );
+			$paragraph->appendChild( $link );
+
+			$embed->parentNode->replaceChild( $paragraph, $embed );
+		}
+	}
+
+	/**
+	 * The URL an embed element points at, or an empty string when it names none.
+	 *
+	 * Ordered by how close each candidate is to the resource itself: the stored
+	 * source URL first, then a link in the provider's fallback markup (which
+	 * points at the original tweet, post or track), and the player frame last —
+	 * its `src` is an embed endpoint, not the address a reader would visit.
+	 */
+	private function embed_url( \DOMElement $embed ): string {
+		$text = trim( $embed->textContent );
+
+		if ( $this->is_http_url( $text ) ) {
+			return $text;
+		}
+
+		foreach ( $embed->getElementsByTagName( 'a' ) as $link ) {
+			$href = trim( $link->getAttribute( 'href' ) );
+
+			if ( $this->is_http_url( $href ) ) {
+				return $href;
+			}
+		}
+
+		foreach ( $embed->getElementsByTagName( 'iframe' ) as $frame ) {
+			$src = trim( $frame->getAttribute( 'src' ) );
+
+			if ( $this->is_http_url( $src ) ) {
+				return $src;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Whether the value is a single absolute http(s) URL and nothing else.
+	 */
+	private function is_http_url( string $value ): bool {
+		return 1 === preg_match( '#^https?://[^\s<>"\']+$#i', $value );
 	}
 
 	/**

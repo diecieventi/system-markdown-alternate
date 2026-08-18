@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.42.0
+Stable tag: 0.43.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -178,6 +178,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.43.0 =
+
+* Fixed: an embedded video, tweet or track no longer disappears from the Markdown. Embed blocks are now replaced by a link to the resource they embed — taken from the address stored in the block, then from the provider's fallback link, then from the player frame — and captions keep their own paragraph. An embed whose markup carries real text (a quoted tweet) is left alone, and a bare `<iframe>` outside an embed block is still removed.
+
 = 0.42.0 =
 
 * Added `ninja_form` (shortcode) and `ninja-forms/form` (block) — Ninja Forms — and `formidable` (shortcode) and `formidable/simple-form` (block) — Formidable Forms — to the default exclusions. Each name is verified against the plugin's own source rather than assumed; Formidable's data-display shortcodes (`frm-show-entry`, `formresults`, `frm-stats`, …) are deliberately left out, as they show submitted entry data rather than interface chrome.
@@ -185,12 +189,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.41.1 =
 
 * Fixed: an actions shortcode first rendered after WordPress had already printed footer scripts stayed hidden because its JavaScript missed the consumed queue. The late path now prints only its own registered handle immediately through the WordPress scripts API; earlier renders still use the normal footer queue and repeated calls remain de-duplicated.
-
-= 0.41.0 =
-
-* Changed: one independently designed converter now owns both inline `<code>` and block `<pre>` output through the public `league/html-to-markdown` element-value API. The two adapted converter files are removed; the general conversion engine and its bundled MIT license remain unchanged.
-* Fixed: inline code now maps each CR/LF line ending to one space, preserves symmetric boundary spaces under CommonMark parsing, emits no invalid delimiter pair for an empty element, and treats nested syntax-highlighter markup as decoded text.
-* Fixed: fenced blocks no longer gain an extra blank line when their source already ends in a newline. A literal fence inside a bare `<pre>` is wrapped by a wider fence; only a safe fence produced by one structural `<code>` child passes through. Fallback language detection now accepts only anchored `language-*` class tokens, then `data-language` / `data-lang`, with code attributes before the parent pre.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
