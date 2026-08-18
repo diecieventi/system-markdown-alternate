@@ -9,6 +9,36 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.44.0
+
+* **A card whose whole surface is clickable now converts to a link that has a
+  name.** Link-preview, related-posts and card plugins build that surface as an
+  empty anchor laid over the card — the "stretched link" idiom, which CSS
+  frameworks document as a utility — with the title, image and summary as
+  siblings rather than children of the link. Nothing was lost in the
+  conversion, but the anchor came out as `[](url "Title")`: a link with no text
+  at all, while the name the markup does carry ended up in a paragraph of its
+  own further down, so nothing tied the name to the address. For a document
+  read by an agent that severs the one association that matters.
+* An anchor that renders nothing now takes the accessible name its markup
+  already declares — `aria-label` first, since that is the mechanism meant for
+  it, otherwise `title` — as its link text. The consumed `title` is dropped, or
+  the library would emit it a second time as a Markdown link title. The rule is
+  read off the anchor itself rather than guessed from the surrounding card, so
+  it covers every plugin producing this shape and none of them specifically.
+* Deliberately narrow in three ways. An anchor with **no** declared name is
+  left exactly as it was: the markup says nothing about it, and synthesising a
+  name from the address would turn decorative anchors — `#top`, JS hooks, skip
+  links — into visible URLs in documents that read cleanly today. Emptiness
+  means what the anchor *renders*, so an anchor wrapping an image (named by its
+  alt) or holding an icon element is untouched. And nothing is rewritten inside
+  `<pre>` or `<code>`, where the markup is a sample an author is quoting.
+* The card's own heading keeps its place instead of being folded into the link.
+  Reattaching it would mean guessing which of a card's elements is the title —
+  the structural guesswork this pass exists to avoid — so the name appears
+  twice: once as the link text, once as the card's heading. Honest, and cheaper
+  than being wrong.
+
 ## 0.43.0
 
 * **An embedded video, tweet or track now leaves a usable address behind

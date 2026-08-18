@@ -190,7 +190,8 @@ theme/plugin-injected related-posts and CTA blocks are not reintroduced:
    root-relative links all become absolute); syntax-highlighter markup is reduced
    to its `language-*` class so the converter can emit a fenced code block; an
    embed block is reduced to a link to the resource it embeds (since `0.43.0`,
-   see below).
+   see below); a link that renders nothing takes the accessible name its markup
+   declares (since `0.44.0`, see below).
 3. **HTML → Markdown** (`MarkdownConverter`, `league/html-to-markdown`) with:
    - ATX headings (`# Heading`);
    - `-` list markers;
@@ -225,6 +226,7 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 | `<figcaption>` (image, table or embed caption) | its own paragraph, following the element it captions |
 | `wp-block-embed` (an embed block, since `0.43.0`) | a link to the embedded resource, replacing the element or just its player frame — see below |
 | `<details>` / `<summary>` | `**Summary**` as its own paragraph, followed by the disclosure body as ordinary content |
+| `<a>` that renders nothing but declares a name (since `0.44.0`) | a link whose text is that name — see below |
 
 ### Embeds keep their text and their address
 
@@ -255,6 +257,41 @@ element in every case.
 
 A bare `<iframe>` that is **not** inside an embed block is not this construct and
 is still removed with the other unknown markup (see below).
+
+### A link that renders nothing still gets a name
+
+Since `0.44.0`, an `<a href>` with no rendered content takes the accessible name
+its markup declares as its link text: `aria-label` if present, otherwise
+`title`. A `title` used this way is consumed, so it is not also emitted as a
+Markdown link title.
+
+The shape this addresses is the "stretched link": a card whose entire surface is
+clickable is built as an empty anchor positioned over it, with the title, image
+and summary as siblings rather than children of the link. Link-preview,
+related-posts and card plugins emit it by default. Nothing was lost in the
+conversion, but the link arrived as `[](url "Title")` — no text at all — while
+the name the markup carries sat in a separate paragraph, so nothing connected
+the name to the address.
+
+The rule is read off the anchor and nothing else, which fixes every plugin
+producing this shape and none of them specifically. Three limits are part of the
+format:
+
+| Case | Emitted as |
+|---|---|
+| empty anchor with `aria-label` or `title` | a link named by that value |
+| empty anchor with **neither** | unchanged — `[](url)`, exactly as before |
+| anchor containing an image or any other element | unchanged; an image names the link through its `alt` |
+| empty anchor inside `<pre>` or `<code>` | unchanged; code is quoted, never rewritten |
+
+An anchor with no declared name is left alone deliberately: the markup says
+nothing about where it leads, and synthesising a name from the address would
+turn decorative anchors — `#top`, script hooks, skip links — into visible URLs
+in documents that read cleanly today.
+
+The card's own heading is **not** folded into the link. Reattaching it would
+mean guessing which of a card's elements is its title; instead the name appears
+twice, once as the link text and once as the heading that was already there.
 
 ### Code delimiters are sized to their content
 

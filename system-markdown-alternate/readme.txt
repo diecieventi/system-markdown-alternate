@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.43.0
+Stable tag: 0.44.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,7 +28,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **`Vary: Accept`** on negotiable URLs, so caches and CDNs that honour it keep the HTML and Markdown representations of the same address apart. Because some page caches key by URL only and ignore `Vary`, the negotiated Markdown (and `406`) responses are also sent non-cacheable, so safety never depends on `Vary` alone.
 * **Markdown discovery in HTML and HTTP**: supported canonical pages advertise the representation with both `<link rel="alternate" type="text/markdown">` in the document head and a typed `Link: rel="alternate"` response header. The HTTP form is also available to `HEAD` requests.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
-* **Clean conversion**: Gutenberg blocks are rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code blocks become fenced blocks, URLs are made absolute, and an embedded video, tweet or track leaves a link to what it embeds rather than an empty gap.
+* **Clean conversion**: Gutenberg blocks are rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code blocks become fenced blocks, URLs are made absolute, and an embedded video, tweet or track leaves a link to what it embeds rather than an empty gap. Clickable link cards keep their name too: the invisible overlay link such cards are built from takes the name the markup declares, instead of arriving with no text at all.
 * **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
@@ -178,6 +178,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.44.0 =
+
+* Fixed: a link card whose whole surface is clickable — the "stretched link" pattern used by link-preview, related-posts and card plugins — no longer converts to a link with no text. The clickable area is an empty anchor laid over the card, with the title and summary as separate elements, so the Markdown carried `[](url "Title")` while the title sat in a paragraph of its own further down. An anchor that renders nothing now takes the accessible name its markup declares (`aria-label`, otherwise `title`) as its link text. Anchors with no declared name are left exactly as they were, so decorative links are never turned into visible URLs, and nothing is rewritten inside code samples.
+
 = 0.43.0 =
 
 * Fixed: an embedded video, tweet or track no longer disappears from the Markdown. An embed now always leaves a usable address behind — the element becomes a link when it says nothing but its URL, keeps its own link when it carries real text (a quoted tweet), and has just its player frame replaced by the link when the address lives only there. Captions keep their own paragraph, relative and protocol-relative frame addresses are resolved against the permalink, and a bare `<iframe>` outside an embed block is still removed.
@@ -185,10 +189,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.42.0 =
 
 * Added `ninja_form` (shortcode) and `ninja-forms/form` (block) — Ninja Forms — and `formidable` (shortcode) and `formidable/simple-form` (block) — Formidable Forms — to the default exclusions. Each name is verified against the plugin's own source rather than assumed; Formidable's data-display shortcodes (`frm-show-entry`, `formresults`, `frm-stats`, …) are deliberately left out, as they show submitted entry data rather than interface chrome.
-
-= 0.41.1 =
-
-* Fixed: an actions shortcode first rendered after WordPress had already printed footer scripts stayed hidden because its JavaScript missed the consumed queue. The late path now prints only its own registered handle immediately through the WordPress scripts API; earlier renders still use the normal footer queue and repeated calls remain de-duplicated.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

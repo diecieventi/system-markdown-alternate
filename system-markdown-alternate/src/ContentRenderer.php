@@ -220,6 +220,7 @@ class ContentRenderer {
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
 		$this->link_embeds( $dom, $base );
+		$this->name_empty_links( $dom );
 		$this->unwrap_figures( $dom );
 		$this->normalize_code_blocks( $dom );
 		$this->absolutize_urls( $dom, $base );
@@ -682,6 +683,91 @@ class ContentRenderer {
 	 */
 	private function is_http_url( string $value ): bool {
 		return 1 === preg_match( '#^https?://[^\s<>"\']+$#i', $value );
+	}
+
+	/**
+	 * Gives an anchor that renders nothing the accessible name its markup declares.
+	 *
+	 * A card whose whole surface is clickable is usually built as an empty
+	 * anchor positioned over it, with the title, image and summary as siblings
+	 * rather than children — the "stretched link" idiom, which CSS frameworks
+	 * document as a utility and link-preview and related-posts plugins emit by
+	 * default. Nothing is lost in the conversion, but the link comes out as
+	 * `[](url "Name")`: a link with no text at all, while the name the markup
+	 * does carry ends up in a paragraph of its own further down. For a document
+	 * read by an agent that severs the one association that matters — what the
+	 * resource is, and where it lives.
+	 *
+	 * An anchor that renders nothing still has to name itself for anyone not
+	 * looking at the layout, and HTML has exactly two places for that name, so
+	 * the fix reads what the markup already declares instead of guessing from
+	 * the surrounding structure. `aria-label` first: it is the mechanism meant
+	 * for this, while `title` is a tooltip that merely happens to be readable.
+	 *
+	 * Deliberately narrow on three points:
+	 *
+	 * - **A declared name or nothing.** With neither attribute the markup says
+	 *   nothing about the link, and synthesising one from the href would turn
+	 *   decorative anchors — "#top", JS hooks, skip links — into visible URLs
+	 *   in documents that read cleanly today. The degenerate `[](url)` stays.
+	 * - **Emptiness is what the anchor renders, not whether it holds text.** An
+	 *   anchor wrapping an image is named by that image's alt and already
+	 *   converts correctly; one holding an empty `<span>` may be an icon drawn
+	 *   in CSS. Only an anchor with no element children at all is claimed.
+	 * - **Nothing is rewritten inside code.** A sample quoting this markup is
+	 *   an author documenting it, and the name would land in the sample.
+	 *
+	 * The sibling title is left where it is: reattaching it to the anchor would
+	 * mean guessing which of a card's elements is the title, which is exactly
+	 * the structural guesswork this pass avoids. The name is duplicated as a
+	 * result — once as the link text, once as the card's own heading — which is
+	 * honest, and cheaper than being wrong.
+	 *
+	 * Runs after link_embeds(): that pass reads an embed's text nodes to decide
+	 * what an embed says, and naming a fallback anchor first would answer that
+	 * question for it.
+	 */
+	private function name_empty_links( \DOMDocument $dom ): void {
+		$xpath = new \DOMXPath( $dom );
+		$nodes = $xpath->query( '//a[@href][not(*)][not(normalize-space())][not(ancestor::pre)][not(ancestor::code)]' );
+
+		if ( ! $nodes instanceof \DOMNodeList ) {
+			return;
+		}
+
+		foreach ( iterator_to_array( $nodes ) as $link ) {
+			if ( ! $link instanceof \DOMElement ) {
+				continue;
+			}
+
+			$name       = trim( $link->getAttribute( 'aria-label' ) );
+			$from_title = false;
+
+			if ( '' === $name ) {
+				$name       = trim( $link->getAttribute( 'title' ) );
+				$from_title = true;
+			}
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			// The library emits `title` as a Markdown link title, so consuming it
+			// as the text and leaving it in place would print it twice over:
+			// `[The Name](url "The Name")`. An aria-label it never emits, so that
+			// one stays; a title alongside it is genuinely something else.
+			if ( $from_title ) {
+				$link->removeAttribute( 'title' );
+			}
+
+			// Whitespace-only children are what "renders nothing" allows, and they
+			// would otherwise be kept in front of the name.
+			while ( $link->firstChild ) {
+				$link->removeChild( $link->firstChild );
+			}
+
+			$link->appendChild( $dom->createTextNode( $name ) );
+		}
 	}
 
 	/**

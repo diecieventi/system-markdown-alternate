@@ -202,6 +202,37 @@ The v1 scope is done and widely exceeded. Implemented:
     part of the output format. Scope is the embed construct only — a bare
     `<iframe>` elsewhere is still removed, and widening this to arbitrary
     framed markup is a different decision.
+  - **a link that renders nothing is named from what the markup declares, never
+    from what surrounds it** (`0.44.0`, `name_empty_links()`). A card whose whole
+    surface is clickable is built as an empty anchor laid over it, with the
+    title, image and summary as siblings — the "stretched link" idiom, which CSS
+    frameworks document as a utility and link-preview/related-posts plugins emit
+    by default. Nothing was lost, but the link came out `[](url "Title")` — no
+    text at all — while the name sat in a paragraph further down, severing the
+    one association the document exists to carry. The name is read off the
+    anchor (`aria-label`, else `title`), which fixes every plugin producing the
+    shape and none of them specifically. Four properties are load-bearing:
+    - **a declared name or nothing at all.** With neither attribute the markup
+      says nothing, and synthesising a name from the href would turn decorative
+      anchors — `#top`, JS hooks, skip links — into visible URLs in documents
+      that read cleanly today. The degenerate `[](url)` stays, deliberately.
+      This is where it differs from the embed pass above: an embed is a known
+      construct that holds a resource address, an arbitrary empty anchor is not.
+    - **emptiness is what the anchor RENDERS**, not whether it holds text: an
+      anchor wrapping an image is named by that image's alt and already converts
+      correctly, and one holding an empty `<span>` may be a CSS-drawn icon. Only
+      an anchor with no element children at all is claimed.
+    - **the consumed `title` is removed.** The library emits `title` as a
+      Markdown link title, so keeping it prints the name twice —
+      `[The Name](url "The Name")`. An `aria-label` it never emits, so that one
+      stays and a `title` beside it is genuinely something else.
+    - **it runs AFTER `link_embeds()`.** That pass reads an embed's text nodes to
+      decide what the embed says; naming a fallback anchor first would answer
+      that question for it and change which branch an embed takes.
+    The sibling title is deliberately NOT folded into the link: that would mean
+    guessing which of a card's elements is the title, which is the structural
+    guesswork this pass avoids. The name is duplicated instead — link text and
+    card heading — which is honest and cheaper than being wrong.
   - **the exclusion lists in the panel ADD to the built-in defaults; they do
     not replace them** (`0.40.0`). The old semantics were a trap with no visible
     symptom: `AdminSettings::option_to_list()` returned the defaults only while
@@ -1942,6 +1973,14 @@ Test posts:
     specifically: which of the two shapes reaches the pipeline depends on
     whether anything resolved the embed, and that varies per provider and per
     caching setup.
+
+18. Post carrying a **clickable link card** from a link-preview or related-posts
+    plugin → the `.md` holds a link whose text is the card's name, not
+    `[](url "Name")`. Worth doing on staging specifically: whether such a card
+    renders as an overlay anchor with sibling text or nests its title inside the
+    link is the card plugin's own choice, and only the real one settles it. A
+    decorative anchor elsewhere on the page (a "back to top" link) must be
+    unchanged, and a code sample quoting an empty anchor must publish verbatim.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
