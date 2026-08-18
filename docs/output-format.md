@@ -188,7 +188,9 @@ theme/plugin-injected related-posts and CTA blocks are not reintroduced:
 2. **HTML cleanup** — excluded shortcodes are stripped; absolute URLs are
    resolved against the **post permalink** (document-relative, `../` and
    root-relative links all become absolute); syntax-highlighter markup is reduced
-   to its `language-*` class so the converter can emit a fenced code block.
+   to its `language-*` class so the converter can emit a fenced code block; an
+   embed block is reduced to a link to the resource it embeds (since `0.43.0`,
+   see below).
 3. **HTML → Markdown** (`MarkdownConverter`, `league/html-to-markdown`) with:
    - ATX headings (`# Heading`);
    - `-` list markers;
@@ -221,7 +223,38 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
 | `<pre>` from a syntax highlighter | fenced block, with the `language-*` class preserved as the info string and line breaks reconstructed when the highlighter relies on CSS for them |
 | `<figcaption>` (image, table or embed caption) | its own paragraph, following the element it captions |
+| `wp-block-embed` (an embed block, since `0.43.0`) | a link to the embedded resource, replacing the element or just its player frame — see below |
 | `<details>` / `<summary>` | `**Summary**` as its own paragraph, followed by the disclosure body as ordinary content |
+
+### Embeds keep their text and their address
+
+Since `0.43.0`, an element carrying the `wp-block-embed` class is guaranteed to
+leave a usable address behind. Before it, a resolved embed left nothing at all:
+`iframe` is among the removed nodes, so where a video had been the reader got
+neither the player nor its URL.
+
+The address is taken from the first of these the element provides: the URL
+stored in the block (the shape a `core/embed` block has when nothing resolved
+it, since `the_content` — where WordPress resolves embeds — is deliberately not
+part of this pipeline); then a link inside the provider's fallback markup, which
+points at the original post, tweet or track; then the `src` of the player frame.
+References are resolved against the permalink, so a root-relative or
+protocol-relative frame counts as an address like any other.
+
+What happens to the element depends on what else it says:
+
+| The element | Emitted as |
+|---|---|
+| says nothing but the URL — the stored address, a player frame alone, a fallback link with no text | one paragraph holding that link, which becomes an autolink (`<https://…>`) because the link text equals its target |
+| carries text **and** a link that already names the resource (a quoted tweet, a provider's fallback markup) | left as it is; the text converts normally and the link goes with it |
+| carries text and keeps the address **only in the frame** | the frame alone becomes the link, in place; the text around it is untouched |
+
+Keeping the text and keeping the address are never in tension, so the format
+does not trade one for the other. A caption keeps its own paragraph after the
+element in every case.
+
+A bare `<iframe>` that is **not** inside an embed block is not this construct and
+is still removed with the other unknown markup (see below).
 
 ### Code delimiters are sized to their content
 

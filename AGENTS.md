@@ -167,6 +167,41 @@ The v1 scope is done and widely exceeded. Implemented:
   - code blocks whose highlighter wraps each line in its own element with no
     literal newline (Shiki → Code Block Pro) get their line breaks
     reconstructed (`code_text()`); markup that already has newlines is untouched.
+  - **an embed keeps its text AND its address** (`0.43.0`, `link_embeds()`).
+    `iframe` is in the converter's `remove_nodes`, so a resolved embed — a
+    cached oEmbed result, a plugin filtering `render_block`, an embed block from
+    another plugin — was stripped whole and the document kept no trace of it,
+    the address included. The fix is not "replace the embed with a link": the
+    first version did exactly that and bailed out whenever the element carried
+    any other text, which loses the address again for the shape that keeps it
+    only in the frame (a player plus a "Watch the video" span). Caught in
+    review; the two goals are only in tension if the pass insists on replacing
+    the whole element. So: nothing but the URL → the element becomes a
+    paragraph linking it; real text plus a link that already names the resource
+    → left alone; real text with the address only in the frame → **the frame
+    alone** is replaced, in place. Four properties are load-bearing, each with
+    a test seen to fail without it:
+    - the pass runs **after `promote_figcaptions()`**, so the caption is
+      already a sibling and survives;
+    - the class is matched as a **whole token**, or core's
+      `wp-block-embed-youtube` provider suffix would be swept in;
+    - the stored URL is read **per text node**, never from `textContent`: that
+      flattens the subtree, so a wrapper followed by a sibling paragraph reads
+      as `https://example.com/v/1Note` — a string that passes for a URL, is not
+      one, and outranks the frame that holds the real address;
+    - the replacement is a **paragraph**, not a bare anchor: emitted flush
+      against inline siblings the autolink came out as `<https://…>Watch the
+      video` on one line, which is the defect `promote_figcaptions()` exists to
+      prevent for captions.
+    Frame references are resolved against the permalink inside this pass
+    (`embed_reference()`), because `absolutize_urls()` runs later and only
+    covers `a` and `img` — a protocol-relative or root-relative `src` would
+    otherwise be rejected as a candidate and then removed, address and all. The
+    protocol-relative completion is local to embeds: `absolutize()` keeps
+    returning `//host/path` unchanged for ordinary links, which is a documented
+    part of the output format. Scope is the embed construct only — a bare
+    `<iframe>` elsewhere is still removed, and widening this to arbitrary
+    framed markup is a different decision.
   - **the exclusion lists in the panel ADD to the built-in defaults; they do
     not replace them** (`0.40.0`). The old semantics were a trap with no visible
     symptom: `AdminSettings::option_to_list()` returned the defaults only while
@@ -581,9 +616,12 @@ The v1 scope is done and widely exceeded. Implemented:
   **What would reopen it**: a census of real content showing a large share of
   the corpus inside blocks whose *meaning* — not merely layout — is lost through
   `render_block()`. Layout wrappers do not count: their children already convert
-  correctly. The single genuinely block-aware idea worth keeping is
+  correctly. The single genuinely block-aware idea worth keeping was
   `core/embed` → the canonical URL rather than the rendered oEmbed markup, and
-  that is one converter, not an engine.
+  **that shipped in `0.43.0`** — as one DOM pass keyed on the `wp-block-embed`
+  class, not as a block renderer, so it covers embed blocks from other plugins
+  and already-resolved markup for free. Nothing of the engine proposal survives
+  it.
 - **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
   might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
@@ -1867,6 +1905,15 @@ Test posts:
     → the excluded text is absent from the body *and* from the front-matter
     `description:`. A post without any excluded class → its `description:` is
     unchanged from the previous release (the pass must be a no-op there).
+
+17. Post with a **YouTube/Vimeo embed block**, one with a caption, and a
+    **tweet/Mastodon embed** whose fallback markup carries the quoted text →
+    each video embed becomes an autolink to its address (never nothing, which is
+    what a resolved embed used to leave), the caption follows as its own
+    paragraph, and the quoted text is still published. Worth doing on staging
+    specifically: which of the two shapes reaches the pipeline depends on
+    whether anything resolved the embed, and that varies per provider and per
+    caching setup.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
