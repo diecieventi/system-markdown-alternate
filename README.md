@@ -50,6 +50,8 @@ Two consequences worth knowing:
   and tables of contents that the panel adds to.
 - Code fences sized to their content, GFM tables, definition lists, and URLs
   made absolute against the post's own permalink.
+- Embeds always leave a usable address: the element becomes a link to what it
+  embeds, or just its player frame does when the embed shows text of its own.
 - **Advanced Custom Fields** (when active): a subtitle and a TL;DR as a
   preamble between the H1 and the body.
 

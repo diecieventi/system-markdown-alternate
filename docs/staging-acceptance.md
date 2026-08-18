@@ -33,6 +33,12 @@ the server.
   Markdown.
 - Excluded shortcodes are absent from prose but survive literally inside inline
   and fenced code examples.
+- Embed blocks leave a usable address: a video embed becomes a link to it,
+  a captioned one keeps its caption as the following paragraph, and an embed
+  showing text of its own (a quoted post) keeps that text as well as its link.
+  Worth doing here specifically: whether the player is already resolved when
+  the pipeline sees it varies per provider and per caching setup, and only one
+  of the two shapes can be reproduced offline.
 - `/llms.txt` is healthy and excludes ineligible content.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).
