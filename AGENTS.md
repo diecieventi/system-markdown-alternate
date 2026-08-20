@@ -1458,12 +1458,24 @@ contradicting this plugin — that second group is exactly the audience the
 
 **Test environments**: the pure PHP suite remains the fast CI gate. For behavior
 that needs real WordPress routing, hook order, emitted headers or a browser, use
-the connected InstaWP site and the repeatable checklist in
-`docs/staging-acceptance.md`. Run that matrix before a release or after changing
-those integration surfaces. The latest full pass was `0.41.1` on 10 August 2026
-(WordPress 7.0.3, PHP 8.4.20); it complements rather than replaces the pure
-suite. Use the safe update/rollback procedure and remove transferred packages
-and backups when finished.
+the connected InstaWP sites and the repeatable checklist in
+`docs/staging-acceptance.md`. There are **two**, and which one a run needs
+depends on what changed: `instawp_sma` (GeneratePress, ACF, Polylang, Code Block
+Pro and the link-card plugins) is the general release environment, and
+`sma-bricks-instawp-co` (Bricks 2.0 as the active theme) is the only one with
+page-builder content — the general one has none at all, so a builder change
+cannot be exercised there. Run the matrix before a release or after changing
+those integration surfaces. The latest full pass was `0.45.0` on 20 August 2026,
+across both: WordPress 7.1 / PHP 8.4.7 on the Bricks environment and WordPress
+7.1 / PHP 8.4.20 on the release one. It complements rather than replaces the
+pure suite. Use the safe update/rollback procedure and remove transferred
+packages and backups when finished.
+
+**Verify which site a connector points at before writing to it.** The connector
+names are not stable across reconnects — one came back under a different name
+mid-session, still pointing at the other site, and a plugin update went to the
+wrong environment because the name looked like continuity. Any call that writes
+should assert `home_url()` first and refuse otherwise; it costs one line.
 
 ### Impact on defaults
 

@@ -78,10 +78,16 @@ repository.
 ## Latest full pass
 
 - **2026-08-20 — System Markdown Alternate 0.45.0 (page-builder veto)**
-- Run on the Bricks environment (`sma-bricks-instawp-co`, Bricks 2.0 active),
-  because the release environment carries no builder content at all. The
-  general matrix was additionally exercised on the release environment, which
-  is where the "no builder content, nothing changes" property was measured.
+
+  | Environment | Platform | Role in this run |
+  |---|---|---|
+  | `sma-bricks-instawp-co` — Bricks 2.0 | WordPress 7.1, PHP 8.4.7 | The veto itself: it is the only environment with page-builder content |
+  | `instawp_sma` — GeneratePress 3.6.1 | WordPress 7.1, PHP 8.4.20 | The general matrix, and the "no builder content, nothing changes" property (0 of 31 published posts claimed) |
+
+  Both were needed and neither is redundant: the release environment has no
+  builder content at all, so it cannot exercise the veto, while the Bricks clone
+  lacks Rank Math and GenerateBlocks. The two also happen to sit on different
+  PHP patch releases, which is worth keeping rather than levelling.
 - Veto, both directions, both fixtures holding the **same** Bricks tree and
   differing only in render mode: **passed**
 - Panel breakdown, revision exclusion, census cache not bumping the salt,
