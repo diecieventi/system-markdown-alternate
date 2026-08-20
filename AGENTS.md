@@ -510,6 +510,22 @@ The v1 scope is done and widely exceeded. Implemented:
   reconnaissance described inside — the current plan's central query assumption
   is not reliable and must be verified against real plugin behaviour before any
   code is written.
+- **Page builders** (`docs/page-builders-plan.md`): **not started**, scope fixed
+  with the maintainer August 2026. **Bricks is the one builder to support**;
+  Elementor is parked (a free-only staging cannot validate the Pro features that
+  make it hard); Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are
+  **never** to be supported — a post built with one has no Markdown
+  representation at all, enforced as a veto through `PostSupport::is_servable()`
+  so the `.md` 404s and the post leaves `/llms.txt`, the alternate links and the
+  shortcodes by construction. Two rules from that plan are the ones easy to get
+  backwards: **detection is per-post, never per-type** (sites routinely build
+  pages with a builder while articles stay in Gutenberg, so activating Bricks on
+  a site of Gutenberg posts must change nothing), and it keys on the **render
+  mode, not the presence of builder data** — Bricks documents that a post
+  switched to "Render with WordPress" keeps its data stored while the front end
+  serves `post_content`, so keying on the blob would publish a representation no
+  visitor sees. The veto phase is shippable on its own and does not wait on the
+  Bricks reconnaissance.
 - **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
   started** — deferred August 2026, see the status note at the top of the plan.
   The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,
@@ -1397,7 +1413,8 @@ and backups when finished.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   └── llms-txt-multilingual-plan.md
+│   ├── llms-txt-multilingual-plan.md
+│   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
 │   ├── astro.config.mjs          ← sidebar, site + base path, favicon
