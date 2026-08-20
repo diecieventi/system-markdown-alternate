@@ -382,7 +382,7 @@ password-protected, not an attachment, and — since `0.26.0` — **not carrying
 non-standard post format** (aside, audio, chat, gallery, image, link, quote,
 status, video; filterable through `sysmda_markdown_excluded_post_formats`).
 
-It also excludes any post **rendered by a page builder the
+Since `0.45.0` it also excludes any post **rendered by a page builder the
 plugin has no adapter for** — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver
 Builder and Breakdance, filterable through
 `sysmda_markdown_unsupported_builders`. Such a post has no Markdown

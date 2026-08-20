@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.44.0
+Stable tag: 0.45.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -182,6 +182,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.45.0 =
+
+* Added: posts rendered by a page builder no longer expose a Markdown version. Bricks, Elementor, Beaver Builder, Oxygen and Breakdance keep their content outside the post content, so the `.md` was front matter and a bare heading; Divi and WPBakery fill the post content with their own layout shortcodes, so the `.md` was layout scaffolding converted as prose. Such a post now returns 404 and leaves `/llms.txt`, the discovery links, the shortcodes and the dynamic tag — an honest "there isn't one" rather than an empty or misleading document. The rule is decided **per post**, from the builder's own render mode: activating a builder does not affect the posts you did not build with it, a post switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored, and nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page. New `sysmda_markdown_unsupported_builders` filter (Stable) serves them anyway if you prefer.
+* Added: the *Enabled content types* setting now shows what each type's published posts are actually built with — for example *12 Bricks, 3 Gutenberg* — with a warning naming any builder that costs the Markdown version. Advisory only: it never changes what is served.
+* Fixed: rebuilding `/llms.txt` primed the post meta cache only in enriched mode, so the new page-builder check cost one database query per candidate post on the basic path — up to 2500 per content type on a cold index. Both caches are now primed for the whole batch.
+
 = 0.44.0 =
 
 * Fixed: a link card whose whole surface is clickable — the "stretched link" pattern used by link-preview, related-posts and card plugins — no longer converts to a link with no text. The clickable area is an empty anchor laid over the card, with the title and summary as separate elements, so the Markdown carried `[](url "Title")` while the title sat in a paragraph of its own further down. An anchor that renders nothing now takes the accessible name its markup declares (`aria-label`, otherwise `title`) as its link text. Anchors with no declared name are left exactly as they were, so decorative links are never turned into visible URLs, and nothing is rewritten inside code samples.
@@ -189,10 +195,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.43.0 =
 
 * Fixed: an embedded video, tweet or track no longer disappears from the Markdown. An embed now always leaves a usable address behind — the element becomes a link when it says nothing but its URL, keeps its own link when it carries real text (a quoted tweet), and has just its player frame replaced by the link when the address lives only there. Captions keep their own paragraph, relative and protocol-relative frame addresses are resolved against the permalink, and a bare `<iframe>` outside an embed block is still removed.
-
-= 0.42.0 =
-
-* Added `ninja_form` (shortcode) and `ninja-forms/form` (block) — Ninja Forms — and `formidable` (shortcode) and `formidable/simple-form` (block) — Formidable Forms — to the default exclusions. Each name is verified against the plugin's own source rather than assumed; Formidable's data-display shortcodes (`frm-show-entry`, `formresults`, `frm-stats`, …) are deliberately left out, as they show submitted entry data rather than interface chrome.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
