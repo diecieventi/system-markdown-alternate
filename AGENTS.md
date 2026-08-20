@@ -490,7 +490,14 @@ The v1 scope is done and widely exceeded. Implemented:
   that last one so the menu never grows across the button it belongs to. The
   direction is read per pass, so a right-to-left theme mirrors both alignments.
   The portal into `document.body` stays, because unlike the reference the
-  shortcode can be placed anywhere in an unknown theme. The root is hidden until setup, copy uses the
+  shortcode can be placed anywhere in an unknown theme. The menu is sized to its
+  content rather than to a fixed width, which couples placement to the labels:
+  copy feedback ("Copying…", "Copied!") can be wider than the label it replaces,
+  so **`setLabel()` schedules a repositioning pass**. Without it an open,
+  end-aligned menu grew straight past the viewport edge on the first long
+  translated feedback string and stayed there until the next scroll (caught by
+  Codex on PR #100, then reproduced: 184 px outside the viewport). Anything else
+  that can change the menu's size while it is open owes the same call. The root is hidden until setup, copy uses the
   Safari-safe promise-backed `ClipboardItem` path with fallbacks, and a response
   whose type is not `text/markdown` is refused rather than copied as HTML. The
   whole shortcode is in `ShortcodeCleaner::ALWAYS_EXCLUDED`: interface chrome

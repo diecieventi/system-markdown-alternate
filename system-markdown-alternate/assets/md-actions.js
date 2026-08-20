@@ -157,6 +157,12 @@
 			if ( label ) {
 				label.textContent = text;
 			}
+
+			// Copy feedback can be wider than the label it replaces, and the menu
+			// is sized to its content: an open menu near the viewport edge would
+			// otherwise grow straight past it until the next scroll or resize.
+			// A no-op while the menu is closed.
+			schedulePosition();
 		}
 
 		function announce( message ) {
