@@ -9,6 +9,24 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.45.1
+
+* Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the
+  button instead of below it. The menu was anchored to the caret rather than to
+  the split button as a whole, so its left edge started halfway across the
+  control and the panel hung out over the text beside it. It is now aligned to
+  the button's own edge and drops straight below, which is what the control
+  looked like it should do all along.
+* Fixed: the fallback placements now run only when they are needed, and they
+  handle the awkward cases better. The menu switches to the opposite alignment
+  when the button sits too close to the screen edge, flips above the button when
+  there is no room below, and — where there is room on neither side — caps its
+  height and scrolls instead of growing across the button it belongs to. On a
+  right-to-left site both alignments mirror.
+* Changed: the menu is sized to its own content instead of a fixed 250 px, with
+  the same width as its floor, so a longer translated label is no longer squeezed
+  into two lines while a narrow screen still keeps it inside the viewport.
+
 ## 0.45.0
 
 * **A post rendered by a page builder no longer has a Markdown representation.**

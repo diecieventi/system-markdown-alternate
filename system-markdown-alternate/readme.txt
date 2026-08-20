@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.45.0
+Stable tag: 0.45.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -96,7 +96,7 @@ Use the `[sysmda_md_url]` shortcode. If you run GenerateBlocks 2.x, the `{{sysmd
 
 Use `[sysmda_md_actions]`. It renders a GitHub-style split button: the main action copies the complete Markdown document, while the dropdown offers **Copy as Markdown**, **View as Markdown** in a new tab and **Download Markdown**. Use `[sysmda_md_actions id="123"]` for a specific post.
 
-The component renders only where the shortcode is placed. Its small stylesheet and dependency-free script are loaded only on pages that actually render it, including placements in templates, widgets and secondary loops. The menu automatically opens toward the side and vertical direction with available viewport space.
+The component renders only where the shortcode is placed. Its small stylesheet and dependency-free script are loaded only on pages that actually render it, including placements in templates, widgets and secondary loops. The menu opens aligned to the button and drops below it, moving to the opposite side or above only when the screen edge leaves no room.
 
 Like the other shortcodes, it outputs nothing when the target post has no Markdown version.
 
@@ -182,6 +182,11 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.45.1 =
+
+* Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the button instead of below it. The menu was anchored to the small caret rather than to the split button as a whole, so it started halfway across the control and hung out over the text beside it. It now lines up with the button's own edge and drops straight below it. The fallbacks for a button close to the screen edge run only when they are actually needed: the menu switches to the opposite alignment, flips above the button when there is no room below, and where there is room on neither side it caps its height and scrolls instead of covering the button. Right-to-left sites mirror both alignments.
+* Changed: the menu is sized to its own content rather than to a fixed width, so a longer translated label is no longer squeezed into two lines, while a narrow screen still keeps the menu inside the viewport.
+
 = 0.45.0 =
 
 * Added: posts rendered by a page builder no longer expose a Markdown version. Bricks, Elementor, Beaver Builder, Oxygen and Breakdance keep their content outside the post content, so the `.md` was front matter and a bare heading; Divi and WPBakery fill the post content with their own layout shortcodes, so the `.md` was layout scaffolding converted as prose. Such a post now returns 404 and leaves `/llms.txt`, the discovery links, the shortcodes and the dynamic tag — an honest "there isn't one" rather than an empty or misleading document. The rule is decided **per post**, from the builder's own render mode: activating a builder does not affect the posts you did not build with it, a post switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored, and nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page. New `sysmda_markdown_unsupported_builders` filter (Stable) serves them anyway if you prefer.
@@ -191,10 +196,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.44.0 =
 
 * Fixed: a link card whose whole surface is clickable — the "stretched link" pattern used by link-preview, related-posts and card plugins — no longer converts to a link with no text. The clickable area is an empty anchor laid over the card, with the title and summary as separate elements, so the Markdown carried `[](url "Title")` while the title sat in a paragraph of its own further down. An anchor that renders nothing now takes the accessible name its markup declares (`aria-label`, otherwise `title`) as its link text. Anchors with no declared name are left exactly as they were, so decorative links are never turned into visible URLs, and nothing is rewritten inside code samples.
-
-= 0.43.0 =
-
-* Fixed: an embedded video, tweet or track no longer disappears from the Markdown. An embed now always leaves a usable address behind — the element becomes a link when it says nothing but its URL, keeps its own link when it carries real text (a quoted tweet), and has just its player frame replaced by the link when the address lives only there. Captions keep their own paragraph, relative and protocol-relative frame addresses are resolved against the permalink, and a bare `<iframe>` outside an embed block is still removed.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

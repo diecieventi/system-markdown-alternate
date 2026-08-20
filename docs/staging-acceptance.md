@@ -62,8 +62,10 @@ the server.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).
   In both cases markup, localization and exactly one script must be emitted.
-- In a real browser, verify actions are visible, the menu opens, Escape closes
-  it, copy reports success and the console has no plugin JavaScript errors.
+- In a real browser, verify actions are visible, the menu opens aligned to the
+  button and directly below it, Escape closes it, copy reports success and the
+  console has no plugin JavaScript errors. Near a screen edge, and at 320 px,
+  check the fallback placements do not overflow or clip.
 - Search WordPress debug and PHP error logs for new plugin warnings or fatals.
 
 ## Cleanup and record

@@ -3,8 +3,9 @@
  *
  * Vanilla JavaScript, no build step and no dependencies. The menu is moved to
  * document.body after setup so transformed/overflowing theme containers cannot
- * clip it, then positioned against the viewport with horizontal and vertical
- * fallback placement.
+ * clip it, then positioned against the split button: aligned to the group's
+ * start edge and dropping below it, with flip and clamp fallbacks used only
+ * when the viewport leaves no room for that placement.
  */
 ( function () {
 	'use strict';
@@ -16,6 +17,7 @@
 	var FEEDBACK_MS = 2000;
 	var VIEWPORT_GAP = 8;
 	var MENU_GAP = 6;
+	var MIN_MENU_HEIGHT = 48;
 
 	function init() {
 		var roots = document.querySelectorAll( '.sysmda-md-actions' );
@@ -24,6 +26,12 @@
 		for ( index = 0; index < roots.length; index++ ) {
 			setup( roots[ index ] );
 		}
+	}
+
+	function directionOf( element ) {
+		var styles = window.getComputedStyle ? window.getComputedStyle( element ) : null;
+
+		return styles && styles.direction ? styles.direction : 'ltr';
 	}
 
 	function canCopyMarkdown() {
@@ -112,6 +120,7 @@
 		var status = root.querySelector( '.sysmda-md-actions__status' );
 		var url = root.getAttribute( 'data-sysmda-md-url' );
 		var copyActions = [ copyButton, menuCopy ].filter( Boolean );
+		var group = root.querySelector( '.sysmda-md-actions__group' ) || toggle;
 		var copyable = canCopyMarkdown();
 		var busy = false;
 		var scheduled = false;
@@ -148,6 +157,12 @@
 			if ( label ) {
 				label.textContent = text;
 			}
+
+			// Copy feedback can be wider than the label it replaces, and the menu
+			// is sized to its content: an open menu near the viewport edge would
+			// otherwise grow straight past it until the next scroll or resize.
+			// A no-op while the menu is closed.
+			schedulePosition();
 		}
 
 		function announce( message ) {
@@ -160,33 +175,79 @@
 			return 'true' === toggle.getAttribute( 'aria-expanded' );
 		}
 
+		/**
+		 * Does a menu of this width fit the viewport when its left edge is at x?
+		 */
+		function fitsAt( x, width ) {
+			return x >= VIEWPORT_GAP && x + width <= window.innerWidth - VIEWPORT_GAP;
+		}
+
+		/**
+		 * Place the menu under the split button.
+		 *
+		 * The menu is anchored to the whole group, not to the caret: its start
+		 * edge lines up with the group's start edge, so it drops straight down
+		 * under the button instead of hanging off to one side. The end-aligned
+		 * placement is a fallback for a group sitting too close to the viewport
+		 * edge, and the clamp below it is the last resort for a viewport too
+		 * narrow for either.
+		 */
 		function positionMenu() {
 			if ( ! isOpen() ) {
 				return;
 			}
 
-			var anchor = toggle.getBoundingClientRect();
+			// Reset what a previous pass constrained, or the menu is measured
+			// against its own clamped size instead of its natural one.
+			menu.style.maxHeight = '';
+
+			var anchor = group.getBoundingClientRect();
 			var box = menu.getBoundingClientRect();
-			var maxLeft = Math.max( VIEWPORT_GAP, window.innerWidth - box.width - VIEWPORT_GAP );
-			var maxTop = Math.max( VIEWPORT_GAP, window.innerHeight - box.height - VIEWPORT_GAP );
-			var left = anchor.left;
-			var top = anchor.bottom + MENU_GAP;
-			var horizontal = 'right';
+			// Read per pass rather than cached: a theme may set the direction
+			// after this script has run, and the two placements are mirrored.
+			var rtl = 'rtl' === directionOf( root );
+			var start = rtl ? anchor.right - box.width : anchor.left;
+			var end = rtl ? anchor.left : anchor.right - box.width;
+			var horizontal = 'start';
+			var left = start;
+
+			if ( ! fitsAt( start, box.width ) && fitsAt( end, box.width ) ) {
+				left = end;
+				horizontal = 'end';
+			}
+
+			left = Math.min(
+				Math.max( VIEWPORT_GAP, left ),
+				Math.max( VIEWPORT_GAP, window.innerWidth - box.width - VIEWPORT_GAP )
+			);
+
+			var below = window.innerHeight - anchor.bottom - MENU_GAP - VIEWPORT_GAP;
+			var above = anchor.top - MENU_GAP - VIEWPORT_GAP;
 			var vertical = 'bottom';
+			var room = below;
 
-			if ( left + box.width > window.innerWidth - VIEWPORT_GAP ) {
-				left = anchor.right - box.width;
-				horizontal = 'left';
-			}
-
-			left = Math.min( Math.max( VIEWPORT_GAP, left ), maxLeft );
-
-			if ( top + box.height > window.innerHeight - VIEWPORT_GAP && anchor.top - box.height - MENU_GAP >= VIEWPORT_GAP ) {
-				top = anchor.top - box.height - MENU_GAP;
+			if ( box.height > below && above > below ) {
 				vertical = 'top';
+				room = above;
 			}
 
-			top = Math.min( Math.max( VIEWPORT_GAP, top ), maxTop );
+			// With room on neither side, cap the height and let the menu scroll
+			// rather than let it grow across the button it belongs to. The floor
+			// is the one case where covering the button is the lesser evil: below
+			// it the menu would be too short to operate at all.
+			room = Math.max( room, MIN_MENU_HEIGHT );
+
+			if ( box.height > room ) {
+				menu.style.maxHeight = Math.round( room ) + 'px';
+				box = menu.getBoundingClientRect();
+			}
+
+			var top = 'top' === vertical ? anchor.top - MENU_GAP - box.height : anchor.bottom + MENU_GAP;
+
+			top = Math.min(
+				Math.max( VIEWPORT_GAP, top ),
+				Math.max( VIEWPORT_GAP, window.innerHeight - box.height - VIEWPORT_GAP )
+			);
 
 			menu.style.left = Math.round( left ) + 'px';
 			menu.style.top = Math.round( top ) + 'px';
