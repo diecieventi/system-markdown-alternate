@@ -9,6 +9,69 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.45.0
+
+* **A post rendered by a page builder no longer has a Markdown representation.**
+  The pipeline assumes the content lives in `post_content`, and page builders
+  break that assumption in two different ways. Bricks, Elementor, Beaver
+  Builder, Oxygen and Breakdance keep their tree in post meta, so the `.md` came
+  out as front matter plus a bare `# Title` — a document with no document in it.
+  Divi and WPBakery fill `post_content` with their own `[et_pb_*]` / `[vc_*]`
+  layout shortcodes, so the `.md` came out full of scaffolding converted as
+  prose. The second is the worse of the two: an empty file is obviously useless,
+  whereas a file of builder wrappers looks like content to whatever fetched it
+  and looks like nothing at all from the admin side.
+
+  Such a post is now denied at `PostSupport::is_servable()`, so everything
+  follows from one rule: the `.md` URL returns 404, no `rel="alternate"` link or
+  `Link:` header is advertised, the post is absent from `/llms.txt`, and
+  `[sysmda_md_url]`, `[sysmda_md_download]`, `[sysmda_md_actions]` and the
+  GenerateBlocks dynamic tag all render nothing — so nothing on the site points
+  at a Markdown URL that does not exist.
+
+  Three properties of the detection are worth stating, because each is the
+  opposite of what a naive implementation would do:
+
+  * **It is decided per post, never per content type and never per site.** Sites
+    routinely build their pages with a builder while the articles stay in the
+    ordinary editor, and mixed types are the normal case. Activating a builder
+    on a site of 150 block-editor articles changes nothing for any of them.
+  * **It reads the render mode, not the presence of builder data.** Bricks and
+    Elementor both offer a per-post switch back to the WordPress editor that
+    leaves the builder tree stored while the front end serves `post_content`, so
+    a post switched back keeps its Markdown version. The same exactness is what
+    stops `_wpb_vc_js_status` claiming every post that ever had the WPBakery
+    editor opened on it: it stores the string `false`, which is truthy.
+  * **It never inspects `post_content`.** An article documenting Divi and quoting
+    `[et_pb_section]` in a code sample is not a Divi page, and keeps its Markdown
+    version like any other article.
+
+  The rule also holds whether the builder plugin is currently active or not:
+  with Divi deactivated its shortcodes stay in `post_content` unregistered and
+  would be published as literal text, which is the worst of the three outcomes.
+
+  New Stable filter `sysmda_markdown_unsupported_builders` serves a builder's
+  posts anyway — with whatever the ordinary pipeline makes of them — or switches
+  the rule off entirely. Bricks and Elementor sit on the list *until an adapter
+  exists*; the others are permanent.
+
+* **The settings page shows what each content type is actually built with.**
+  *Enabled content types* now carries a per-type breakdown — for example
+  *12 Bricks, 3 Gutenberg* — with a warning naming any builder whose posts have
+  no Markdown version. A breakdown rather than one label, because mixed types
+  are the normal case. It is advisory only: it never filters, enables or
+  disables anything, it is computed on the settings screen and never on the
+  front end, and it is cached.
+
+* **Fixed: rebuilding `/llms.txt` issued one extra query per candidate post.**
+  The batch query primed the post meta cache only in enriched mode, from when
+  the enriched descriptions were the only reader of post meta. The new
+  page-builder check reads meta too, so on the basic path every candidate cost
+  its own `postmeta` query — with the default 500-post limit and up to five
+  pages of candidates, as many as 2500 per content type whenever the index cache
+  was cold. Both caches are now primed for the whole batch, which is also what
+  was already being done for the term lookup the post-format check needs.
+
 ## 0.44.0
 
 * **A card whose whole surface is clickable now converts to a link that has a
