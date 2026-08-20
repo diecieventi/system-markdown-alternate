@@ -19,7 +19,8 @@ A post is served only when it is published, carries no password, and uses the st
 
 - a draft, pending, scheduled or private post;
 - a password-protected post — including for a visitor who has already entered the password, because the rule is about the content, not the reader;
-- a post whose format is aside, status, quote, link, image, video, audio, gallery or chat.
+- a post whose format is aside, status, quote, link, image, video, audio, gallery or chat;
+- a post rendered by a page builder — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance. This is decided per post, from the builder's own render mode, so a site whose pages use a builder keeps every article that does not. See [Page builders](/integrations/page-builders/).
 
 A quick way to tell the difference between "not eligible" and "not working": if the post were eligible, its HTML page would carry a Markdown `alternate` link. View source and search for `text/markdown`. Nothing there means the post is being excluded, not that the endpoint is broken.
 

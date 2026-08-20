@@ -44,6 +44,20 @@ the server.
   `[](url "Name")`. Worth doing here specifically: whether such a card renders
   as an overlay anchor with sibling text, or nests its title inside the link,
   is the plugin's own choice and only the real one can settle it.
+- Posts rendered by an unsupported page builder stay unavailable as Markdown:
+  the `.md` returns 404, the HTML page advertises no `alternate` link or `Link:`
+  header, the post is absent from `/llms.txt`, and all three shortcodes and the
+  dynamic tag render nothing. The fixture that matters most is the **inverse**
+  one: a page holding builder data but switched back to *Render with WordPress*
+  must serve an ordinary `.md` built from `post_content`, because that is the
+  case a presence-based check gets wrong and no other check catches. Gutenberg
+  and classic posts on the same site must be entirely unaffected — the rule is
+  per post, not per type. Requires the second connected site,
+  `sma-bricks-instawp-co` (Bricks 2.0 as the active theme); the release
+  environment carries no builder content.
+- The *Enabled content types* rows show the real per-type breakdown (for example
+  *Pages — 1 Bricks, 3 Gutenberg*) with the warning on the builder part, and
+  revisions of a builder page do not inflate its count.
 - `/llms.txt` is healthy and excludes ineligible content.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).

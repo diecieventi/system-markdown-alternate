@@ -102,12 +102,19 @@ class PostSupport {
 	 * representation at all" — see the decision in AGENTS.md — so having the
 	 * password is irrelevant. This also makes the endpoint agree with
 	 * `/llms.txt`, which has always filtered on `has_password => false`.
+	 *
+	 * The last built-in rule is the page-builder veto: a post rendered by a
+	 * builder the plugin has no adapter for has no Markdown representation, so
+	 * it is denied here rather than published empty or full of layout chrome.
+	 * See `BuilderDetector` for why the test is per post and reads the render
+	 * mode rather than the presence of builder data.
 	 */
 	public static function is_servable( \WP_Post $post ): bool {
 		$servable = in_array( $post->post_type, self::supported_post_types(), true )
 			&& 'publish' === $post->post_status
 			&& '' === (string) $post->post_password
-			&& ! self::has_excluded_post_format( $post );
+			&& ! self::has_excluded_post_format( $post )
+			&& ! BuilderDetector::is_unsupported( $post );
 
 		if ( ! $servable ) {
 			return false;

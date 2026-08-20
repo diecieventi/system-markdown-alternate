@@ -1,6 +1,8 @@
 # Page builders — Bricks first, a veto for the rest
 
-> Implementation plan. Status: **not started.** Written against `main @ 0.44.0`.
+> Implementation plan. Status: **Phases 1 and 1b shipped** (the veto and the
+> panel breakdown); Phase 0 is partly answered; Phase 2 is not started. Written
+> against `main @ 0.44.0`.
 >
 > Scope was fixed with the maintainer in August 2026 and is deliberately narrow:
 > **Bricks is the one builder to support.** Elementor is parked. Divi, WPBakery,
@@ -99,6 +101,16 @@ was not the question that mattered ("what is actually served?").
 The same argument applies to Elementor and is an extra reason to call
 `is_built_with_elementor()` rather than read `_elementor_edit_mode` directly:
 the official method already accounts for "Back to WordPress Editor".
+
+**Phase 1 reads the meta anyway, and that is not an oversight.** §3.2 requires
+the veto to hold with the plugin deactivated, so a vendor call cannot be the
+primary source and a meta read has to exist regardless. Elementor's own
+`is_built_with_elementor()` is a truthiness test on that same
+`_elementor_edit_mode` row, which the "Back to WordPress Editor" action deletes,
+so the two agree today; adding a vendor-preferred branch on top would have
+bought nothing except a code path the pure suite cannot exercise. **The adapter
+is where the vendor call belongs** — it requires the plugin active by
+construction, so there the API is free and strictly better.
 
 ### 3.2 A deliberate asymmetry: veto and adapter have different preconditions
 
@@ -206,7 +218,7 @@ State verified on that site at setup:
 | Plugin | System Markdown Alternate 0.44.0, active |
 | Also active | ACF 6.8.8 |
 | **Not installed** | **GenerateBlocks, Rank Math** |
-| Bricks content | **none yet** — no `_bricks*` meta row exists |
+| Bricks content | one page (ID 18), plus two revisions of it |
 
 Two consequences. The GenerateBlocks dynamic tag and the Rank Math description
 path cannot be exercised there, so they stay on the original staging —
@@ -230,10 +242,26 @@ Questions to answer before any adapter code. Each one changes the design:
    consults the queried object. If it renders empty or wrong, the adapter needs
    a query context faked as well — invasive, and a decision to take
    deliberately.
-2. **Does an AJAX save move `post_modified_gmt`?** Decides how much §5 has to
-   carry.
-3. **What is the exact meta key and value set for the render mode?** §3.1 rests
-   on it.
+2. ~~**Does an AJAX save move `post_modified_gmt`?**~~ **Answered: yes**
+   (August 2026, same site). The one Bricks page has `post_date 2026-01-02` and
+   `post_modified 2026-08-20`, moved by a save from the Bricks editor. Edge case
+   10 — "the top correctness risk" — therefore does **not** apply to ordinary
+   saves, and §5 shrinks accordingly: the fingerprint still has to cover the
+   render mode (edge cases 2 and 3 are transitions, and a mode flip need not
+   touch the post row) and the out-of-post dependencies of edge case 11, but not
+   the everyday edit.
+3. ~~**What is the exact meta key and value set for the render mode?**~~
+   **Answered** (August 2026, on `sma-bricks-instawp-co`, Bricks 2.0). The page
+   carries three meta rows: `_bricks_editor_mode = "bricks"`,
+   `_bricks_template_type = "content"` and `_bricks_page_content_2` holding the
+   serialized tree. The mode row is the one to key on, and Phase 1 does.
+
+   **Revisions carry the payload but not the mode.** Measured on the same site:
+   two `post_type = 'revision'` rows hold `_bricks_page_content_2` while only the
+   published page holds `_bricks_editor_mode`. Anything counting the payload —
+   the Phase 1b census in particular — would report one Bricks page three times.
+   A second reason to key on the mode, beyond §3.1, and the reason `BuilderCensus`
+   constrains `post_status` and `post_type` as well.
 4. **What is the exact signature of `\Bricks\Frontend::render_data()` on the
    installed version?** The `bricks/frontend/render_data` filter documents the
    second argument as `$area` (`header`/`content`/`footer`); snippets in
@@ -361,9 +389,9 @@ to "are my articles affected?" should take three seconds, not an audit.
 
 | Phase | Content | Blocked by |
 |---|---|---|
-| **1** | The veto: `BuilderDetector`, the rule in `is_servable()`, a Stable escape filter. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor out temporarily | nothing |
-| **1b** | Panel labels | nothing |
-| **0** | Bricks reconnaissance (§6) | staging — available |
+| **1** ✅ | The veto: `BuilderDetector`, the rule in `is_servable()`, the Stable `sysmda_markdown_unsupported_builders`. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor in `AWAITING_ADAPTER` | nothing |
+| **1b** ✅ | Panel labels — `BuilderCensus`, one query, transient-cached, admin only | nothing |
+| **0** ◐ | Bricks reconnaissance (§6) — questions 2 and 3 answered, the rest open | staging — available |
 | **2** | Bricks adapter; Bricks leaves the unsupported list | Phase 0 |
 | **3** | Elementor — only on real demand, and only with a Pro staging | — |
 
@@ -373,8 +401,8 @@ published without anyone noticing.
 
 ## 10. Open questions
 
-1. In Phase 1, do Bricks and Elementor 404 **immediately**, even though the
-   Bricks adapter follows shortly? Recommended yes — consistent, and better than
+1. ~~In Phase 1, do Bricks and Elementor 404 immediately?~~ **Resolved: yes.**
+   Both shipped in `AWAITING_ADAPTER`. Consistent with the rest, and better than
    the current emptiness.
 2. Edge case 6: accept the related/CTA content that `the_content` reintroduces
    through the Post content element, or suppress foreign filters around the

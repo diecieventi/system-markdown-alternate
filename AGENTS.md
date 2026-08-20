@@ -294,6 +294,18 @@ The v1 scope is done and widely exceeded. Implemented:
       plausible way for a region to go missing instead of handling it afterwards.
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
+- **Page-builder veto** (`BuilderDetector`): a post rendered by a builder the
+  plugin has no adapter for is not servable, so the `.md` 404s and the post
+  leaves `/llms.txt`, the alternate links, the shortcodes and the dynamic tag —
+  one predicate, everything else by construction. Divi, WPBakery, Oxygen, Beaver
+  Builder and Breakdance permanently; Bricks and Elementor until their adapter
+  lands. Detection is **per post**, keys on the **render mode** rather than the
+  presence of builder data, reads **meta and never `post_content`**, and holds
+  whether the builder plugin is active or not. Escape hatch:
+  `sysmda_markdown_unsupported_builders`. The panel shows the per-type
+  breakdown (`BuilderCensus`, admin-only, transient-cached). Full rationale and
+  the three rules easy to get backwards: the durable decision in "Product
+  decisions".
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
@@ -510,22 +522,23 @@ The v1 scope is done and widely exceeded. Implemented:
   reconnaissance described inside — the current plan's central query assumption
   is not reliable and must be verified against real plugin behaviour before any
   code is written.
-- **Page builders** (`docs/page-builders-plan.md`): **not started**, scope fixed
-  with the maintainer August 2026. **Bricks is the one builder to support**;
-  Elementor is parked (a free-only staging cannot validate the Pro features that
-  make it hard); Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are
-  **never** to be supported — a post built with one has no Markdown
-  representation at all, enforced as a veto through `PostSupport::is_servable()`
-  so the `.md` 404s and the post leaves `/llms.txt`, the alternate links and the
-  shortcodes by construction. Two rules from that plan are the ones easy to get
-  backwards: **detection is per-post, never per-type** (sites routinely build
-  pages with a builder while articles stay in Gutenberg, so activating Bricks on
-  a site of Gutenberg posts must change nothing), and it keys on the **render
-  mode, not the presence of builder data** — Bricks documents that a post
-  switched to "Render with WordPress" keeps its data stored while the front end
-  serves `post_content`, so keying on the blob would publish a representation no
-  visitor sees. The veto phase is shippable on its own and does not wait on the
-  Bricks reconnaissance.
+- **Page builders** (`docs/page-builders-plan.md`): **Phases 1 and 1b shipped**
+  (the veto and the panel breakdown — see the durable decision in "Product
+  decisions"); Phase 0, the Bricks reconnaissance, is **partly answered** and
+  Phase 2, the Bricks adapter, is **not started**. Scope was fixed with the
+  maintainer August 2026: **Bricks is the one builder to support**; Elementor is
+  parked (a free-only staging cannot validate the Pro features that make it
+  hard); Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are **never** to
+  be supported. Bricks and Elementor stay in `AWAITING_ADAPTER` until their
+  adapter exists, which is the whole phasing mechanism. Two questions still gate
+  the adapter, and neither can be answered by reading source: the exact signature
+  of `\Bricks\Frontend::render_data()` on the installed version, and whether
+  Bricks renders at all with the main query in a 404 state (the `.md` suffix
+  route resolves nothing). Answered already, on the staging clone: the render
+  mode is `_bricks_editor_mode = 'bricks'` (with `_bricks_template_type` and
+  `_bricks_page_content_2` alongside), and a save from the editor **does** move
+  `post_modified` — so the §5 cache-validator work is smaller than the plan
+  feared, and stale-`304` risk on ordinary saves is not a concern.
 - **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
   started** — deferred August 2026, see the status note at the top of the plan.
   The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,
@@ -742,6 +755,82 @@ The v1 scope is done and widely exceeded. Implemented:
   `is_servable()` (with `update_post_term_cache => true` so the formats are primed
   in one query, not one per post) — the index must never advertise a `.md` URL
   that 404s.
+- **A post rendered by an unsupported page builder has NO Markdown
+  representation** (decided August 2026, Phase 1 of `docs/page-builders-plan.md`):
+  `BuilderDetector::is_unsupported()` is the last built-in rule in
+  `is_servable()`, so the `.md` 404s, no `rel="alternate"` link or `Link:`
+  header is advertised, the post leaves `/llms.txt`, and the shortcodes and the
+  dynamic tag render nothing — all by construction, from one predicate.
+  `NEVER_SUPPORTED` is Divi, WPBakery, Oxygen, Beaver Builder and Breakdance;
+  `AWAITING_ADAPTER` is Bricks and Elementor, and that second list is how the
+  work is phased — an adapter shipping moves its builder out of it, with no
+  other edit and no window in which an empty or wrong `.md` is published.
+  Escape hatch: `sysmda_markdown_unsupported_builders` (Stable; empty array =
+  veto off). Rationale: the meta-based builders leave `post_content` empty, so
+  the `.md` was front matter plus a bare `# Title`; Divi and WPBakery fill it
+  with their own layout shortcodes, so the `.md` was layout chrome converted as
+  prose. The second is the worse of the two — an empty document is useless, a
+  wrong one actively misleads the audience this plugin exists for, and nothing
+  about it looks broken from the admin side.
+  Three rules carry the design, and each one is easy to get backwards:
+  - **Per post, never per post type and never per site.** Sites routinely build
+    their pages with a builder while the articles stay in the ordinary editor;
+    mixed types are the normal case. Activating Bricks on a site of 150
+    Gutenberg posts must change nothing at all, and it does not.
+  - **The render mode decides, not the presence of builder data.** Bricks and
+    Elementor both document a per-post switch back to the WordPress editor that
+    leaves the builder tree stored while the front end serves `post_content`.
+    Keying on the blob would deny a Markdown representation to a post that
+    renders perfectly ordinary content — the same class of error as the old
+    `post_password_required()` check, where the question asked was not the
+    question that mattered. Hence exact-value matches on the mode meta, which is
+    also what keeps `_wpb_vc_js_status` from claiming every post that ever had
+    the WPBakery editor opened on it: it stores the string `false`, which is
+    perfectly truthy. Oxygen and Breakdance ship no documented mode flag, so
+    their payload is the closest available proxy — narrowly, and only for them.
+  - **The veto applies whether the builder plugin is active or not**, a
+    deliberate asymmetry with the adapters that will follow. An adapter needs the
+    vendor present (with no renderer there is nothing to render, and
+    `post_content` is then the correct answer); a veto is the opposite, because
+    with Divi deactivated its `[et_pb_*]` shortcodes stay in `post_content`
+    unregistered and would be published as literal text — the worst outcome of
+    all. So detection reads meta and never calls a vendor API.
+  And the detection **never sniffs `post_content`**: an article documenting Divi
+  and quoting `[et_pb_section]` in a code sample would otherwise be made
+  unservable by its own example, which is the defect `CodeRegions` exists to
+  prevent, one level up.
+  **Corollary for every batch caller: prime the meta cache.** `detect()` costs
+  one query per post at most, because the first `get_post_meta()` loads the
+  post's whole meta row set — but *per post*, so a loop over N posts with an
+  unprimed cache is N queries. `LlmsTxtController::servable_posts()` had
+  `update_post_meta_cache => $enriched`, from when the enriched descriptions
+  were the only meta reader, and the veto silently inherited `false` on the
+  basic path: up to 2500 extra queries per content type on a cold index. It now
+  primes unconditionally, for the same reason it already primed the term cache
+  that the post-format check reads — two rules, one shape, one line each. The
+  regression has **no symptom** (the index is byte-identical either way, only
+  the query count moves), so the priming is asserted in the suite. Caught by
+  Codex on PR #97.
+- **The panel's per-type breakdown informs and decides nothing** (decided with
+  the above, Phase 1b): `BuilderCensus` shows what each content type's published
+  posts are actually built with — *12 Bricks, 3 Gutenberg* — with a warning
+  naming any builder that costs the Markdown version. A breakdown rather than
+  one label, because mixed types are the normal case and a single label would be
+  wrong for both halves. Same line as "never auto-detect which taxonomies to
+  emit": it informs, the owner decides. Three constraints, all load-bearing:
+  computed on the settings screen only and never on the front end; cached in a
+  transient whose option name starts with `_transient_`, which is what keeps it
+  out of `AdminSettings::maybe_bump_cache_salt()` (a census must not invalidate
+  every cached body on the site — same rule as the hit-counter buckets, and
+  asserted in the suite rather than assumed); and one query whose `CASE` chain is
+  built from `BuilderDetector::RENDER_MODE_META` in the same order the detector
+  tests it, so the census and the veto cannot disagree. **Revisions are excluded
+  twice over** (`post_status = 'publish'` and the post-type list): verified on
+  staging, a Bricks revision carries `_bricks_page_content_2` but *not*
+  `_bricks_editor_mode`, so a census counting payload rows reported the one
+  Bricks page three times. It describes the built-in veto list and deliberately
+  does not evaluate `sysmda_markdown_unsupported_builders`, which is per post and
+  has no post to be given here.
 - **`/llms.txt` stays silent until a content type is enabled** (decided July
   2026): the option remains **on by default**, but with nothing to index the
   endpoint answered a site name plus a tagline and took the URL over from anything
@@ -1439,7 +1528,9 @@ and backups when finished.
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
         ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment()
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
-        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, sanitize_types: attachment always stripped)
+        ├── BuilderDetector.php     ← per-post page-builder detection (render mode, from meta) + the veto list
+        ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)
+        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + code/paragraph safety overrides)
@@ -1998,6 +2089,18 @@ Test posts:
     link is the card plugin's own choice, and only the real one settles it. A
     decorative anchor elsewhere on the page (a "back to top" link) must be
     unchanged, and a code sample quoting an empty anchor must publish verbatim.
+
+19. **Page builder veto.** A Bricks page (`_bricks_editor_mode = 'bricks'`) →
+    `.md` **404**, no `rel="alternate"` link and no `Link:` header on its HTML,
+    absent from `/llms.txt`, and all three shortcodes plus the dynamic tag
+    render nothing. The same page switched to **"Render with WordPress"** → back
+    to a normal `.md` from `post_content`, even though `_bricks_page_content_2`
+    is still stored: that is the single most important fixture in the set, and
+    the one a presence-based check fails. A Gutenberg post on the same
+    Bricks-themed site is completely unaffected. In the panel, the *Enabled
+    content types* rows read the real breakdown (for example *Pages — 1 Bricks,
+    3 Gutenberg*) with the warning on the Bricks part, and the Bricks page's two
+    **revisions** do not inflate the count.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
