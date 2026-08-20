@@ -32,7 +32,7 @@ This works whether the shortcode sits in the post content, in a template, in a w
 
 ## The dropdown escapes your layout
 
-The menu is moved to the end of the document when it opens and positioned against the viewport, flipping left/right and above/below as needed and staying clear of the screen edges.
+The menu is moved to the end of the document when it opens and positioned against the button: aligned to its left edge, dropping straight below it. Only when the screen edge leaves no room does it align to the right edge instead, flip above the button, or shrink and scroll — and it always stays clear of the screen edges.
 
 This is not decoration. A dropdown rendered inside a narrow article column gets clipped by the theme's `overflow` rules, and on a phone it is the difference between a working menu and one you cannot see. Positioning it against the viewport removes the theme from the equation.
 

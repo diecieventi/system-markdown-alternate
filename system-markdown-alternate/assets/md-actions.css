@@ -89,7 +89,13 @@
 	position: fixed;
 	z-index: 100000;
 	box-sizing: border-box;
-	width: 250px;
+	/*
+	 * Content-sized, so a translated label is not truncated and a short menu is
+	 * not padded out. min() keeps the floor from winning over the viewport cap:
+	 * a plain min-width would beat max-width on a screen narrower than both.
+	 */
+	width: max-content;
+	min-width: min( 250px, calc( 100vw - 16px ) );
 	max-width: calc( 100vw - 16px );
 	max-height: calc( 100vh - 16px );
 	margin: 0;

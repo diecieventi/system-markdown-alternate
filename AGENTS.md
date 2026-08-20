@@ -477,9 +477,20 @@ The v1 scope is done and widely exceeded. Implemented:
   render after `wp_print_footer_scripts` prints only this handle immediately
   through the scripts API, because merely enqueueing it after the consumed pass
   leaves the component permanently hidden. JavaScript moves the
-  dropdown to `document.body`, positions it against the viewport, flips
-  left/right and above/below, and clamps it inside an 8 px edge inset, so theme
-  overflow and narrow columns cannot clip it. The root is hidden until setup, copy uses the
+  dropdown to `document.body`, then anchors it to the **whole split button and
+  not to the caret** (`0.45.1`): its start edge lines up with the group's start
+  edge and it drops straight below, which is the placement the reference
+  implementation at `acceptmarkdown.com` gets from a plain `left: 0` on the
+  wrapper. Anchoring it to the caret instead made the menu hang off to the
+  right of the button on every ordinary desktop placement — the fallbacks were
+  correct and simply never ran there. They now run only when they are the point:
+  end alignment when the group sits too close to the viewport edge, a clamp
+  inside an 8 px inset when neither alignment fits, a flip above when there is no
+  room below, and a `max-height` with scroll when there is room on neither side —
+  that last one so the menu never grows across the button it belongs to. The
+  direction is read per pass, so a right-to-left theme mirrors both alignments.
+  The portal into `document.body` stays, because unlike the reference the
+  shortcode can be placed anywhere in an unknown theme. The root is hidden until setup, copy uses the
   Safari-safe promise-backed `ClipboardItem` path with fallbacks, and a response
   whose type is not `text/markdown` is refused rather than copied as HTML. The
   whole shortcode is in `ShortcodeCleaner::ALWAYS_EXCLUDED`: interface chrome
@@ -1179,7 +1190,9 @@ The v1 scope is done and widely exceeded. Implemented:
   twelve-property styling API. Its assets load only on pages where the
   shortcode actually renders; the minimal white/bordered CSS has namespaced
   classes for later theme work, and the menu escapes layout containers by
-  moving to `document.body` and using viewport-aware placement. That scope and
+  moving to `document.body` and using viewport-aware placement — anchored to the
+  split button as a whole, with the viewport fallbacks reserved for the cases
+  that need them (`0.45.1`). That scope and
   positioning are the answer to the two concrete failures above, not a reversal
   of them. If menu opening/positioning moves toward a CSS-only implementation in
   future, evaluate declarative popovers + CSS anchor positioning; copying to the
@@ -2082,8 +2095,10 @@ Test posts:
     dropdown repeats copy, opens View in a new tab and downloads with the safe
     slug filename. One CSS/JS pair only, and neither appears on a page without
     the shortcode. Verify keyboard/Escape/outside-focus behaviour and place the
-    component near all four viewport edges at 320, 375, 768 px and desktop: the
-    menu flips/clamps without horizontal overflow or clipping by an ancestor.
+    component near all four viewport edges at 320, 375, 768 px and desktop: away
+    from an edge the menu is aligned to the button's start edge and drops
+    directly below it (never hanging off the caret), and near one it flips or
+    clamps without horizontal overflow or clipping by an ancestor.
     Draft/protected/unsupported targets output nothing. The shortcode itself is
     absent from the `.md`, including when the excluded-shortcodes filter
     replaces the defaults.
