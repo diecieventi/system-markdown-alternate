@@ -77,8 +77,67 @@ repository.
 
 ## Latest full pass
 
-- **2026-08-10 — System Markdown Alternate 0.41.1**
-- WordPress 7.0.3, PHP 8.4.20
-- HTTP, conditional request, eligibility, shortcode-code protection, real
-  footer-hook timing, browser interactions and error-log checks: **passed**
-- Transferred update and rollback artifacts: **removed**
+- **2026-08-20 — System Markdown Alternate 0.45.0 (page-builder veto)**
+
+  | Environment | Platform | Role in this run |
+  |---|---|---|
+  | `sma-bricks-instawp-co` — Bricks 2.0 | WordPress 7.1, PHP 8.4.7 | The veto itself: it is the only environment with page-builder content |
+  | `instawp_sma` — GeneratePress 3.6.1 | WordPress 7.1, PHP 8.4.20 | The general matrix, and the "no builder content, nothing changes" property (0 of 31 published posts claimed) |
+
+  Both were needed and neither is redundant: the release environment has no
+  builder content at all, so it cannot exercise the veto, while the Bricks clone
+  lacks Rank Math and GenerateBlocks. The two also happen to sit on different
+  PHP patch releases, which is worth keeping rather than levelling.
+- Veto, both directions, both fixtures holding the **same** Bricks tree and
+  differing only in render mode: **passed**
+- Panel breakdown, revision exclusion, census cache not bumping the salt,
+  shortcodes and discovery links: **passed**
+- No fatals in either log. Installed from the wordpress.org package, so no
+  transferred artifacts existed to remove.
+
+### What the pre-veto state actually looked like
+
+Worth recording, because it was worse than the plan predicted and is the
+clearest argument the feature has. Under `0.44.0` the Bricks page did **not**
+serve an empty document: it served front matter plus six paragraphs of prose
+from `post_content`, while the page itself rendered a single Bricks heading and
+nothing else. That text appeared nowhere in the rendered page except inside
+`og:description`. So the `.md` was neither empty nor obviously chrome — it was
+plausible, well-formed, and describing a page that does not exist. `/llms.txt`
+advertised it, with the same text as its description.
+
+The plan anticipated two failure modes, empty and wrong. This is a third and
+the worst of them: **confidently wrong**, with nothing about it visible from
+the admin side.
+
+### The fixtures, and why they are a pair
+
+Two pages carrying the **identical** `_bricks_page_content_2` value, differing
+only in `_bricks_editor_mode`:
+
+| Page | Mode | `.md` | Discovery links | `/llms.txt` | Shortcodes |
+|---|---|---|---|---|---|
+| Bricks page | `bricks` | **404** | absent | absent | empty |
+| Same tree, switched back | `wordpress` | **200**, built from `post_content` | present | present | full output |
+
+The second row is the one a presence-based check fails, and copying the real
+tree rather than inventing one is what makes it evidence. Keep both when
+refreshing this environment.
+
+Two further properties, both measured rather than assumed:
+
+- **The census counts render modes, not payloads.** With two pages holding the
+  tree and two revisions of one of them also holding it, the panel reported
+  *Pages — 1 Bricks, 4 Gutenberg*: right on both halves at once.
+- **Writing the census does not move the cache salt.** Asserted live, not only
+  in the suite.
+
+### Note for the multilingual work
+
+Not a defect, but it belongs in `docs/llms-txt-multilingual-plan.md` before any
+code is written there. `BuilderCensus` counts with raw SQL, so on the Polylang
+site it reports the **whole corpus**; a `get_posts()`-based count returns only
+the current language's slice (31 published against 20, measured). For an
+advisory breakdown describing what a content type is built with, the corpus is
+arguably the right answer — but the two numbers differ, and whichever the
+multilingual work picks should be a decision rather than an accident.

@@ -1,5 +1,15 @@
 # Plan: translations in `/llms.txt` (dedicated section)
 
+> **Note added August 2026, from the 0.45.0 staging run.** `BuilderCensus`
+> (the settings panel's per-type breakdown) counts with raw SQL, so on the
+> Polylang staging it reports the **whole corpus** while a `get_posts()`-based
+> count returns only the current language's slice — 31 published against 20,
+> measured. Not a defect: for an advisory "what is this content type built
+> with" breakdown, the corpus is arguably the right answer. But the two numbers
+> differ, and this plan is where the choice has to be made deliberately rather
+> than inherited. Whatever it decides for `/llms.txt` should be checked against
+> what the panel already does.
+
 > English-only (repo convention). Independent of everything else. **Do not code
 > before the staging
 > reconnaissance below** — the current plan's central query assumption is not
