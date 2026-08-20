@@ -165,10 +165,13 @@ free-only staging cannot validate the part that actually needs validating.
 
 ### 6.1 The environment
 
-**`https://sma-bricks.instawp.co/`** — a clone of the existing staging, taken in
-August 2026. The original `sma.instawp.co` is left untouched and stays the
-release acceptance environment described in `docs/staging-acceptance.md`;
-converting it would have burned that baseline.
+The connected site **`sma-bricks-instawp-co`** — a clone of the existing
+staging, taken in August 2026. Named by its connected-site alias, not by its
+hostname, for the reason `docs/staging-acceptance.md` already gives: staging
+URLs are transient and belong outside the repository, which is why that file
+names the release environment `instawp_sma` rather than its address. A clone
+because the original stays the release acceptance environment; converting it
+would have burned that baseline.
 
 **Bricks is a theme, not a plugin.** It replaces GeneratePress rather than
 coexisting with it, which is why the clone was necessary at all.
@@ -182,10 +185,20 @@ through `wp_footer`.
 
 **Never alternate the active theme during a test run.** The scenario to exercise
 is Bricks and Gutenberg *coexisting* — which is the whole reason detection is
-per-post — not one replacing the other. Switching back and forth also dirties
-the cache salt and the per-post entries.
+per-post — not one replacing the other.
 
-State verified on the clone at setup:
+And if a theme is ever switched anyway, **purge explicitly: nothing does it for
+you.** There is no `switch_theme` hook anywhere in the plugin; the global salt
+is bumped only for the site-wide inputs `AdminSettings::boot()` lists
+(permalink structure, home URL, timezone, author display name, the two
+front-matter taxonomies) and per-post entries are dropped only on `save_post` /
+`deleted_post`. So a switch leaves both layers intact and a body built under the
+previous theme keeps being served, validator included. The theme is *usually*
+irrelevant to the output, per the paragraph above — but `render_block()` and
+`do_shortcode()` still run through whatever filters a theme registers, which is
+exactly the difference a stale entry would hide.
+
+State verified on that site at setup:
 
 | | |
 |---|---|
@@ -196,7 +209,7 @@ State verified on the clone at setup:
 | Bricks content | **none yet** — no `_bricks*` meta row exists |
 
 Two consequences. The GenerateBlocks dynamic tag and the Rank Math description
-path cannot be exercised on this clone, so they stay on the original staging —
+path cannot be exercised there, so they stay on the original staging —
 note that the dynamic tag keys on the *plugin* class
 (`GenerateBlocks_Register_Dynamic_Tag`), not on the theme, so installing the
 plugin here would restore it if ever needed. And the Bricks corpus still has to
