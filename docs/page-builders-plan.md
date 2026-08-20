@@ -158,11 +158,56 @@ Two consequences to accept up front:
 
 ## 6. Reconnaissance (Phase 0, Bricks only)
 
-Staging with Bricks is available. Elementor staging would be **free-only**,
-which is a further reason to park it: Theme Builder, the Template widget, global
-widgets and loop grids — the out-of-post dependencies that make an Elementor
-adapter hard — are all Pro, so a free-only staging cannot validate the part that
-actually needs validating.
+Elementor staging would be **free-only**, which is a further reason to park it:
+Theme Builder, the Template widget, global widgets and loop grids — the
+out-of-post dependencies that make an Elementor adapter hard — are all Pro, so a
+free-only staging cannot validate the part that actually needs validating.
+
+### 6.1 The environment
+
+**`https://sma-bricks.instawp.co/`** — a clone of the existing staging, taken in
+August 2026. The original `sma.instawp.co` is left untouched and stays the
+release acceptance environment described in `docs/staging-acceptance.md`;
+converting it would have burned that baseline.
+
+**Bricks is a theme, not a plugin.** It replaces GeneratePress rather than
+coexisting with it, which is why the clone was necessary at all.
+
+**The theme barely matters to the `.md`.** The pipeline renders cleaned blocks
+directly and never goes through `the_content` or the theme's template, so
+Gutenberg posts convert identically under Bricks. Three surfaces do depend on
+the theme and must be re-verified here: the `<link rel="alternate">` printed on
+`wp_head`, the `Link:` response header, and `[sysmda_md_actions]` rendering
+through `wp_footer`.
+
+**Never alternate the active theme during a test run.** The scenario to exercise
+is Bricks and Gutenberg *coexisting* — which is the whole reason detection is
+per-post — not one replacing the other. Switching back and forth also dirties
+the cache salt and the per-post entries.
+
+State verified on the clone at setup:
+
+| | |
+|---|---|
+| Active theme | Bricks 2.0 (GeneratePress and its child theme present but inactive) |
+| Plugin | System Markdown Alternate 0.44.0, active |
+| Also active | ACF 6.8.8 |
+| **Not installed** | **GenerateBlocks, Rank Math** |
+| Bricks content | **none yet** — no `_bricks*` meta row exists |
+
+Two consequences. The GenerateBlocks dynamic tag and the Rank Math description
+path cannot be exercised on this clone, so they stay on the original staging —
+note that the dynamic tag keys on the *plugin* class
+(`GenerateBlocks_Register_Dynamic_Tag`), not on the theme, so installing the
+plugin here would restore it if ever needed. And the Bricks corpus still has to
+be built: Bricks pages, **one Bricks page switched to "Render with WordPress"**
+(edge case 3, the most important single fixture), alongside the Gutenberg and
+classic posts the clone already carries.
+
+Divi and WPBakery are deliberately **not** installed. Phase 1 only needs their
+meta keys, which the pure suite can stub.
+
+### 6.2 The questions
 
 Questions to answer before any adapter code. Each one changes the design:
 
