@@ -772,6 +772,14 @@ The v1 scope is done and widely exceeded. Implemented:
   prose. The second is the worse of the two — an empty document is useless, a
   wrong one actively misleads the audience this plugin exists for, and nothing
   about it looks broken from the admin side.
+  **Measured on staging at 0.45.0, there is a third and worse case than either**
+  (`docs/staging-acceptance.md`): a Bricks page whose `post_content` still held
+  the prose from before it was rebuilt served a `.md` of six well-formed
+  paragraphs, while the page itself rendered a single Bricks heading — the text
+  appearing nowhere in the rendered page except `og:description`, and `/llms.txt`
+  advertising it with the same text. Not empty, not chrome: **confidently wrong**.
+  A builder does not have to leave `post_content` empty for the old behaviour to
+  be harmful; it only has to leave it stale.
   Three rules carry the design, and each one is easy to get backwards:
   - **Per post, never per post type and never per site.** Sites routinely build
     their pages with a builder while the articles stay in the ordinary editor;
