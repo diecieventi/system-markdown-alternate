@@ -272,7 +272,7 @@ class LlmsTxtController {
 			 */
 			$main_limit = $enriched ? (int) apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type ) : $limit;
 
-			$posts = $this->servable_posts( $post_type, $limit, $enriched );
+			$posts = $this->servable_posts( $post_type, $limit );
 
 			if ( empty( $posts ) ) {
 				continue;
@@ -345,7 +345,7 @@ class LlmsTxtController {
 	 *
 	 * @return \WP_Post[]
 	 */
-	private function servable_posts( string $post_type, int $limit, bool $enriched ): array {
+	private function servable_posts( string $post_type, int $limit ): array {
 		if ( $limit < 1 ) {
 			return array();
 		}
@@ -363,10 +363,20 @@ class LlmsTxtController {
 					'orderby'                => 'date',
 					'order'                  => 'DESC',
 					'no_found_rows'          => true,
-					'update_post_meta_cache' => $enriched, // Enriched descriptions read post meta.
-					// Primed in one query for the whole batch: the servability
-					// check reads each post's format, which would otherwise be a
-					// term lookup per post.
+					// Both caches are primed in one query for the whole batch,
+					// for the same reason: the servability check reads each
+					// post's format (a term lookup) and its page-builder render
+					// mode (a meta lookup), and an unprimed cache turns each of
+					// those into a query PER POST — up to `posts_per_page` ×
+					// MAX_QUERY_PAGES of them, on a route that runs whenever the
+					// index cache is cold.
+					//
+					// Meta priming used to be tied to $enriched, back when the
+					// descriptions were the only meta reader. It costs nothing
+					// extra in memory to prime it always: an unprimed
+					// get_post_meta() still loads every meta row for that post,
+					// just one post at a time. Only the query count differs.
+					'update_post_meta_cache' => true,
 					'update_post_term_cache' => true,
 				)
 			);

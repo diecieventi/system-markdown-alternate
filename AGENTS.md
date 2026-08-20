@@ -799,6 +799,18 @@ The v1 scope is done and widely exceeded. Implemented:
   and quoting `[et_pb_section]` in a code sample would otherwise be made
   unservable by its own example, which is the defect `CodeRegions` exists to
   prevent, one level up.
+  **Corollary for every batch caller: prime the meta cache.** `detect()` costs
+  one query per post at most, because the first `get_post_meta()` loads the
+  post's whole meta row set — but *per post*, so a loop over N posts with an
+  unprimed cache is N queries. `LlmsTxtController::servable_posts()` had
+  `update_post_meta_cache => $enriched`, from when the enriched descriptions
+  were the only meta reader, and the veto silently inherited `false` on the
+  basic path: up to 2500 extra queries per content type on a cold index. It now
+  primes unconditionally, for the same reason it already primed the term cache
+  that the post-format check reads — two rules, one shape, one line each. The
+  regression has **no symptom** (the index is byte-identical either way, only
+  the query count moves), so the priming is asserted in the suite. Caught by
+  Codex on PR #97.
 - **The panel's per-type breakdown informs and decides nothing** (decided with
   the above, Phase 1b): `BuilderCensus` shows what each content type's published
   posts are actually built with — *12 Bricks, 3 Gutenberg* — with a warning

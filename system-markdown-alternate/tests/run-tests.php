@@ -50,6 +50,7 @@ $GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is
 $GLOBALS['sysmda_test_post_types']  = array(); // post type => registered object (overrides the public default)
 $GLOBALS['sysmda_test_query_posts'] = array(); // post type => WP_Post list served by the get_posts() stub
 $GLOBALS['sysmda_test_query_pages'] = array(); // pages the get_posts() stub was asked for
+$GLOBALS['sysmda_test_query_args']  = array(); // full args every get_posts() call was made with
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -348,6 +349,7 @@ function get_posts( $args ) {
 	$paged    = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
 
 	$GLOBALS['sysmda_test_query_pages'][] = $paged;
+	$GLOBALS['sysmda_test_query_args'][]  = $args;
 
 	return array_slice( $all, ( $paged - 1 ) * $per_page, $per_page );
 }
@@ -2000,7 +2002,8 @@ $sysmda_sp_fixture = static function ( array $formats ) {
 $sysmda_sp_run = static function ( array $formats, $limit ) use ( $sysmda_sp_method, $sysmda_sp_ctrl, $sysmda_sp_fixture ) {
 	$GLOBALS['sysmda_test_query_posts']['post'] = $sysmda_sp_fixture( $formats );
 	$GLOBALS['sysmda_test_query_pages']         = array();
-	return $sysmda_sp_method->invoke( $sysmda_sp_ctrl, 'post', $limit, false );
+	$GLOBALS['sysmda_test_query_args']          = array();
+	return $sysmda_sp_method->invoke( $sysmda_sp_ctrl, 'post', $limit );
 };
 
 $GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
@@ -2042,11 +2045,35 @@ check(
 
 check( 'llms: a zero limit queries nothing', array(), $sysmda_sp_run( array( '', '' ), 0 ) );
 
+// Both object caches are primed for the whole batch, and BOTH matter: the
+// servability check reads each post's format (a term lookup) and its
+// page-builder render mode (a meta lookup). Unprimed, each becomes a query per
+// post — up to posts_per_page × MAX_QUERY_PAGES of them, on the route that runs
+// whenever the index cache is cold. Meta priming used to be tied to enriched
+// mode, back when the descriptions were the only meta reader, and the builder
+// veto silently inherited the basic path's `false`.
+//
+// Asserted because the regression has no symptom: the index comes out
+// byte-identical either way, and only the query count moves. Caught by Codex on
+// PR #97, not by any output assertion.
+$sysmda_sp_run( array( '', '', '' ), 2 );
+check(
+	'llms: the batch primes the meta cache (the builder check reads meta)',
+	true,
+	! empty( $GLOBALS['sysmda_test_query_args'] ) && true === $GLOBALS['sysmda_test_query_args'][0]['update_post_meta_cache']
+);
+check(
+	'llms: and the term cache (the post-format check reads terms)',
+	true,
+	! empty( $GLOBALS['sysmda_test_query_args'] ) && true === $GLOBALS['sysmda_test_query_args'][0]['update_post_term_cache']
+);
+
 unset(
 	$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'],
 	$GLOBALS['sysmda_test_query_posts']['post']
 );
 $GLOBALS['sysmda_test_query_pages'] = array();
+$GLOBALS['sysmda_test_query_args']  = array();
 
 // ─── LlmsTxtController: the cached index follows the site identity ────
 //

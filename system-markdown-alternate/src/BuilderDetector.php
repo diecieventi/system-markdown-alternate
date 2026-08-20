@@ -130,8 +130,12 @@ class BuilderDetector {
 	 * `CodeRegions` exists to prevent, one level up.
 	 *
 	 * The first `get_post_meta()` call primes WordPress's meta cache for the
-	 * post, so the whole loop costs one query at most, and none at all on the
-	 * `.md` route where the post's meta is already primed.
+	 * whole post, so the loop below costs at most one query however many keys it
+	 * tests. That is per post, not per batch, and the distinction bites: a
+	 * caller that walks many posts must prime the meta cache for the batch, or
+	 * this becomes one query per post. `LlmsTxtController::servable_posts()`
+	 * does exactly that, for the same reason it already primed the term cache
+	 * that the post-format check reads.
 	 *
 	 * @return string A key of self::LABELS, or '' when the post is ordinary.
 	 */
