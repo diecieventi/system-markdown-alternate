@@ -33,6 +33,13 @@ response says about caching. Renaming one, removing it, dropping a parameter or
 changing its meaning is a breaking change, and goes through deprecation
 (`apply_filters_deprecated()` where practical), the changelog and this page.
 
+The other half of that promise is what it does **not** cover, because a rule that
+only says what is forbidden is read as forbidding everything: appending an
+optional parameter after the existing ones, adding a new hook, and rewriting the
+implementation behind a hook while its input and output stay the same are all
+compatible changes, and ship without ceremony. A callback registered with the
+arity it was written for keeps working across all three.
+
 Most of these are stable for free rather than by sacrifice: fourteen of them are
 the mechanism by which a saved setting reaches the code — `AdminSettings` feeds
 the stored option in as the filter's own value — so they last exactly as long as
