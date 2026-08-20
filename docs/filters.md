@@ -77,6 +77,7 @@ compatibility promise of any kind.
 | `sysmda_markdown_supported_post_types` | Stable |
 | `sysmda_markdown_excluded_post_formats` | Stable |
 | `sysmda_post_is_servable` | Stable |
+| `sysmda_markdown_unsupported_builders` | Stable |
 | `sysmda_markdown_robots_header` | Stable |
 | `sysmda_markdown_strict_406` | Stable |
 | `sysmda_markdown_canonical_url` | Stable |
@@ -131,6 +132,43 @@ Non-standard post formats that never expose a `.md`. Defaults to all nine
 empty array to serve every format. The rule lives in `is_servable()`, so it
 applies to the `.md` route, negotiation, `rel="alternate"`, `/llms.txt`, the
 shortcodes and the dynamic tag at once.
+
+```php
+apply_filters( 'sysmda_markdown_unsupported_builders', $builders, $post );
+```
+Page builders whose posts have **no Markdown representation**. Defaults to every
+builder the plugin can detect — `bricks`, `elementor`, `divi`, `wpbakery`,
+`oxygen`, `beaver-builder`, `breakdance` — because none of them has an adapter
+yet. A post rendered by one of these is denied everywhere `is_servable()`
+reaches: the `.md` URL returns 404, no `alternate` link or `Link:` header is
+advertised, the post leaves `/llms.txt`, and the shortcodes and the dynamic tag
+render nothing.
+
+Detection is **per post** and reads the builder's own render-mode meta, so
+enabling a builder on a site of ordinary posts changes nothing, and a post
+switched back to the WordPress editor keeps its `.md` even though the builder
+data is still stored. It never inspects `post_content`: an article quoting
+`[et_pb_section]` in a code sample is not a Divi page.
+
+Remove a key to serve that builder's posts again — which means accepting
+whatever the ordinary pipeline makes of them: an empty document for the
+meta-based builders, and layout shortcodes converted as prose for Divi and
+WPBakery. Return an empty array to switch the veto off entirely. Adding a key
+the plugin cannot detect has no effect; use `sysmda_post_is_servable` to deny
+posts built with something else.
+
+Two notes. The list is **not** a supported-builders roster that shrinks as
+adapters ship on your site — it shrinks in the plugin, and `bricks` leaving it
+in a future version is a feature addition, not a breaking change. And the
+settings panel's per-type breakdown describes the **built-in** list: it is
+rendered without a post, so it cannot evaluate this filter.
+
+```php
+// Serve Bricks pages anyway, empty body and all.
+add_filter( 'sysmda_markdown_unsupported_builders', function ( array $builders ) {
+    return array_diff( $builders, array( 'bricks' ) );
+} );
+```
 
 ```php
 apply_filters( 'sysmda_post_is_servable', true, $post );

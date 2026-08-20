@@ -618,6 +618,8 @@ if ( $GLOBALS['sysmda_has_vendor'] ) {
 	require __DIR__ . '/../src/CodeElementConverter.php';
 	require __DIR__ . '/../src/SafeParagraphConverter.php';
 }
+require __DIR__ . '/../src/BuilderDetector.php';
+require __DIR__ . '/../src/BuilderCensus.php';
 require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
@@ -631,6 +633,8 @@ require __DIR__ . '/../src/MarkdownActions.php';
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\BuilderCensus;
+use Diecieventi\SystemMarkdownAlternate\BuilderDetector;
 use Diecieventi\SystemMarkdownAlternate\CodeElementConverter;
 use Diecieventi\SystemMarkdownAlternate\CodeFence;
 use Diecieventi\SystemMarkdownAlternate\CodeRegions;
@@ -2454,6 +2458,17 @@ check( 'salt: a profile update without usable data does not bump', '0', get_opti
 $sysmda_admin->maybe_bump_cache_salt( 'blogname' );
 $sysmda_admin->maybe_bump_cache_salt( 'sysmda_cache_salt' );
 $sysmda_admin->maybe_bump_cache_salt( HitCounter::OPTION );
+
+// The builder census is rewritten on every settings-page load once its short
+// TTL has expired. With a persistent object cache it never reaches wp_options
+// at all; on the transient fallback it does — and it must still not invalidate
+// a single cached Markdown body, exactly like the hit-counter buckets. What
+// keeps it out is the `_transient_` prefix the option name carries, which is
+// why this is asserted rather than assumed: storing the census in a plain
+// option would flush the whole site every few minutes, silently.
+$sysmda_census_option = '_transient_' . BuilderCensus::CACHE_KEY . '_0a1b2c3d';
+$sysmda_admin->maybe_bump_cache_salt( $sysmda_census_option );
+$sysmda_admin->maybe_bump_cache_salt( '_transient_timeout_' . BuilderCensus::CACHE_KEY . '_0a1b2c3d' );
 $sysmda_admin->flush_cache_salt();
 check( 'salt: unrelated and excluded options do not bump', '0', get_option( 'sysmda_cache_salt' ) );
 
@@ -2968,6 +2983,274 @@ check( 'servable: the veto filter cannot publish an unsupported type', false, Po
 check( 'servable: the veto filter cannot publish an excluded format', false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => 'aside' ) ) ) );
 check( 'servable: an allowed post is unaffected', true, PostSupport::is_servable( $sysmda_mk_post() ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] );
+
+// ─── BuilderDetector: the page-builder veto ───────────────────────────────────
+
+/*
+ * A post rendered by a builder with no adapter has no Markdown representation,
+ * so it is denied in is_servable() and disappears from every consumer at once.
+ * Three properties carry the whole design, and each is asserted here against
+ * the input that would break it:
+ *
+ *   - detection is PER POST (nothing here is keyed on the post type);
+ *   - it reads the RENDER MODE, not the presence of builder data;
+ *   - it reads META, never post_content.
+ */
+
+$sysmda_builder_post = static function ( $meta = array(), $content = '' ) use ( $sysmda_mk_post ) {
+	$GLOBALS['sysmda_test_meta'][ 901 ] = $meta;
+
+	return $sysmda_mk_post(
+		array(
+			'ID'           => 901,
+			'post_content' => $content,
+		)
+	);
+};
+
+check( 'builder: an ordinary post is claimed by nobody', '', BuilderDetector::detect( $sysmda_builder_post() ) );
+check( 'builder: an ordinary post stays servable', true, PostSupport::is_servable( $sysmda_builder_post() ) );
+
+// Every builder, through the meta that declares it renders the front end.
+$sysmda_builder_modes = array(
+	'bricks'         => array( '_bricks_editor_mode' => 'bricks' ),
+	'elementor'      => array( '_elementor_edit_mode' => 'builder' ),
+	'divi'           => array( '_et_pb_use_builder' => 'on' ),
+	'wpbakery'       => array( '_wpb_vc_js_status' => 'true' ),
+	'beaver-builder' => array( '_fl_builder_enabled' => '1' ),
+	'oxygen'         => array( 'ct_builder_shortcodes' => '[ct_section][/ct_section]' ),
+	'breakdance'     => array( '_breakdance_data' => '{"root":{}}' ),
+);
+
+foreach ( $sysmda_builder_modes as $sysmda_builder => $sysmda_meta ) {
+	check( "builder: {$sysmda_builder} detected", $sysmda_builder, BuilderDetector::detect( $sysmda_builder_post( $sysmda_meta ) ) );
+	check( "builder: {$sysmda_builder} is not servable", false, PostSupport::is_servable( $sysmda_builder_post( $sysmda_meta ) ) );
+}
+
+// Rule 2, the one that would silently deny ordinary posts if it were wrong:
+// data present + mode switched back to WordPress = the visitor sees
+// post_content, so the ordinary pipeline is the CORRECT answer. Bricks and
+// Elementor both document that switch, and both leave the tree stored.
+check(
+	'builder: Bricks data with the mode set back to WordPress is not claimed',
+	'',
+	BuilderDetector::detect(
+		$sysmda_builder_post(
+			array(
+				'_bricks_editor_mode'     => 'wordpress',
+				'_bricks_template_type'   => 'content',
+				'_bricks_page_content_2'  => 'a:1:{i:0;a:2:{s:2:"id";s:6:"abc123";s:4:"name";s:4:"text";}}',
+			)
+		)
+	)
+);
+check(
+	'builder: Elementor data with no edit mode is not claimed',
+	'',
+	BuilderDetector::detect( $sysmda_builder_post( array( '_elementor_data' => '[{"elType":"section"}]' ) ) )
+);
+check(
+	'builder: a post that kept its Bricks data still serves Markdown',
+	true,
+	PostSupport::is_servable(
+		$sysmda_builder_post(
+			array(
+				'_bricks_editor_mode'    => 'wordpress',
+				'_bricks_page_content_2' => 'a:1:{i:0;a:0:{}}',
+			)
+		)
+	)
+);
+
+// The exact-match traps. `_wpb_vc_js_status` stores the STRING "false", which
+// is perfectly truthy; `_et_pb_use_builder` stores "off"; Beaver Builder stores
+// an empty value when the builder is disabled for the post. A presence test, or
+// a loose truthiness test, claims all three and 404s a normal page.
+check( 'builder: WPBakery "false" is not a claim', '', BuilderDetector::detect( $sysmda_builder_post( array( '_wpb_vc_js_status' => 'false' ) ) ) );
+check( 'builder: Divi "off" is not a claim', '', BuilderDetector::detect( $sysmda_builder_post( array( '_et_pb_use_builder' => 'off' ) ) ) );
+check( 'builder: Beaver Builder disabled is not a claim', '', BuilderDetector::detect( $sysmda_builder_post( array( '_fl_builder_enabled' => '' ) ) ) );
+check( 'builder: Beaver Builder "0" is not a claim', '', BuilderDetector::detect( $sysmda_builder_post( array( '_fl_builder_enabled' => '0' ) ) ) );
+check( 'builder: an empty Oxygen payload is not a claim', '', BuilderDetector::detect( $sysmda_builder_post( array( 'ct_builder_shortcodes' => '' ) ) ) );
+
+// Rule 3: detection reads meta, never post_content. An article documenting Divi
+// or WPBakery quotes their shortcodes in a code sample; sniffing the content
+// would make that article unservable through its own example — the same defect
+// CodeRegions exists to prevent, one level up.
+check(
+	'builder: an article quoting builder shortcodes is not claimed',
+	'',
+	BuilderDetector::detect(
+		$sysmda_builder_post(
+			array(),
+			'<pre><code>[et_pb_section][et_pb_row][/et_pb_row][/et_pb_section]' . "\n" . '[vc_row][vc_column][/vc_column][/vc_row]</code></pre>'
+		)
+	)
+);
+check(
+	'builder: that article is still servable',
+	true,
+	PostSupport::is_servable( $sysmda_builder_post( array(), '<p>Divi uses [et_pb_section] wrappers.</p>' ) )
+);
+
+// A post migrated between builders can hold two payloads. Which one is reported
+// must not depend on how PHP happens to walk an array: the constant's order is
+// the tested order.
+check(
+	'builder: two payloads resolve in the declared order',
+	'bricks',
+	BuilderDetector::detect(
+		$sysmda_builder_post(
+			array(
+				'_et_pb_use_builder'  => 'on',
+				'_bricks_editor_mode' => 'bricks',
+			)
+		)
+	)
+);
+
+// The escape hatch. Dropping a key serves that builder's posts again (with
+// whatever the ordinary pipeline makes of them, which is the caller's choice);
+// an empty list switches the veto off entirely.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] = array( 'divi', 'wpbakery', 'oxygen', 'beaver-builder', 'breakdance', 'elementor' );
+check(
+	'builder: the filter can opt one builder back in',
+	true,
+	PostSupport::is_servable( $sysmda_builder_post( array( '_bricks_editor_mode' => 'bricks' ) ) )
+);
+check(
+	'builder: the others stay vetoed',
+	false,
+	PostSupport::is_servable( $sysmda_builder_post( array( '_et_pb_use_builder' => 'on' ) ) )
+);
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] = array();
+check(
+	'builder: an empty list switches the veto off',
+	true,
+	PostSupport::is_servable( $sysmda_builder_post( array( '_et_pb_use_builder' => 'on' ) ) )
+);
+
+// Naming a builder the plugin cannot detect changes nothing — detect() only
+// ever returns a key it knows. sysmda_post_is_servable is the general veto.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] = array( 'some-other-builder' );
+check(
+	'builder: an unknown key has no effect',
+	true,
+	PostSupport::is_servable( $sysmda_builder_post( array( '_et_pb_use_builder' => 'on' ) ) )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] );
+
+// The two lists together must cover every builder the detector can name, or a
+// builder would be detected and then served anyway — the silent half-failure.
+check(
+	'builder: every detectable builder is vetoed by default',
+	array(),
+	array_diff(
+		array_keys( BuilderDetector::RENDER_MODE_META ),
+		array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER )
+	)
+);
+check(
+	'builder: every detectable builder has a label',
+	array(),
+	array_diff( array_keys( BuilderDetector::RENDER_MODE_META ), array_keys( BuilderDetector::LABELS ) )
+);
+check( 'builder: label lookup', 'WPBakery Page Builder', BuilderDetector::label( 'wpbakery' ) );
+check( 'builder: unknown label falls back to the key', 'mystery', BuilderDetector::label( 'mystery' ) );
+
+unset( $GLOBALS['sysmda_test_meta'][901] );
+
+// ─── BuilderCensus: the panel breakdown ───────────────────────────────────────
+
+/*
+ * Advisory only: it never filters, enables or disables anything. tally() is the
+ * half that can be tested without a database — the SQL that feeds it classifies
+ * each published post with a CASE chain built from RENDER_MODE_META, in the same
+ * order the detector tests it, so the census and the veto cannot disagree.
+ */
+
+$sysmda_census_rows = array(
+	array(
+		'post_type' => 'page',
+		'kind'      => 'gutenberg',
+		'n'         => '3',
+	),
+	array(
+		'post_type' => 'page',
+		'kind'      => 'bricks',
+		'n'         => '12',
+	),
+	array(
+		'post_type' => 'post',
+		'kind'      => 'classic',
+		'n'         => '2',
+	),
+	array(
+		'post_type' => 'post',
+		'kind'      => 'gutenberg',
+		'n'         => '148',
+	),
+);
+
+$sysmda_census = BuilderCensus::tally( $sysmda_census_rows, array( 'post', 'page', 'case_study' ) );
+
+// Builder counts come first, so the part carrying a warning is the part the eye
+// reaches first — and the order is the detector's, not the query's.
+check(
+	'census: builders are listed before ordinary content',
+	array( 'bricks' => 12, 'gutenberg' => 3 ),
+	$sysmda_census['page']
+);
+check(
+	'census: an all-Gutenberg type reports no builder',
+	array( 'gutenberg' => 148, 'classic' => 2 ),
+	$sysmda_census['post']
+);
+
+// A type with no published post keeps an empty entry, so the panel says nothing
+// beside it rather than implying the census failed.
+check( 'census: a type with no posts is present and empty', array(), $sysmda_census['case_study'] );
+
+// Rows for a type nobody asked about are dropped rather than added to the map:
+// the caller decides which types it is describing.
+check(
+	'census: an unrequested type is ignored',
+	array( 'post' => array() ),
+	BuilderCensus::tally(
+		array(
+			array(
+				'post_type' => 'product',
+				'kind'      => 'divi',
+				'n'         => '4',
+			),
+		),
+		array( 'post' )
+	)
+);
+
+// Counts arrive from the database as strings, and a malformed or empty row must
+// not create a phantom kind.
+check(
+	'census: counts are integers and empty rows are skipped',
+	array( 'post' => array( 'divi' => 4 ) ),
+	BuilderCensus::tally(
+		array(
+			array(
+				'post_type' => 'post',
+				'kind'      => 'divi',
+				'n'         => '4',
+			),
+			array(
+				'post_type' => 'post',
+				'kind'      => '',
+				'n'         => '9',
+			),
+			array( 'post_type' => 'post' ),
+			array(),
+		),
+		array( 'post' )
+	)
+);
 
 // ─── Shortcodes::render_download ──────────────────────────────────────────────
 
@@ -4384,6 +4667,7 @@ $sysmda_stable_hooks = array(
 	'sysmda_markdown_supported_post_types'  => 1,
 	'sysmda_markdown_excluded_post_formats' => 2,
 	'sysmda_post_is_servable'               => 2,
+	'sysmda_markdown_unsupported_builders'  => 2,
 	'sysmda_markdown_robots_header'         => 2,
 	'sysmda_markdown_strict_406'            => 1,
 	'sysmda_markdown_canonical_url'         => 2,

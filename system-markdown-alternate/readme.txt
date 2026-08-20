@@ -33,7 +33,8 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
 * **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
-* **Admin panel** to choose which post types are exposed and to tune cache, exclusions and headers — no post type is exposed until you pick one.
+* **Page builders are handled honestly**: a post rendered by Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance has no Markdown representation — its content is not in `post_content`, or is there as the builder's own layout shortcodes — so it returns 404 instead of an empty or misleading document, and it stays out of `/llms.txt`, the alternate links and the shortcodes. Detection is per post, never per post type: a site that builds its pages with a builder while its articles stay in the ordinary editor keeps every one of those articles.
+* **Admin panel** to choose which post types are exposed and to tune cache, exclusions and headers — no post type is exposed until you pick one. Each type shows what its published posts are actually built with (for example *12 Bricks, 3 Gutenberg*), so a page builder that costs you the Markdown version is visible before it surprises you.
 * **Shortcodes** `[sysmda_md_url]` (the Markdown URL), `[sysmda_md_download]` (a bare download link), and `[sysmda_md_actions]` (an opt-in Copy as Markdown split button with copy, new-tab view and download actions).
 * **Optional integrations**, shown only when the related plugin is active:
   * **Advanced Custom Fields**: add a subtitle and a TL;DR (from ACF fields) as a preamble between the H1 and the body.
@@ -62,7 +63,10 @@ Anything the endpoint would not be able to serve honestly:
 * content types not enabled in the settings page;
 * drafts, pending and private content, and password-protected posts;
 * media attachments (always excluded);
-* posts with a **non-standard post format** — aside, status, quote, link, gallery, image, video, audio, chat. These are short snippets, usually untitled, with no editorial body worth serving as a document. Use the `sysmda_markdown_excluded_post_formats` filter to change that.
+* posts with a **non-standard post format** — aside, status, quote, link, gallery, image, video, audio, chat. These are short snippets, usually untitled, with no editorial body worth serving as a document. Use the `sysmda_markdown_excluded_post_formats` filter to change that;
+* posts **rendered by a page builder** — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance. Their content is stored outside `post_content`, or stored in it as the builder's own layout shortcodes, so the Markdown would come out either empty or full of layout wrappers converted as prose. A 404 is the honest answer; use the `sysmda_markdown_unsupported_builders` filter if you would rather have the empty document.
+
+That last rule is decided **per post**, from the builder's own render mode. Activating a builder does not affect posts you did not build with it, and a post you switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored. Nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page.
 
 Markdown is also never served for URL *variants* of a post — its feed, its oEmbed view, its trackback endpoint, paged comments and the sub-pages of a post split with `<!--nextpage-->` — even with `Accept: text/markdown`. Only the canonical permalink and its `.md` URL return Markdown.
 

@@ -1101,28 +1101,96 @@ class AdminSettings {
 		$all_types = get_post_types( array( 'public' => true ), 'objects' );
 		unset( $all_types['attachment'] ); // Media is always excluded.
 
+		$orphans = array_values( array_diff( $saved, array_keys( $all_types ) ) );
+
+		// What each type is actually built with. Advisory only — it never
+		// filters anything — but it is what makes the page-builder veto visible
+		// before it surprises anybody: a type showing "8 Divi" is a type whose
+		// posts have no Markdown version at all. Computed here, on the settings
+		// screen, and never on the front end.
+		$census = BuilderCensus::breakdown( array_merge( array_keys( $all_types ), $orphans ) );
+
 		foreach ( $all_types as $pt ) {
 			printf(
-				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%s"%s /> %s <code>(%s)</code></label>',
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%1$s"%2$s /> %3$s <code>(%4$s)</code>%5$s</label>',
 				esc_attr( $pt->name ),
 				checked( in_array( $pt->name, $saved, true ), true, false ),
 				esc_html( $pt->labels->singular_name ),
-				esc_html( $pt->name )
+				esc_html( $pt->name ),
+				wp_kses_post( self::breakdown_html( isset( $census[ $pt->name ] ) ? $census[ $pt->name ] : array() ) )
 			);
 		}
 
 		// Types saved earlier that are not registered right now (plugin
 		// deactivated). Rendered checked so saving the page cannot silently
 		// discard the choice: the field would otherwise be absent from the POST.
-		foreach ( array_diff( $saved, array_keys( $all_types ) ) as $type ) {
+		foreach ( $orphans as $type ) {
 			printf(
-				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%1$s" checked="checked" /> <code>%1$s</code> <span class="description">%2$s</span></label>',
+				'<label style="display:block;margin-bottom:4px"><input type="checkbox" name="sysmda_supported_post_types[]" value="%1$s" checked="checked" /> <code>%1$s</code> <span class="description">%2$s</span>%3$s</label>',
 				esc_attr( $type ),
-				esc_html__( '— not registered right now', 'system-markdown-alternate' )
+				esc_html__( '— not registered right now', 'system-markdown-alternate' ),
+				wp_kses_post( self::breakdown_html( isset( $census[ $type ] ) ? $census[ $type ] : array() ) )
 			);
 		}
 
 		echo '<p class="description">' . wp_kses_post( __( 'Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive.', 'system-markdown-alternate' ) ) . '</p>';
+	}
+
+	/**
+	 * The "— 12 Bricks, 3 Gutenberg" note beside a content type, plus a warning
+	 * naming any page builder whose posts are not served.
+	 *
+	 * A breakdown rather than one label, because mixed types are the normal
+	 * case: sites routinely build their pages with a builder while the articles
+	 * stay in the ordinary editor, and a single label would be wrong for both
+	 * halves.
+	 *
+	 * It describes the **built-in** veto list and deliberately does not consult
+	 * `sysmda_markdown_unsupported_builders`: that filter is evaluated per post
+	 * and there is no post here. A site that has opted a builder back in through
+	 * it knows it did; the panel would have to invent a post to ask.
+	 *
+	 * @param array<string,int> $counts kind => number of published posts.
+	 */
+	private static function breakdown_html( array $counts ): string {
+		if ( empty( $counts ) ) {
+			return '';
+		}
+
+		$vetoed  = array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER );
+		$parts   = array();
+		$flagged = array();
+
+		foreach ( $counts as $kind => $n ) {
+			if ( 'gutenberg' === $kind ) {
+				$label = 'Gutenberg';
+			} elseif ( 'classic' === $kind ) {
+				$label = __( 'classic', 'system-markdown-alternate' );
+			} else {
+				$label = BuilderDetector::label( $kind );
+
+				if ( in_array( $kind, $vetoed, true ) ) {
+					$flagged[] = $label;
+				}
+			}
+
+			/* translators: 1: number of posts, 2: what they are built with (a page builder name, "Gutenberg" or "classic"). */
+			$parts[] = sprintf( _x( '%1$d %2$s', 'content breakdown entry', 'system-markdown-alternate' ), (int) $n, $label );
+		}
+
+		$html = ' <span class="description">' . esc_html( '— ' . implode( ', ', $parts ) ) . '</span>';
+
+		if ( ! empty( $flagged ) ) {
+			$html .= ' <span class="description sysmda-builder-warning"><strong>' . esc_html(
+				sprintf(
+					/* translators: %s: comma-separated page builder names. */
+					__( '⚠ %s content has no Markdown version and is never served.', 'system-markdown-alternate' ),
+					implode( ', ', array_unique( $flagged ) )
+				)
+			) . '</strong></span>';
+		}
+
+		return $html;
 	}
 
 	public function field_cache_ttl(): void {

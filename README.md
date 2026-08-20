@@ -91,6 +91,16 @@ Two consequences worth knowing:
 
 - No post type is exposed until you enable it, and no taxonomy reaches the
   front matter until you tick it — nothing is ever inferred.
+- **Posts rendered by a page builder have no Markdown representation** and
+  return 404 rather than an empty or misleading document: Bricks, Elementor,
+  Divi, WPBakery, Oxygen, Beaver Builder and Breakdance keep their content
+  outside `post_content`, or keep it there as their own layout shortcodes, and
+  neither converts to anything worth publishing. The rule is per post and reads
+  the builder's render mode, so enabling a builder does not touch posts you did
+  not build with it, and it never inspects `post_content` — an article quoting
+  `[et_pb_section]` is not a Divi page. Escape hatch:
+  `sysmda_markdown_unsupported_builders`. The settings panel shows, per content
+  type, what its published posts are actually built with.
 - Logged-in requests are rebuilt in the visitor's own context: they never touch
   the shared cache and are never answered `304`.
 - Object cache when a persistent one is available (transients otherwise),
@@ -178,7 +188,8 @@ crawlers that cannot pin a version, the hooks by code that can.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   └── llms-txt-multilingual-plan.md
+│   ├── llms-txt-multilingual-plan.md
+│   └── page-builders-plan.md
 ├── documentation/                ← user documentation site (Astro Starlight, not shipped)
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4

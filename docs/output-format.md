@@ -382,6 +382,16 @@ password-protected, not an attachment, and — since `0.26.0` — **not carrying
 non-standard post format** (aside, audio, chat, gallery, image, link, quote,
 status, video; filterable through `sysmda_markdown_excluded_post_formats`).
 
+It also excludes any post **rendered by a page builder the
+plugin has no adapter for** — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver
+Builder and Breakdance, filterable through
+`sysmda_markdown_unsupported_builders`. Such a post has no Markdown
+representation: its content does not live in `post_content` at all, or lives
+there as the builder's own layout shortcodes, and the document this format
+describes cannot be produced from either. Detection is per post and keys on the
+builder's render mode, so a post that merely *stores* builder data while
+rendering ordinary content is unaffected.
+
 Markdown is served at the `.md` URL and, through negotiation, at the canonical
 permalink. It is **never** served at URL variants of the post — its feed, its
 oEmbed view, its trackback endpoint, paged comments, or the sub-pages of a post

@@ -267,6 +267,16 @@
 	}
 }
 
+/*
+ * The page-builder warning beside a content type. Colour only — the message
+ * already says what is wrong, so this must stay readable if the colour does not
+ * land (high contrast mode, a printout, an admin colour scheme that overrides
+ * it).
+ */
+.sysmda-settings-page .sysmda-builder-warning {
+	color: #b32d2e;
+}
+
 @media screen and ( max-width: 782px ) {
 	.sysmda-settings-page__header {
 		display: block;

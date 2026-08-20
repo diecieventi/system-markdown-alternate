@@ -61,7 +61,9 @@ $sysmda_clean_site = static function ( array $options ) use ( $wpdb ) {
 		 WHERE option_name LIKE '\_transient\_sysmda\_md\_%'
 		    OR option_name LIKE '\_transient\_timeout\_sysmda\_md\_%'
 		    OR option_name LIKE '\_transient\_sysmda\_llms\_%'
-		    OR option_name LIKE '\_transient\_timeout\_sysmda\_llms\_%'"
+		    OR option_name LIKE '\_transient\_timeout\_sysmda\_llms\_%'
+		    OR option_name LIKE '\_transient\_sysmda\_builder\_%'
+		    OR option_name LIKE '\_transient\_timeout\_sysmda\_builder\_%'"
 	);
 };
 

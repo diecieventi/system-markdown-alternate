@@ -1,6 +1,6 @@
 ---
 title: "Extending the plugin with filters"
-description: "Thirty-two documented filters, split into two stability levels, covering what gets served, what the document contains and how it is cached."
+description: "Thirty-three documented filters, split into two stability levels, covering what gets served, what the document contains and how it is cached."
 sidebar:
   order: 1
 ---
@@ -28,6 +28,16 @@ add_filter( 'sysmda_post_is_servable', function ( bool $servable, WP_Post $post 
 ```
 
 Every consumer honours it at once: the endpoint, negotiation, the discovery links, `/llms.txt`, the shortcodes and the dynamic tag.
+
+`sysmda_markdown_unsupported_builders` is the built-in list of page builders whose posts have no Markdown version — see [Page builders](/integrations/page-builders/) for what that means and why. Drop a key to serve that builder's posts anyway, or return an empty array to switch the rule off entirely:
+
+```
+add_filter( 'sysmda_markdown_unsupported_builders', function ( array $builders ) {
+	return array_diff( $builders, array( 'bricks' ) );
+} );
+```
+
+Those posts then go through the ordinary pipeline, which for a builder means an empty document or a body of layout wrappers. Adding a key the plugin does not recognise does nothing; to deny posts built with something else, use `sysmda_post_is_servable` above.
 
 ## Changing the document
 
