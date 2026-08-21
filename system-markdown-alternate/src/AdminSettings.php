@@ -459,6 +459,14 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
+			'sysmda_excluded_builder_elements',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_class_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
 			'sysmda_supported_post_types',
 			array(
 				'type'              => 'array',
@@ -570,6 +578,7 @@ class AdminSettings {
 		add_settings_field( 'sysmda_excluded_shortcodes', __( 'Excluded shortcodes', 'system-markdown-alternate' ), array( $this, 'field_excluded_shortcodes' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sysmda_markdown' );
+		add_settings_field( 'sysmda_excluded_builder_elements', __( 'Excluded builder elements', 'system-markdown-alternate' ), array( $this, 'field_excluded_builder_elements' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_front_matter_taxonomies', __( 'Custom taxonomies', 'system-markdown-alternate' ), array( $this, 'field_front_matter_taxonomies' ), self::PAGE, 'sysmda_markdown' );
 
 		if ( $this->acf_active() ) {
@@ -839,6 +848,14 @@ class AdminSettings {
 			'sysmda_markdown_excluded_classes',
 			function ( $defaults ) {
 				return $this->option_to_merged_list( 'sysmda_excluded_classes', $defaults );
+			},
+			20
+		);
+
+		add_filter(
+			'sysmda_markdown_excluded_builder_elements',
+			function ( $defaults ) {
+				return $this->option_to_merged_list( 'sysmda_excluded_builder_elements', $defaults );
 			},
 			20
 		);
@@ -1210,6 +1227,18 @@ class AdminSettings {
 
 	public function field_excluded_classes(): void {
 		$this->render_exclusion_field( 'sysmda_excluded_classes', ContentRenderer::EXCLUDED_CLASSES );
+	}
+
+	/**
+	 * Page-builder chrome (a form, a nav menu, a share bar, a table of
+	 * contents, a breadcrumb trail) removed the same way an excluded CSS class
+	 * is. Defaults come from the active builder adapters
+	 * (`BuilderAdapter::element_selectors()`) rather than a class constant here,
+	 * since which classes are even meaningful depends on which builder is
+	 * active — currently just `BricksAdapter::DEFAULT_EXCLUDED_ELEMENTS`.
+	 */
+	public function field_excluded_builder_elements(): void {
+		$this->render_exclusion_field( 'sysmda_excluded_builder_elements', BricksAdapter::DEFAULT_EXCLUDED_ELEMENTS );
 	}
 
 	/**

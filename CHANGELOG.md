@@ -9,6 +9,62 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.46.0
+
+* **Bricks pages now get a real `.md`** (Phase 2 of the page-builder plan;
+  `bricks` leaves `BuilderDetector::AWAITING_ADAPTER`, which is the whole
+  phasing mechanism — no other rule changed). The new `BricksAdapter` renders
+  a Bricks-mode post through Bricks' own `\Bricks\Frontend::render_data()`
+  rather than reimplementing its element types, the same "read the builder's
+  data to decide, read the vendor to render" shape `BuilderDetector` already
+  used. A new `BuilderAdapter` interface and a third branch in
+  `ContentRenderer::render()`, tried before the block/classic branches, is the
+  seam: `sysmda_markdown_builder_adapters` (Advanced) is the extension point.
+  A post switched back to *Render with WordPress* is unaffected — the adapter
+  requires the render mode AND the Bricks plugin active, so with either
+  missing the ordinary `post_content` pipeline is the correct answer, exactly
+  as it was before this release.
+* **Fixed the one defect the Phase 0 reconnaissance found**: Bricks' own image
+  lazy-loading swaps `src` for an inline SVG placeholder and moves the real
+  URL to `data-src` unless `\Bricks\Database::$page_settings['disableLazyLoad']`
+  is set for the render — the adapter now brackets every render with a
+  save/restore of that flag, so every Bricks image converts to a normal
+  `![](url)` instead of a meaningless data URI.
+* **New exclusion list**: `sysmda_markdown_excluded_builder_elements`
+  (Stable), a panel field and filter for page-builder chrome — Bricks'
+  form, nav menu, share bar, table of contents and breadcrumbs elements are
+  excluded by default, the same way `sysmda_markdown_excluded_classes`
+  excludes a CSS class. Additive to the built-in defaults, never a
+  replacement (the 0.40.0 rule). The existing `md-exclude` class already
+  worked on Bricks elements with no code change needed — Bricks emits it
+  verbatim on the element's wrapper.
+* **The cache validator now covers Bricks content**: the render mode, a hash
+  of the stored element tree, and the modification date of any referenced
+  `template` element's own post are folded into the existing dependency
+  fingerprint, so a mode flip or a template edit moves the ETag even though
+  `post_modified_gmt` does not.
+* **The front-matter `description` fallback and `/llms.txt` entries** now have
+  a Bricks-aware last resort, after Rank Math and the excerpt: a cheap,
+  unrendered read of the stored tree's text-bearing settings, run through the
+  same exclusion pass as the body. A Bricks post's `post_content` is never
+  used for this, even when the adapter's fallback finds nothing — it can hold
+  stale prose left over from before the page was rebuilt in Bricks, and
+  publishing that would reproduce, in the description field, the exact
+  "confidently wrong" failure the page-builder veto exists to prevent in the
+  body.
+* **Advanced-level toggle**: `sysmda_markdown_builder_suppress_content_filters`
+  (default on) removes foreign `the_content` callbacks — a related-posts
+  block, a CTA — while Bricks' own `post-content` element renders, since that
+  element calls the full `the_content` chain internally and would otherwise
+  reintroduce exactly the injected content this pipeline avoids everywhere
+  else. Flagged as a maintainer-reversible design choice; return `false` from
+  the filter to accept whatever a real visitor sees there instead.
+* `sysmda_markdown_prewarm` stays off for Bricks posts as for everything else:
+  element-level visibility conditions are unverified under WP-Cron's missing
+  request context (documentation only, no code change).
+* Elementor remains the only builder in `AWAITING_ADAPTER`; Divi, WPBakery,
+  Oxygen, Beaver Builder and Breakdance stay permanently unsupported.
+
 ## 0.45.1
 
 * Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the

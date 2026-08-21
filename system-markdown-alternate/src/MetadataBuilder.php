@@ -349,8 +349,13 @@ class MetadataBuilder {
 	 *
 	 * Returns an empty string when the post has none of them, which keeps the
 	 * validator byte-identical for plain posts (no mass invalidation on upgrade).
+	 *
+	 * Instance method, unlike its sibling taxonomies_fingerprint(): reading the
+	 * page-builder adapter's own fingerprint means going through
+	 * ContentRenderer::builder_dependency_parts(), and this class already holds
+	 * that renderer instance rather than duplicating the adapter list.
 	 */
-	public static function dependencies_fingerprint( \WP_Post $post ): string {
+	public function dependencies_fingerprint( \WP_Post $post ): string {
 		$parts = array();
 
 		$seen = array();
@@ -375,6 +380,10 @@ class MetadataBuilder {
 		}
 
 		self::collect_acf_dependencies( $post, $seen, $parts );
+
+		foreach ( $this->renderer->builder_dependency_parts( $post ) as $part ) {
+			$parts[] = $part;
+		}
 
 		/**
 		 * Filter: extra cache-validator inputs for output this plugin cannot
@@ -669,7 +678,14 @@ class MetadataBuilder {
 			}
 		}
 
-		$raw = $post->post_content;
+		// A builder-rendered post's post_content must never be trusted, even as
+		// a last resort: it can hold stale prose left over from before the post
+		// was rebuilt in the builder, and summarising that would reproduce, in
+		// this very field, the "confidently wrong" failure the page-builder
+		// veto exists to prevent in the body itself (see AGENTS.md). The
+		// adapter's own (crude, unrendered) text approximation is the honest
+		// source there — empty when it finds nothing, never stale.
+		$raw = $this->renderer->builder_handles( $post ) ? $this->renderer->builder_source_text( $post ) : $post->post_content;
 		$raw = $this->shortcodes->strip( $raw );   // Removes excluded shortcodes (even when they are not registered).
 		$raw = $this->renderer->strip_excluded_content( $raw ); // Removes md-exclude regions, as the body does.
 		$raw = strip_shortcodes( $raw );           // Removes other registered shortcodes.

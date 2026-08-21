@@ -1,6 +1,6 @@
 ---
 title: "Excluding content from the Markdown"
-description: "Three lists — shortcodes, blocks and CSS classes — decide what never reaches the Markdown. They add to the built-in defaults rather than replacing them."
+description: "Four lists — shortcodes, blocks, CSS classes and page-builder elements — decide what never reaches the Markdown. They add to the built-in defaults rather than replacing them."
 sidebar:
   order: 2
 ---
@@ -9,23 +9,26 @@ sidebar:
 
 Most page furniture never reaches the Markdown in the first place, because the plugin converts your blocks rather than scraping the rendered page — headers, menus, sidebars, cookie banners and anything injected into `the_content` are simply not part of the pipeline.
 
-What is left is the furniture that lives *inside* the post: a subscription form in the middle of an article, a table of contents, a promo box. Three lists handle those.
+What is left is the furniture that lives *inside* the post: a subscription form in the middle of an article, a table of contents, a promo box. Four lists handle those.
 
-## The three lists
+## The four lists
 
 | Field | Takes | Use for |
 |---|---|---|
 | Excluded shortcodes | Shortcode tags, without brackets | Forms, tables of contents, anything shortcode-driven |
 | Excluded blocks | Block names, e.g. `acme/promo` | Blocks whose output is interface, not content |
 | Excluded CSS classes | Class names, without the dot | Marking a section in the editor as not-for-Markdown |
+| Excluded builder elements | Class names, without the dot | Page-builder chrome (currently Bricks — see [Page builders](/integrations/page-builders/)) |
 
 One entry per line in each field.
+
+The fourth list exists because a page-builder element is neither a shortcode nor a block: a Bricks form, for instance, is ordinary HTML by the time the plugin sees it, with no `[contact-form-7]`-style tag to match against. It works exactly like *Excluded CSS classes* — the entries are the class the builder puts on the element — but its built-in defaults come from the page builder itself rather than a fixed list, so they only appear when a page-builder integration is active.
 
 ## Your entries add to the defaults
 
 This is the part worth reading twice. The built-in defaults **always apply**, and whatever you type is added to them. Typing one tag into *Excluded shortcodes* does not switch the built-in form exclusions off.
 
-The panel shows the current defaults under *View built-in defaults*. They cover the common form plugins — Contact Form 7, Gravity Forms, WPForms, Fluent Forms, Ninja Forms, Formidable — the common newsletter forms — MailerLite, Mailchimp for WordPress, MailPoet, The Newsletter Plugin, Brevo — and the common table-of-contents plugins.
+The panel shows the current defaults under *View built-in defaults*. They cover the common form plugins — Contact Form 7, Gravity Forms, WPForms, Fluent Forms, Ninja Forms, Formidable — the common newsletter forms — MailerLite, Mailchimp for WordPress, MailPoet, The Newsletter Plugin, Brevo — the common table-of-contents plugins, and, for *Excluded builder elements*, Bricks' own form, navigation menu, share, table-of-contents and breadcrumb elements.
 
 Removing a default is possible, but deliberately requires code rather than a text field:
 
@@ -39,7 +42,7 @@ The asymmetry is intentional. Getting an exclusion wrong in the permissive direc
 
 ## Excluding a section while writing
 
-Three class names work out of the box, on any block: `no-md`, `md-exclude` and `exclude-from-markdown`. Add one to a block's *Additional CSS class(es)* field in the editor sidebar and that block — with everything nested inside it — is gone from the Markdown.
+Three class names work out of the box, on any block: `no-md`, `md-exclude` and `exclude-from-markdown`. Add one to a block's *Additional CSS class(es)* field in the editor sidebar and that block — with everything nested inside it — is gone from the Markdown. The same works on a Bricks element, through its *CSS Classes* field.
 
 The exclusion also applies to the front matter `description`, so an excluded section can never be summarised into the metadata of the very document that refuses to publish it.
 

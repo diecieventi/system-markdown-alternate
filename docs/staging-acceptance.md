@@ -44,15 +44,29 @@ the server.
   `[](url "Name")`. Worth doing here specifically: whether such a card renders
   as an overlay anchor with sibling text, or nests its title inside the link,
   is the plugin's own choice and only the real one can settle it.
-- Posts rendered by an unsupported page builder stay unavailable as Markdown:
-  the `.md` returns 404, the HTML page advertises no `alternate` link or `Link:`
-  header, the post is absent from `/llms.txt`, and all three shortcodes and the
-  dynamic tag render nothing. The fixture that matters most is the **inverse**
-  one: a page holding builder data but switched back to *Render with WordPress*
-  must serve an ordinary `.md` built from `post_content`, because that is the
-  case a presence-based check gets wrong and no other check catches. Gutenberg
-  and classic posts on the same site must be entirely unaffected — the rule is
-  per post, not per type. Requires the second connected site,
+- Posts rendered by an unsupported page builder (Elementor, Divi, WPBakery,
+  Oxygen, Beaver Builder, Breakdance) stay unavailable as Markdown: the `.md`
+  returns 404, the HTML page advertises no `alternate` link or `Link:` header,
+  the post is absent from `/llms.txt`, and all three shortcodes and the
+  dynamic tag render nothing.
+- **Bricks pages now produce a real `.md`** (Phase 2, since `0.46.0`): a
+  Bricks-mode page serves `text/markdown` built through `\Bricks\Frontend::render_data()`,
+  with real image `src`/`srcset` values (never a `data:image/svg+xml`
+  placeholder — the lazy-load flag must actually be exercised: render an
+  element referencing a **real WordPress attachment**, not a raw external
+  URL, or the bug never triggers to begin with), `md-exclude` on a Bricks
+  element's *CSS Classes* field removed as usual, and the default excluded
+  builder elements (`brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`,
+  `brxe-post-sharing`, `brxe-post-toc`, `brxe-breadcrumbs`) stripped without
+  any panel configuration. A second request with `If-None-Match` from the
+  first answers `304`; saving the page (moving `post_modified_gmt`) or editing
+  a referenced `template` element's own post must both invalidate it. The
+  fixture that matters most is still the **inverse** one: a page holding
+  Bricks data but switched back to *Render with WordPress* must serve an
+  ordinary `.md` built from `post_content`, because that is the case a
+  presence-based check gets wrong and no other check catches. Gutenberg and
+  classic posts on the same site must be entirely unaffected — the rule is per
+  post, not per type. Requires the second connected site,
   `sma-bricks-instawp-co` (Bricks 2.0 as the active theme); the release
   environment carries no builder content.
 - The *Enabled content types* rows show the real per-type breakdown (for example

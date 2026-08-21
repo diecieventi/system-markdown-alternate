@@ -22,7 +22,7 @@ class Plugin {
 	 */
 	public function boot(): void {
 		$shortcodes = new ShortcodeCleaner();
-		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes );
+		$renderer   = new ContentRenderer( new BlockCleaner( $shortcodes ), $shortcodes, array( new BricksAdapter() ) );
 		$converter  = new MarkdownConverter();
 		$metadata   = new MetadataBuilder( $shortcodes, $renderer );
 

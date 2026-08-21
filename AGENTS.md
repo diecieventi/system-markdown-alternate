@@ -298,14 +298,129 @@ The v1 scope is done and widely exceeded. Implemented:
   plugin has no adapter for is not servable, so the `.md` 404s and the post
   leaves `/llms.txt`, the alternate links, the shortcodes and the dynamic tag —
   one predicate, everything else by construction. Divi, WPBakery, Oxygen, Beaver
-  Builder and Breakdance permanently; Bricks and Elementor until their adapter
-  lands. Detection is **per post**, keys on the **render mode** rather than the
-  presence of builder data, reads **meta and never `post_content`**, and holds
-  whether the builder plugin is active or not. Escape hatch:
-  `sysmda_markdown_unsupported_builders`. The panel shows the per-type
-  breakdown (`BuilderCensus`, admin-only, transient-cached). Full rationale and
-  the three rules easy to get backwards: the durable decision in "Product
-  decisions".
+  Builder and Breakdance permanently; Elementor until its adapter lands (Bricks
+  left this list in `0.46.0` — see the next bullet). Detection is **per post**,
+  keys on the **render mode** rather than the presence of builder data, reads
+  **meta and never `post_content`**, and holds whether the builder plugin is
+  active or not. Escape hatch: `sysmda_markdown_unsupported_builders`. The panel
+  shows the per-type breakdown (`BuilderCensus`, admin-only, transient-cached).
+  Full rationale and the three rules easy to get backwards: the durable
+  decision in "Product decisions".
+- **Bricks adapter** (`BricksAdapter`, `0.46.0`, Phase 2 of
+  `docs/page-builders-plan.md`): a Bricks-mode post (`_bricks_editor_mode ===
+  'bricks'`) produces a real `.md`, rendered through Bricks' own
+  `\Bricks\Frontend::render_data()` rather than a re-implementation — the
+  plugin reads the builder's stored tree only to *decide* (does this post's
+  current render mode match, what should the cache validator cover, what crude
+  text can stand in for a description), never to reproduce Bricks' own element
+  rendering. New `BuilderAdapter` interface
+  (`is_active()`/`handles()`/`render()`/`fingerprint()`/`source_text()`/`element_selectors()`)
+  and a third branch in `ContentRenderer::render()`, tried **before** the
+  `has_blocks()` test and gated by both `is_active()` (the vendor plugin must
+  actually be loaded — with Bricks deactivated `post_content` is the correct
+  answer) and `handles()` (the *current* render mode, not the presence of
+  stored data — a post switched to "Render with WordPress" is unaffected).
+  Deliberately **not** hung off `sysmda_markdown_source_content`: that hook
+  already ran, and already-rendered builder HTML falling into the classic
+  branch would pick up `wpautop()` plus a second `do_shortcode()` pass over
+  content Bricks already expanded. New Advanced filter
+  `sysmda_markdown_builder_adapters` (the adapter list, default one entry).
+  - **The lazy-load fix is mandatory, not optional cleanup.** Bricks' own
+    image lazy-loading swaps `src` for an inline `data:image/svg+xml`
+    placeholder and moves the real URL to `data-src`/`data-srcset` unless
+    `\Bricks\Database::$page_settings['disableLazyLoad']` is set for the
+    render; `render()` brackets the call with a save/restore of that flag
+    (never a bare assignment — a bare one would leave every *other* Bricks
+    render on the same PHP process, a preview, an admin-ajax call, with lazy
+    loading silently disabled). Verified live against a **real WordPress
+    attachment**: the bug does not reproduce at all with a raw external image
+    reference, because Bricks only swaps `src` inside
+    `wp_get_attachment_image_attributes`, a filter that fires only for a real
+    attachment — an easy way to ship a guard that "passes" without ever having
+    been seen to fire (see "A guard is not done until it has been seen to
+    fire" in "Code conventions").
+  - **Excluded builder elements** (`sysmda_markdown_excluded_builder_elements`,
+    Stable, new panel field): page-builder chrome removed the same way an
+    excluded CSS class is, additive to whatever else contributes to the list
+    (the 0.40.0 rule — exclusions accumulate, never replace). Defaults come
+    from the active adapter(s)' `element_selectors()`, not a fixed constant:
+    for Bricks, `brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`,
+    `brxe-post-sharing`, `brxe-post-toc`, `brxe-breadcrumbs` — the class Bricks
+    itself emits (`brxe-{element name}`) for its built-in form, navigation,
+    share, table-of-contents and breadcrumbs elements, verified against the
+    installed Bricks 2.0's own element registry. The existing `md-exclude`
+    class needed **no new code at all**: Bricks already emits an element's
+    custom CSS classes (`settings._cssClasses`) verbatim on the rendered
+    wrapper, so `ContentRenderer`'s existing class-removal pass already
+    reaches it — confirmed live rather than assumed.
+  - **Cache fingerprint**: `MetadataBuilder::dependencies_fingerprint()` (now
+    an **instance method**, not static — it needs `ContentRenderer`'s adapter
+    list) folds in `ContentRenderer::builder_dependency_parts()`, which asks
+    the matching adapter for its `fingerprint()`. For Bricks: the render mode
+    (so a flip to/from "Render with WordPress" moves the validator even
+    though the tree is untouched), a hash of the whole stored tree, and the
+    modification date of any referenced `template` element's own post (a
+    `bricks_template` post referenced via `settings.template` — confirmed
+    live; the classic "out-of-post dependency" shape, same rule as a synced
+    pattern). **Deliberately narrower than every out-of-post dependency**: a
+    Bricks "component" instance carries a `cid` reference whose own
+    definition was not confirmed to live anywhere resolvable on the
+    reconnaissance install (no `bricks_component` post type registered, no
+    populated components option) — the `cid` value itself still moves the
+    tree hash, so a *reassigned* reference invalidates; a component's own
+    definition changing elsewhere does not. Documented as an accepted, narrow
+    residual rather than guessed at. **Cost measured, not assumed** (the plan's
+    explicit requirement): `json_encode()` + `md5()` on a representative
+    60-element/~22 KB tree costs ~0.09 ms, and on a deliberately large
+    300-element/~89 KB tree ~0.36 ms — negligible next to the ~1000–1200 ms
+    `.md` TTFB already measured in the `0.29.0` cache work, and this runs on
+    every request, `304`s included.
+  - **`description` / `/llms.txt` fallback**: `MetadataBuilder::description()`'s
+    last-resort tier (after Rank Math, after the excerpt) now checks
+    `ContentRenderer::builder_handles()` first. For a builder-handled post it
+    uses `BuilderAdapter::source_text()` — a cheap, unrendered walk of the
+    stored tree's text-bearing `settings.text` values, each wrapped in a span
+    carrying the element's own `brxe-{name}`/custom class so the **same**
+    `strip_excluded_content()` exclusion pass the body uses applies to it
+    too — and **never** falls back to `post_content`, even when that text is
+    empty. A Bricks post's `post_content` can hold stale prose left over from
+    before the page was rebuilt in Bricks, and summarising it would reproduce,
+    in the description field, the exact "confidently wrong" failure the
+    page-builder veto exists to prevent in the body (see the `0.45.0`
+    decision below) — empty is the honest answer there, not a fallback to a
+    field that was never trustworthy for this post. `/llms.txt` inherits this
+    for free through the shared `description()` method: it never renders N
+    Bricks pages to build N entries.
+  - **Post Content and `the_content`**: Bricks' `post-content` element calls
+    WordPress's full `the_content` filter chain internally, which would
+    reintroduce exactly the injected related/CTA content `render_block()` is
+    used instead of `the_content()` to avoid everywhere else in this pipeline
+    (see "Technical notes" §4). `maybe_suppress_content_filters()` removes
+    every foreign callback from `the_content` for the duration of the render —
+    but only when the tree actually contains a `post-content` element (a page
+    without one pays nothing) and only when the new Advanced filter
+    `sysmda_markdown_builder_suppress_content_filters` (default `true`)
+    allows it. **A maintainer-reversible design choice, not a settled
+    answer** — flip the filter to `false` to accept whatever a real visitor
+    sees there instead, no code change required. Verified live: a foreign
+    `the_content` callback appending a "SUBSCRIBE NOW" block is present in
+    the Post Content element's output without the suppression and absent with
+    it, while `wpautop`/`do_shortcode` still run either way. The snapshot has
+    one sharp edge, caught by testing rather than reasoning about it: a
+    `WP_Hook` object assigned to a variable copies the handle, not the state,
+    so the snapshot must be a `clone` — a bare read shares the same object
+    `remove_all_filters()` then empties, and the restore silently does
+    nothing (see "A guard is not done until it has been seen to fire").
+  - `sysmda_markdown_prewarm` stays **off** for Bricks posts as for every
+    other post: element-level visibility conditions (`settings._conditions`,
+    evaluated by `\Bricks\Conditions::check()`) were confirmed live to read
+    only post/user/date/WooCommerce/dynamic-data/browser/referer/current-URL
+    state — none of it `is_singular()`/archive/query-var predicates, contrary
+    to what the reconnaissance had flagged as an open risk — but a `_conditions`
+    rule keyed on `current_url` (which reads the parsed request path) still
+    differs between the `.md` suffix route and the negotiated permalink route,
+    and WP-Cron's missing request context remains unverified for that one
+    case. Documentation only; no code change.
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
@@ -540,41 +655,14 @@ The v1 scope is done and widely exceeded. Implemented:
   reconnaissance described inside — the current plan's central query assumption
   is not reliable and must be verified against real plugin behaviour before any
   code is written.
-- **Page builders** (`docs/page-builders-plan.md`): **Phases 1 and 1b shipped**
-  (the veto and the panel breakdown — see the durable decision in "Product
-  decisions"); **Phase 0, the Bricks reconnaissance, is closed** (all seven
-  questions in the plan's §6.2 answered, August 2026); Phase 2, the Bricks
-  adapter, is **not started** — Phase 0's closure is what unblocks it. Scope
-  was fixed with the maintainer August 2026: **Bricks is the one builder to
-  support**; Elementor is parked (a free-only staging cannot validate the Pro
-  features that make it hard); Divi, WPBakery, Oxygen, Beaver Builder and
-  Breakdance are **never** to be supported. Bricks and Elementor stay in
-  `AWAITING_ADAPTER` until their adapter exists, which is the whole phasing
-  mechanism. What reconnaissance settled, on the Bricks staging clone: the
-  render mode is `_bricks_editor_mode = 'bricks'` (with `_bricks_template_type`
-  and `_bricks_page_content_2` alongside), a save from the editor **does** move
-  `post_modified` (so the §5 cache-validator work is smaller than the plan
-  feared, and stale-`304` risk on ordinary saves is not a concern),
-  `\Bricks\Frontend::render_data( $elements = [], $area = 'content' )` is
-  confirmed `public static` with `$area` as its second argument (never a post
-  ID), and — verified directly against `\Bricks\Frontend::render_data()` under
-  a faked 404 main query, the exact shape the `.md` suffix route produces —
-  **the render has no dependency on the main query at all**: byte-identical
-  output, dynamic tags included, across a 404 query, a singular query and a
-  real `the_post()` loop, so the adapter needs no faked query context. One new,
-  concrete defect surfaced that reconnaissance existed to find: **Bricks' own
-  image lazy-loading swaps `src` for an inline SVG placeholder and moves the
-  real URL to `data-src`**, which would silently convert every Bricks image to
-  a meaningless `![](data:image/svg+xml,...)`; the adapter must set
-  `\Bricks\Database::$page_settings['disableLazyLoad'] = true` around the
-  render call (verified fix — see the plan's §6.2.5 and §7.2 for the
-  save/restore shape, matching how `build_markdown()` already save/restores
-  `$GLOBALS['post']`). The one open call left for Phase 2 to make, not for
-  reconnaissance to answer: whether to suppress foreign `the_content` filters
-  when the adapter's Post Content element renders (mechanism confirmed —
-  it does call the full `the_content` chain, same class of interference
-  `render_block()` already avoids elsewhere per Technical notes §4 — but real
-  frequency is unmeasurable on synthetic staging data).
+- **Page builders** (`docs/page-builders-plan.md`): **Phases 1, 1b, 0 and 2 are
+  all shipped** (`0.46.0`) — the veto, the panel breakdown, the Bricks
+  reconnaissance and the Bricks adapter itself; see "Current state" for what
+  `BricksAdapter` does. Only Elementor remains parked in `AWAITING_ADAPTER`
+  (a free-only staging cannot validate the Pro features that make it hard);
+  Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are **never** to be
+  supported. Elementor — real demand and a Pro staging, in that order — is
+  the only open item this plan still has.
 - **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
   started** — deferred August 2026, see the status note at the top of the plan.
   The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,
@@ -798,9 +886,10 @@ The v1 scope is done and widely exceeded. Implemented:
   header is advertised, the post leaves `/llms.txt`, and the shortcodes and the
   dynamic tag render nothing — all by construction, from one predicate.
   `NEVER_SUPPORTED` is Divi, WPBakery, Oxygen, Beaver Builder and Breakdance;
-  `AWAITING_ADAPTER` is Bricks and Elementor, and that second list is how the
-  work is phased — an adapter shipping moves its builder out of it, with no
-  other edit and no window in which an empty or wrong `.md` is published.
+  `AWAITING_ADAPTER` is Elementor (Bricks left it in `0.46.0`, moved out by its
+  adapter shipping — see the decision below), and that list is how the work is
+  phased — an adapter shipping moves its builder out of it, with no other edit
+  and no window in which an empty or wrong `.md` is published.
   Escape hatch: `sysmda_markdown_unsupported_builders` (Stable; empty array =
   veto off). Rationale: the meta-based builders leave `post_content` empty, so
   the `.md` was front matter plus a bare `# Title`; Divi and WPBakery fill it
@@ -875,6 +964,93 @@ The v1 scope is done and widely exceeded. Implemented:
   Bricks page three times. It describes the built-in veto list and deliberately
   does not evaluate `sysmda_markdown_unsupported_builders`, which is per post and
   has no post to be given here.
+- **The Bricks adapter renders through the vendor and reads the tree only to
+  decide** (decided August 2026, Phase 2 of `docs/page-builders-plan.md`,
+  `0.46.0`): `BricksAdapter` calls `\Bricks\Frontend::render_data()` rather
+  than mapping Bricks element types to semantic HTML — the rejected
+  alternative is the "block-native Markdown engine" already evaluated and
+  rejected elsewhere in this file, with the surface multiplied: an unmapped
+  element type would disappear silently, and dynamic data would go
+  unresolved. Same shape as `candidate_taxonomies()`: the stored tree answers
+  `handles()`, `fingerprint()` and `source_text()`, never `render()`'s job.
+  Four points in the design are load-bearing and were each verified live
+  rather than assumed, because each one has exactly the "looks fine, is
+  silently wrong" shape "A guard is not done until it has been seen to fire"
+  warns about:
+  - **The lazy-load fix needs a real WordPress attachment to even be
+    testable.** Bricks only swaps an image's `src` for a placeholder inside
+    `wp_get_attachment_image_attributes`, a filter that fires solely for a
+    real attachment — a raw external image reference never reaches it, so a
+    naive reproduction attempt (a synthetic element pointing at a bare URL)
+    shows no bug at all and would have shipped a guard that had never been
+    seen to fire. Reproduced and fixed against attachment ID 13 on
+    `sma-bricks-instawp-co`: default render → `src="data:image/svg+xml,…"`
+    with the real URL in `data-src`; with
+    `\Bricks\Database::$page_settings['disableLazyLoad'] = true` → the real
+    `src`/`srcset`. `render()` brackets the call with a save/restore of that
+    flag, never a bare assignment, for the same reason `build_markdown()`
+    already save/restores `$GLOBALS['post']`: a bare assignment would leave
+    every *other* Bricks render sharing the PHP process — a preview, an
+    admin-ajax call — with lazy loading silently disabled afterwards.
+  - **`md-exclude` needed no code**, only verification: Bricks emits an
+    element's custom CSS classes (`settings._cssClasses`) verbatim on the
+    rendered wrapper, so `ContentRenderer`'s existing class-removal pass
+    already reaches it. Confirmed live rather than assumed, alongside the
+    `brxe-{name}` class Bricks emits for every element (verified against
+    `\Bricks\Elements::$elements`, not guessed) — which is what
+    `sysmda_markdown_excluded_builder_elements`'s Bricks defaults
+    (`brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`, `brxe-post-sharing`,
+    `brxe-post-toc`, `brxe-breadcrumbs`) key on. Additive to whatever else
+    contributes to the list, per the `0.40.0` rule — never a replacement.
+  - **The `description`/`llms.txt` fallback never reads a Bricks post's
+    `post_content`, even when it finds nothing better.** This is the same
+    lesson the "confidently wrong" measurement above already taught for the
+    body — a Bricks post's `post_content` can hold stale prose left over from
+    before the page was rebuilt, and a `.md` is not the only place that would
+    surface: the description fallback derives text from stored data the same
+    way, and reads `post_content` for every other post type. `source_text()`
+    (a cheap, unrendered read of the tree's `settings.text` values, each
+    wrapped in a span carrying the element's own class so the same exclusion
+    pass applies) is the one honest source there — empty when it finds
+    nothing, never stale.
+  - **Suppressing foreign `the_content` filters around Bricks' Post Content
+    element is implemented, but as a maintainer-reversible default, not a
+    settled answer** (closes `docs/page-builders-plan.md` §10's open
+    question): `render_block()` is used instead of `the_content()` everywhere
+    else in this pipeline specifically to keep injected related/CTA content
+    out (see "Technical notes" §4), and Bricks' `post-content` element calls
+    the full chain internally, reintroducing exactly that. The new
+    `sysmda_markdown_builder_suppress_content_filters` filter (Advanced,
+    default `true`) is the reversal switch. The snapshot-and-restore has one
+    sharp edge, caught by testing the exact sequence rather than reasoning
+    about it: `$wp_filter['the_content']` is a `WP_Hook` object, so
+    `$previous = $wp_filter['the_content']` copies the object handle, not its
+    state — `remove_all_filters()` then empties the "snapshot" too, and the
+    restore silently does nothing. The fix is `clone`, not a bare read.
+  Cache validator (§5 of the plan): `MetadataBuilder::dependencies_fingerprint()`
+  became an **instance method** (it needs `ContentRenderer`'s adapter list,
+  via the new `builder_dependency_parts()` seam) and folds in the render mode,
+  a hash of the stored tree, and any referenced `template` element's own
+  post's modification date — verified live that `settings.template` on a
+  `template`-named element holds that referenced post's ID. Deliberately
+  **not** covering a Bricks "component" (`cid`) reference's own definition:
+  no `bricks_component` post type and no populated components option were
+  found on the reconnaissance install to resolve it against, so a
+  *reassigned* `cid` still invalidates through the tree hash while a
+  component's own definition changing elsewhere does not — an accepted, named
+  gap rather than a guess. **Cost measured, not assumed** (the plan's explicit
+  requirement, since this runs on every request, `304`s included):
+  `json_encode()` + `md5()` costs ~0.09 ms on a representative 60-element tree
+  and ~0.36 ms on a deliberately large 300-element one — negligible next to
+  the ~1000–1200 ms `.md` TTFB already measured for the `0.29.0` cache work.
+  `sysmda_markdown_prewarm` stays off for Bricks posts as for everything else:
+  `\Bricks\Conditions::check()` was read directly and confirmed to have no
+  condition type keyed on `is_singular()`/archive/query-var state — narrowing
+  the residual risk flagged in the plan's §7.5 to just the `current_url`
+  condition type, which reads the parsed request path and genuinely does
+  differ between the `.md` suffix route and the negotiated permalink route
+  (documentation only; no code change, and no broader `is_singular()`-style
+  risk turned out to exist to fix).
 - **`/llms.txt` stays silent until a content type is enabled** (decided July
   2026): the option remains **on by default**, but with nothing to index the
   endpoint answered a site name plus a tagline and took the URL over from anything
@@ -1618,13 +1794,15 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
         ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link, invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
-        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment()
+        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles())
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── BuilderDetector.php     ← per-post page-builder detection (render mode, from meta) + the veto list
         ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)
+        ├── BuilderAdapter.php      ← interface: a page builder that can render its own content
+        ├── BricksAdapter.php       ← BuilderAdapter for Bricks (render_data(), lazy-load fix, fingerprint, source_text)
         ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
-        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static)
+        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static); dependencies_fingerprint() is an instance method (needs ContentRenderer's builder adapter list)
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + code/paragraph safety overrides)
         ├── CodeFence.php           ← content-sized code delimiters (pure logic, no WP/library deps)
         ├── CodeElementConverter.php ← independently designed <code>/<pre> converter using public library interfaces
@@ -1810,7 +1988,7 @@ not exist as far as the public API is concerned.
   deprecation, changelog and docs. **Advanced** = anchored to a stage of the
   *current implementation* (where the pipeline cuts, how ACF is read, how the hit
   counter classifies, how `/llms.txt` is laid out) — supported and documented,
-  free to evolve pre-1.0. 22 Stable, 11 Advanced.
+  free to evolve pre-1.0. 24 Stable, 13 Advanced.
   The classification is deliberate on three points, all of which a naive reading
   gets backwards:
   - **The settings-transport hooks are Stable, and they are stable for free.**
@@ -2184,17 +2362,37 @@ Test posts:
     decorative anchor elsewhere on the page (a "back to top" link) must be
     unchanged, and a code sample quoting an empty anchor must publish verbatim.
 
-19. **Page builder veto.** A Bricks page (`_bricks_editor_mode = 'bricks'`) →
-    `.md` **404**, no `rel="alternate"` link and no `Link:` header on its HTML,
-    absent from `/llms.txt`, and all three shortcodes plus the dynamic tag
-    render nothing. The same page switched to **"Render with WordPress"** → back
-    to a normal `.md` from `post_content`, even though `_bricks_page_content_2`
-    is still stored: that is the single most important fixture in the set, and
-    the one a presence-based check fails. A Gutenberg post on the same
-    Bricks-themed site is completely unaffected. In the panel, the *Enabled
-    content types* rows read the real breakdown (for example *Pages — 1 Bricks,
-    3 Gutenberg*) with the warning on the Bricks part, and the Bricks page's two
+19. **Page builder veto.** An Elementor page (`_elementor_edit_mode =
+    'builder'`) → `.md` **404**, no `rel="alternate"` link and no `Link:`
+    header on its HTML, absent from `/llms.txt`, and all three shortcodes plus
+    the dynamic tag render nothing. Same for Divi/WPBakery/Oxygen/Beaver
+    Builder/Breakdance fixtures. A Gutenberg post on the same page-builder-
+    themed site is completely unaffected. In the panel, the *Enabled content
+    types* rows read the real breakdown (for example *Pages — 8 Divi, 3
+    Gutenberg*) with the warning on the vetoed part, and a builder page's
     **revisions** do not inflate the count.
+20. **Bricks adapter (`0.46.0`).** A Bricks page
+    (`_bricks_editor_mode = 'bricks'`) → `.md` **200**, `text/markdown`,
+    front matter plus a body rendered through `\Bricks\Frontend::render_data()`;
+    `rel="alternate"` and the `Link:` header present; listed in `/llms.txt`;
+    all three shortcodes and the dynamic tag render normally. Images reference
+    their **real `src`/`srcset`**, never a `data:image/svg+xml,...` placeholder
+    (verify against an element referencing a real WordPress attachment — a raw
+    external URL never exercises Bricks' own lazy-load filter, so it cannot
+    catch a regression here). An element carrying `md-exclude` in its *CSS
+    Classes* field is absent from the body; a `brxe-form`/`brxe-nav-menu`/
+    `brxe-nav-nested`/`brxe-post-sharing`/`brxe-post-toc`/`brxe-breadcrumbs`
+    element is absent by default with no panel configuration, and the panel's
+    **Excluded builder elements** textarea can add another selector without
+    losing those defaults. `curl -sI` with a matching `If-None-Match` from a
+    prior response → **304**; saving the page (moving `post_modified_gmt`) or
+    editing a referenced `template` element's own post both change the ETag.
+    The same page switched to **"Render with WordPress"** → back to a normal
+    `.md` from `post_content`, even though `_bricks_page_content_2` is still
+    stored: that is the single most important fixture in the set, and the one
+    a presence-based check fails — unaffected by this release's adapter, since
+    `handles()` still keys on the render mode. A Gutenberg post on the same
+    Bricks-themed site is completely unaffected either way.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
