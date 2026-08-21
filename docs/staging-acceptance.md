@@ -93,6 +93,34 @@ repository.
 
 ## Latest full pass
 
+- **2026-08-21 — System Markdown Alternate 0.46.0 (Bricks adapter, Phase 2) — targeted, not the full matrix**
+
+  Verified only the Bricks-adapter acceptance criteria above, on
+  `sma-bricks-instawp-co` (WordPress 7.1, PHP 8.4.7) alone. This was not a
+  full pre-release pass across both connected sites — `instawp_sma` was not
+  re-checked in this run — so it does not supersede the `0.45.0` two-site
+  entry below for anything outside the adapter itself.
+
+  | Check | Result |
+  |---|---|
+  | `.md` on a Bricks-mode page: `200`, `text/markdown`, front matter, weak `ETag`, `Last-Modified`, `public, max-age=0, must-revalidate` | passed |
+  | Image `src`/`srcset` against a real attachment: placeholder (`data:image/svg+xml`) reproduced with the lazy-load flag off, real URL confirmed with it on, both via `\Bricks\Frontend::render_data()` directly and through the live `.md` response | passed |
+  | `md-exclude` on a Bricks element's *CSS Classes* field | passed — excluded text absent from the body |
+  | Default excluded builder elements (tested via the `brxe-form` class) | passed — absent with no panel configuration |
+  | `If-None-Match` with the prior `ETag` | passed — `304`, empty body |
+  | Cache validator moves when the stored tree changes | passed — `ETag` differed after the fixture edit |
+  | `rel="alternate"` in both the HTML head and the `Link:` HTTP header | passed |
+  | `/llms.txt` includes the Bricks page | passed |
+  | **The inverse fixture** — page 130, `_bricks_editor_mode = wordpress` with a full Bricks tree still stored — serves its `.md` from `post_content`, not through the adapter | passed |
+
+  Fixture note: page 18 (`_bricks_editor_mode = bricks`) started as a minimal
+  section/container/heading tree with no image or excluded element, so it was
+  extended in place with an image element (real attachment), an element
+  carrying `md-exclude`, and an element carrying `brxe-form`, to make every
+  row above exercisable. The enriched tree is left in place as a standing
+  fixture rather than reverted, matching what page 130 already is for the
+  inverse case.
+
 - **2026-08-20 — System Markdown Alternate 0.45.0 (page-builder veto)**
 
   | Environment | Platform | Role in this run |
