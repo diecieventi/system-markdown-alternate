@@ -630,10 +630,19 @@ The v1 scope is done and widely exceeded. Implemented:
   Motivated by a real conversation about GeneratePress + Blocks sites: a page
   built from a GeneratePress Elements template routinely mixes `post_content`
   with pieces coming from ACF fields, JetEngine dynamic fields, or WordPress's
-  own native Custom Fields UI — and today only the two ACF fields the built-in
-  integration knows about (`sysmda_acf_subtitle_key`, `sysmda_acf_tldr_key`)
-  ever reach the document; everything else silently drops out, the same way
-  theme/template chrome correctly does (see "What about a single-post
+  own native Custom Fields UI. **Correction, caught by Codex on PR #104**: the
+  paragraph originally shipped here claimed only the two ACF preamble fields
+  ever reach the document, which is false for a site already using the
+  developer API — `AcfIntegration::append_fields()` accepts arbitrary ACF
+  text/WYSIWYG field keys through the existing `sysmda_acf_field_keys` filter
+  (Advanced), appends their values and folds them into the cache fingerprint
+  (`MetadataBuilder::collect_acf_dependencies()`). What is actually missing is
+  narrower: that path is filter-only (no panel field lists arbitrary keys),
+  ACF-only (gated on `function_exists('get_field')`, so JetEngine and native
+  Custom Fields — both plain `get_post_meta()`, no ACF involved — cannot reach
+  it at all), and text/WYSIWYG-only by design. The missing piece is a panel UI
+  plus a source that isn't gated on ACF being active, not the ability to pull
+  extra fields into the document at all (see "What about a single-post
   template built with a page builder?" in the page-builders documentation —
   this is the one case on the other side of that line, where the missing
   piece is real content, not chrome).
@@ -656,6 +665,14 @@ The v1 scope is done and widely exceeded. Implemented:
   both, configurable per key?), whether serialized/array meta values need
   special handling before they can be treated as text, and whether this
   should subsume the two existing ACF-specific fields or sit beside them.
+  **Not optional, and not merely a design question** (also caught by Codex on
+  PR #104): whatever shape ships must feed
+  `MetadataBuilder::dependencies_fingerprint()` the same way
+  `collect_acf_dependencies()` already does for `sysmda_acf_field_keys` —
+  editing a pulled meta value does not move `post_modified_gmt`, so skipping
+  this would let a client holding a stale `ETag` keep getting `304` with an
+  outdated body, exactly the failure mode "Technical notes" 6 exists to rule
+  out. `collect_acf_dependencies()` is the template to follow, keys and all.
 - **Ideas surfaced by reviewing a comparable plugin** (`Serve Markdown` /
   `serve-md`, wordpress.org, `akumarjain`, v1.0 — read in full August 2026;
   not a plan, three separate candidates recorded for future evaluation, none
