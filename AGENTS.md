@@ -900,17 +900,27 @@ The v1 scope is done and widely exceeded. Implemented:
     appending the 293-byte block necessarily needs one more page, and `update()`
     invoked by reflection with the real `prepend_rules` transform. The kernel
     produced the short write the docblock names (`fwrite(): Write of 293 bytes
-    failed with errno=28`). Three cases: with free space the block lands above
-    `# BEGIN WordPress` and the other rules survive; on a full filesystem
-    `update()` returns `false` and `.htaccess` comes back byte-identical
-    (sha256); on a file the call had just created the rollback truncates to
-    **0 bytes**. The negative control is the part that matters — neutralising
-    only the `self::overwrite( $handle, $contents )` line flipped three
-    assertions to FAIL and left a file ending mid-directive
+    failed with errno=28`). Two cases run on that fixture: with free space the
+    block lands above `# BEGIN WordPress` and the other rules survive; on a full
+    filesystem `update()` returns `false` and `.htaccess` comes back
+    byte-identical (sha256). The negative control is the part that matters —
+    neutralising only the `self::overwrite( $handle, $contents )` line flipped
+    three assertions to FAIL and left a file ending mid-directive
     (`…# a rule from another plugin\n# a rule f`) with the LiteSpeed block
     written in full above it: a syntactically broken `.htaccess`, i.e. a 500.
-    The empty-contents branch is not theoretical either — without it that case
-    leaves 8192 bytes of half-written config instead of nothing.
+    The **empty-preimage** branch needs a synthetic payload, and why is worth
+    recording (caught by Codex on PR #101, which spotted that the reported
+    numbers could not come from the stated procedure). tmpfs allocates whole
+    4 KiB pages, so a write gets a page or gets nothing, and `prepend_rules` on
+    empty contents returns **292 bytes** — under one page, therefore
+    all-or-nothing. Measured both ways: with no free page it writes 0 bytes onto
+    an already-empty file, so the rollback is a no-op there; with one free page
+    it simply succeeds. The branch was exercised instead with a ~21 KB payload
+    over two free pages, where removing the rollback leaves 8192 bytes of
+    half-written config and keeping it truncates to zero. So that branch is
+    genuinely defensive rather than reachable by this plugin's own block on a
+    page-granular filesystem — which is a reason to keep it (a larger payload, a
+    quota, or finer-grained accounting all reach it), not a reason to trim it.
     **It cannot join `tests/run-tests.php`**: mounting a tmpfs needs root and CI
     does not have it, which is why this is a recorded measurement and not a test.
     Re-running it takes a tmpfs, a page-aligned fixture and a `ReflectionMethod`
