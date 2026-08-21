@@ -542,21 +542,39 @@ The v1 scope is done and widely exceeded. Implemented:
   code is written.
 - **Page builders** (`docs/page-builders-plan.md`): **Phases 1 and 1b shipped**
   (the veto and the panel breakdown — see the durable decision in "Product
-  decisions"); Phase 0, the Bricks reconnaissance, is **partly answered** and
-  Phase 2, the Bricks adapter, is **not started**. Scope was fixed with the
-  maintainer August 2026: **Bricks is the one builder to support**; Elementor is
-  parked (a free-only staging cannot validate the Pro features that make it
-  hard); Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are **never** to
-  be supported. Bricks and Elementor stay in `AWAITING_ADAPTER` until their
-  adapter exists, which is the whole phasing mechanism. Two questions still gate
-  the adapter, and neither can be answered by reading source: the exact signature
-  of `\Bricks\Frontend::render_data()` on the installed version, and whether
-  Bricks renders at all with the main query in a 404 state (the `.md` suffix
-  route resolves nothing). Answered already, on the staging clone: the render
-  mode is `_bricks_editor_mode = 'bricks'` (with `_bricks_template_type` and
-  `_bricks_page_content_2` alongside), and a save from the editor **does** move
-  `post_modified` — so the §5 cache-validator work is smaller than the plan
-  feared, and stale-`304` risk on ordinary saves is not a concern.
+  decisions"); **Phase 0, the Bricks reconnaissance, is closed** (all seven
+  questions in the plan's §6.2 answered, August 2026); Phase 2, the Bricks
+  adapter, is **not started** — Phase 0's closure is what unblocks it. Scope
+  was fixed with the maintainer August 2026: **Bricks is the one builder to
+  support**; Elementor is parked (a free-only staging cannot validate the Pro
+  features that make it hard); Divi, WPBakery, Oxygen, Beaver Builder and
+  Breakdance are **never** to be supported. Bricks and Elementor stay in
+  `AWAITING_ADAPTER` until their adapter exists, which is the whole phasing
+  mechanism. What reconnaissance settled, on the Bricks staging clone: the
+  render mode is `_bricks_editor_mode = 'bricks'` (with `_bricks_template_type`
+  and `_bricks_page_content_2` alongside), a save from the editor **does** move
+  `post_modified` (so the §5 cache-validator work is smaller than the plan
+  feared, and stale-`304` risk on ordinary saves is not a concern),
+  `\Bricks\Frontend::render_data( $elements = [], $area = 'content' )` is
+  confirmed `public static` with `$area` as its second argument (never a post
+  ID), and — verified directly against `\Bricks\Frontend::render_data()` under
+  a faked 404 main query, the exact shape the `.md` suffix route produces —
+  **the render has no dependency on the main query at all**: byte-identical
+  output, dynamic tags included, across a 404 query, a singular query and a
+  real `the_post()` loop, so the adapter needs no faked query context. One new,
+  concrete defect surfaced that reconnaissance existed to find: **Bricks' own
+  image lazy-loading swaps `src` for an inline SVG placeholder and moves the
+  real URL to `data-src`**, which would silently convert every Bricks image to
+  a meaningless `![](data:image/svg+xml,...)`; the adapter must set
+  `\Bricks\Database::$page_settings['disableLazyLoad'] = true` around the
+  render call (verified fix — see the plan's §6.2.5 and §7.2 for the
+  save/restore shape, matching how `build_markdown()` already save/restores
+  `$GLOBALS['post']`). The one open call left for Phase 2 to make, not for
+  reconnaissance to answer: whether to suppress foreign `the_content` filters
+  when the adapter's Post Content element renders (mechanism confirmed —
+  it does call the full `the_content` chain, same class of interference
+  `render_block()` already avoids elsewhere per Technical notes §4 — but real
+  frequency is unmeasurable on synthetic staging data).
 - **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
   started** — deferred August 2026, see the status note at the top of the plan.
   The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,

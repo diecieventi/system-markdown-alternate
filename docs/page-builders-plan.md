@@ -1,19 +1,23 @@
 # Page builders — Bricks first, a veto for the rest
 
 > Implementation plan. Status: **Phases 1 and 1b shipped** (the veto and the
-> panel breakdown); Phase 0 is partly answered; Phase 2 is not started. Written
-> against `main @ 0.44.0`.
+> panel breakdown); **Phase 0 is closed** (all seven reconnaissance questions
+> in §6.2 answered, August 2026); Phase 2 is not started. Written against
+> `main @ 0.45.1`.
 >
 > Scope was fixed with the maintainer in August 2026 and is deliberately narrow:
 > **Bricks is the one builder to support.** Elementor is parked. Divi, WPBakery,
 > Oxygen, Beaver Builder and Breakdance are never to be supported at all — a
 > post built with one of them simply has no Markdown representation.
 >
-> Phase 1 (the veto) does not depend on the reconnaissance and can ship on its
-> own. **Do not write a Bricks adapter before the reconnaissance in §6** — the
-> two questions that decide its shape (does an AJAX save move `post_modified`,
-> and does the builder render at all with the main query in a 404 state) cannot
-> be answered by reading source.
+> Phase 1 (the veto) does not depend on the reconnaissance and shipped on its
+> own. The reconnaissance in §6 is now done: the main query is confirmed
+> irrelevant to `render_data()`, the render-mode meta and the AJAX-save
+> behaviour are confirmed, the exact `render_data()` signature is confirmed,
+> and — the one genuinely new finding — **Bricks' own image lazy-loading
+> silently breaks every image conversion unless the adapter disables it around
+> the render call.** Phase 2 (the adapter) can now start from evidence rather
+> than from a hypothesis.
 
 ## 1. The problem
 
@@ -234,14 +238,25 @@ meta keys, which the pure suite can stub.
 
 ### 6.2 The questions
 
-Questions to answer before any adapter code. Each one changes the design:
+Questions to answer before any adapter code. Each one changes the design.
+**All seven are now answered** (August 2026, `sma-bricks-instawp-co`, Bricks
+2.0) — Phase 0 is closed; see §9.
 
-1. **Does the builder render with the main query in a 404 state?** The `.md`
-   suffix route resolves nothing, so `$wp_query` is a 404 while
-   `build_markdown()` sets only `$GLOBALS['post']` + `setup_postdata()`. Bricks
-   consults the queried object. If it renders empty or wrong, the adapter needs
-   a query context faked as well — invasive, and a decision to take
-   deliberately.
+1. ~~**Does the builder render with the main query in a 404 state?**~~
+   **Answered: no dependency at all.** `\Bricks\Frontend::render_data()` was
+   called directly against page 18's real `_bricks_page_content_2` tree under
+   three query contexts: (a) `$wp_query->set_404()` + `$GLOBALS['post']` +
+   `setup_postdata()` — the exact shape `build_markdown()` produces on the
+   `.md` suffix route; (b) a genuine singular `WP_Query` — the shape the
+   negotiated-permalink route produces; (c) a real loop with `the_post()`,
+   which is the one thing neither route ever does and the only way
+   `in_the_loop()` becomes true. Output was byte-identical across all three,
+   including for dynamic tags (`{post_title}`, `{post_modified}`) and for the
+   **Post Content** element, and no PHP warning or notice was raised in the
+   404 case. `render_data()` reads dynamic data off `$post`/the loop, never off
+   `get_queried_object()` or `$wp_query`. **No faked query context is needed —
+   `render_data()` can be called exactly as `build_markdown()` already sets
+   things up.**
 2. ~~**Does an AJAX save move `post_modified_gmt`?**~~ **Answered: yes**
    (August 2026, same site). The one Bricks page has `post_date 2026-01-02` and
    `post_modified 2026-08-20`, moved by a save from the Bricks editor. Edge case
@@ -262,19 +277,69 @@ Questions to answer before any adapter code. Each one changes the design:
    the Phase 1b census in particular — would report one Bricks page three times.
    A second reason to key on the mode, beyond §3.1, and the reason `BuilderCensus`
    constrains `post_status` and `post_type` as well.
-4. **What is the exact signature of `\Bricks\Frontend::render_data()` on the
-   installed version?** The `bricks/frontend/render_data` filter documents the
-   second argument as `$area` (`header`/`content`/`footer`); snippets in
-   circulation pass a post ID instead.
-5. **What HTML actually comes out, and how much of it already survives the
-   converter?** `MarkdownConverter` runs with `strip_tags => true`, so nested
-   `brxe-*` wrappers may already collapse on their own. Measure before writing a
-   chrome-unwrapping pass — do not build it on a hypothesis.
-6. **Does rendering enqueue or echo assets?** The `.md` route exits before
-   anything is printed, so it should be harmless; confirm under output
-   buffering.
-7. **Edge case 6**: how common is the Post content element in real Bricks pages,
-   and is suppressing foreign `the_content` filters worth it?
+4. ~~**What is the exact signature of `\Bricks\Frontend::render_data()` on the
+   installed version?**~~ **Answered** (Bricks 2.0, via `ReflectionMethod`):
+   `render_data( $elements = [], $area = 'content' )`, `public static`. The
+   second argument is confirmed to be `$area`, never a post ID — the plan's
+   suspicion about circulating snippets was correct to flag, and is now settled
+   rather than assumed. The adapter calls it as
+   `\Bricks\Frontend::render_data( $post_meta['_bricks_page_content_2'], 'content' )`.
+5. ~~**What HTML actually comes out, and how much of it already survives the
+   converter?**~~ **Answered, with a real defect found.** A representative
+   tree (section → container → heading, rich `text-basic`, image, button,
+   list, Post Content) was rendered and piped through the actual
+   `MarkdownConverter::convert()` used in production. The `brxe-*`/section/
+   container chrome collapses cleanly under `strip_tags` exactly as hoped —
+   heading, rich inline text, links and Post Content all convert correctly,
+   confirming the "measure before building a chrome-unwrapping pass" instinct:
+   **no unwrapping pass is needed.**
+
+   **But images are broken by default.** Bricks' own JS lazy-loading
+   (`bricks-lazy-hidden`) replaces `src` with an inline `data:image/svg+xml`
+   placeholder and moves the real URL to `data-src`/`data-srcset`; the library
+   only ever reads `src`, so every Bricks image converts to
+   `![](data:image/svg+xml,...)` — meaningless, and silently so (no error, no
+   empty output to notice). Root cause and fix both verified in
+   `includes/elements/base.php::lazy_load()`: it returns `false` — real `src`
+   emitted — when `Database::$page_settings['disableLazyLoad']` (or the global
+   equivalent) is set. Confirmed live: setting
+   `\Bricks\Database::$page_settings['disableLazyLoad'] = true;` immediately
+   before `render_data()` (and restoring the prior value after, same discipline
+   as `build_markdown()`'s own `$GLOBALS['post']` save/restore) makes every
+   image emit its real `src`/`srcset`, and the Markdown comes out as a normal
+   `![](url)`. **The adapter MUST set this flag around the render call — this
+   is not optional cleanup, it is the difference between a working and a
+   silently-broken image in every Bricks post.**
+
+   Two secondary findings, lower priority than the lazy-load fix: adjacent
+   inline elements (an image immediately followed by a button, both inline in
+   the source) convert with no blank line between them, which is a pre-existing
+   library/converter interaction rather than anything Bricks-specific — worth a
+   look once the adapter has real pages to test against, not a blocker. The
+   `list` element's item-text field name was not confirmed (the test guessed
+   wrong and produced empty bullets); a low-traffic element, deferred to
+   adapter implementation rather than reconnaissance.
+6. ~~**Does rendering enqueue or echo assets?**~~ **Answered: no.** Rendering a
+   tree containing Post Content (the one element that pulls in Gutenberg core
+   block styles via `the_content`) under output buffering produced zero
+   echoed bytes and enqueued only stylesheet handles (`wp-block-library` and
+   friends) — never scripts, never inline output. Confirmed harmless as
+   expected: the `.md` route exits at `template_redirect` before `wp_head`/
+   `wp_footer` ever print the queue, on either route.
+7. **Edge case 6, mechanism confirmed; frequency still unknowable from a
+   synthetic corpus.** The Post Content element does call the full
+   `the_content` filter chain — verified by giving page 18 real `post_content`
+   and confirming the Post Content element's output tracks `the_content()`
+   byte-for-byte, unaffected by `in_the_loop()`. This is exactly the class of
+   interference `render_block()` was chosen over `the_content` to avoid
+   elsewhere in this plugin (Technical notes §4), so **the recommendation is to
+   suppress foreign `the_content` filters when the adapter's Post Content
+   element renders**, for consistency with that existing principle — but no
+   staging site can manufacture the "how common" half of the question, since
+   that depends on which plugins a real Bricks site runs. Carried into Phase 2
+   as a design input with a recommendation, not as a blocking unknown: this is
+   the one question of the seven that reconnaissance cannot fully close, and
+   waiting for it to become "answerable" would block the adapter indefinitely.
 
 ## 7. The adapter, once §6 is answered
 
@@ -330,6 +395,31 @@ interface BuilderAdapter {
 }
 ```
 
+For Bricks, `render()` is not a bare call to `\Bricks\Frontend::render_data()` — per
+§6.2.5, it MUST bracket the call with the lazy-load flag, save/restore the prior
+value the same way `MarkdownController::build_markdown()` already save/restores
+`$GLOBALS['post']`:
+
+```php
+$previous = \Bricks\Database::$page_settings['disableLazyLoad'] ?? null;
+\Bricks\Database::$page_settings['disableLazyLoad'] = true;
+try {
+    $html = \Bricks\Frontend::render_data( $tree, 'content' );
+} finally {
+    if ( null === $previous ) {
+        unset( \Bricks\Database::$page_settings['disableLazyLoad'] );
+    } else {
+        \Bricks\Database::$page_settings['disableLazyLoad'] = $previous;
+    }
+}
+```
+
+Skipping this silently ships `![](data:image/svg+xml,...)` for every image on
+every Bricks post — no error, no empty output, nothing that looks broken in
+review. Per "a guard is not done until it has been seen to fire" in `AGENTS.md`,
+the adapter's test suite must construct an image element, render it with the
+flag OFF, and see the placeholder — not just see the flag ON case pass.
+
 ### 7.3 Exclusions degrade, and the replacement is real
 
 Shortcode-level exclusion cannot work on builder content: the builder renders a
@@ -360,8 +450,12 @@ rather than the rendered body owes the same exclusion pass.
 ### 7.5 Prewarm
 
 The existing decision already warns that cron is not a faithful stand-in for a
-front-end request. With a builder it is worse — theme-builder conditions and the
-queried object. Keep `sysmda_markdown_prewarm` off and say so in the docs.
+front-end request. §6.2.1 showed `render_data()` itself does not depend on the
+queried object, so that specific risk is narrower than originally assumed —
+but element-level **visibility conditions** (a Bricks element can be scoped to
+"only on archive", a device, a query var, …) are unverified under cron and
+remain the open risk. Keep `sysmda_markdown_prewarm` off and say so in the
+docs.
 
 ## 8. Panel labels (Phase 1b)
 
@@ -391,8 +485,8 @@ to "are my articles affected?" should take three seconds, not an audit.
 |---|---|---|
 | **1** ✅ | The veto: `BuilderDetector`, the rule in `is_servable()`, the Stable `sysmda_markdown_unsupported_builders`. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor in `AWAITING_ADAPTER` | nothing |
 | **1b** ✅ | Panel labels — `BuilderCensus`, one query, transient-cached, admin only | nothing |
-| **0** ◐ | Bricks reconnaissance (§6) — questions 2 and 3 answered, the rest open | staging — available |
-| **2** | Bricks adapter; Bricks leaves the unsupported list | Phase 0 |
+| **0** ✅ | Bricks reconnaissance (§6) — all seven questions in §6.2 answered, including the lazy-load image defect and fix | nothing |
+| **2** | Bricks adapter; Bricks leaves the unsupported list | nothing — Phase 0 is closed |
 | **3** | Elementor — only on real demand, and only with a Pro staging | — |
 
 Phases 1 and 1b are shippable on their own and are most of the value: the
@@ -406,4 +500,8 @@ published without anyone noticing.
    the current emptiness.
 2. Edge case 6: accept the related/CTA content that `the_content` reintroduces
    through the Post content element, or suppress foreign filters around the
-   render? Leave open until §6.7.
+   render? §6.2.7 confirmed the mechanism (Post Content does call the full
+   `the_content` chain) and recommends suppressing foreign filters there for
+   consistency with Technical notes §4 — final call belongs to the maintainer
+   when Phase 2 is scoped, since it trades adapter complexity against fidelity
+   to what a real visitor sees.
