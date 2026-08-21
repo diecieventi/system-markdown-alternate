@@ -67,11 +67,12 @@ class BuilderDetector {
 	 * Builders that are vetoed only until their adapter exists.
 	 *
 	 * The list is how the work is phased: one mechanism, incremental coverage,
-	 * and no window in which an empty or wrong `.md` is published. When the
-	 * Bricks adapter lands, `bricks` moves out of here and nothing else has to
-	 * change. Elementor is parked behind it and may never move.
+	 * and no window in which an empty or wrong `.md` is published. `bricks`
+	 * moved out of here in Phase 2 (`BricksAdapter`), with no other edit —
+	 * that is the whole point of the phasing mechanism. Elementor is parked
+	 * and may never move (see docs/page-builders-plan.md).
 	 */
-	const AWAITING_ADAPTER = array( 'bricks', 'elementor' );
+	const AWAITING_ADAPTER = array( 'elementor' );
 
 	/**
 	 * How each builder declares, per post, that it renders the front end.

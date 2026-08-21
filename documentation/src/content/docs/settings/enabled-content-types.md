@@ -38,7 +38,7 @@ Enabling a type is necessary but not sufficient. A post is served only when all 
 | Status is `publish` | Drafts, pending and private posts have no public representation. |
 | No password set | Protected content never has a Markdown version — not even for a visitor who has already entered the password. The rule is about the content, not the visitor. |
 | Standard post format | Aside, status, quote, link, image, video, audio, gallery and chat are skipped: short, often untitled snippets. The *absence* of a format — which is almost all content — is unaffected. |
-| Not built with a page builder | A post rendered by Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance keeps its content outside the WordPress post content, so there is nothing to convert. Decided post by post — see [Page builders](/integrations/page-builders/). |
+| Not built with an unsupported page builder | A post rendered by Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance keeps its content outside the WordPress post content, so there is nothing to convert. **Bricks is the exception**: a Bricks-built post is rendered through Bricks' own API and does get a `.md`. Decided post by post — see [Page builders](/integrations/page-builders/). |
 
 A post failing any of these returns **404** on its `.md` URL, is absent from `/llms.txt`, gets no `alternate` link, and makes the shortcodes render nothing at all — so nothing on your site ever links to a Markdown URL that does not exist.
 

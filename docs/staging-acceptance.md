@@ -44,15 +44,29 @@ the server.
   `[](url "Name")`. Worth doing here specifically: whether such a card renders
   as an overlay anchor with sibling text, or nests its title inside the link,
   is the plugin's own choice and only the real one can settle it.
-- Posts rendered by an unsupported page builder stay unavailable as Markdown:
-  the `.md` returns 404, the HTML page advertises no `alternate` link or `Link:`
-  header, the post is absent from `/llms.txt`, and all three shortcodes and the
-  dynamic tag render nothing. The fixture that matters most is the **inverse**
-  one: a page holding builder data but switched back to *Render with WordPress*
-  must serve an ordinary `.md` built from `post_content`, because that is the
-  case a presence-based check gets wrong and no other check catches. Gutenberg
-  and classic posts on the same site must be entirely unaffected — the rule is
-  per post, not per type. Requires the second connected site,
+- Posts rendered by an unsupported page builder (Elementor, Divi, WPBakery,
+  Oxygen, Beaver Builder, Breakdance) stay unavailable as Markdown: the `.md`
+  returns 404, the HTML page advertises no `alternate` link or `Link:` header,
+  the post is absent from `/llms.txt`, and all three shortcodes and the
+  dynamic tag render nothing.
+- **Bricks pages now produce a real `.md`** (Phase 2, since `0.46.0`): a
+  Bricks-mode page serves `text/markdown` built through `\Bricks\Frontend::render_data()`,
+  with real image `src`/`srcset` values (never a `data:image/svg+xml`
+  placeholder — the lazy-load flag must actually be exercised: render an
+  element referencing a **real WordPress attachment**, not a raw external
+  URL, or the bug never triggers to begin with), `md-exclude` on a Bricks
+  element's *CSS Classes* field removed as usual, and the default excluded
+  builder elements (`brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`,
+  `brxe-post-sharing`, `brxe-post-toc`, `brxe-breadcrumbs`) stripped without
+  any panel configuration. A second request with `If-None-Match` from the
+  first answers `304`; saving the page (moving `post_modified_gmt`) or editing
+  a referenced `template` element's own post must both invalidate it. The
+  fixture that matters most is still the **inverse** one: a page holding
+  Bricks data but switched back to *Render with WordPress* must serve an
+  ordinary `.md` built from `post_content`, because that is the case a
+  presence-based check gets wrong and no other check catches. Gutenberg and
+  classic posts on the same site must be entirely unaffected — the rule is per
+  post, not per type. Requires the second connected site,
   `sma-bricks-instawp-co` (Bricks 2.0 as the active theme); the release
   environment carries no builder content.
 - The *Enabled content types* rows show the real per-type breakdown (for example
@@ -78,6 +92,34 @@ in this file; keep transient URLs, hashes and verbose diagnostics out of the
 repository.
 
 ## Latest full pass
+
+- **2026-08-21 — System Markdown Alternate 0.46.0 (Bricks adapter, Phase 2) — targeted, not the full matrix**
+
+  Verified only the Bricks-adapter acceptance criteria above, on
+  `sma-bricks-instawp-co` (WordPress 7.1, PHP 8.4.7) alone. This was not a
+  full pre-release pass across both connected sites — `instawp_sma` was not
+  re-checked in this run — so it does not supersede the `0.45.0` two-site
+  entry below for anything outside the adapter itself.
+
+  | Check | Result |
+  |---|---|
+  | `.md` on a Bricks-mode page: `200`, `text/markdown`, front matter, weak `ETag`, `Last-Modified`, `public, max-age=0, must-revalidate` | passed |
+  | Image `src`/`srcset` against a real attachment: placeholder (`data:image/svg+xml`) reproduced with the lazy-load flag off, real URL confirmed with it on, both via `\Bricks\Frontend::render_data()` directly and through the live `.md` response | passed |
+  | `md-exclude` on a Bricks element's *CSS Classes* field | passed — excluded text absent from the body |
+  | Default excluded builder elements (tested via the `brxe-form` class) | passed — absent with no panel configuration |
+  | `If-None-Match` with the prior `ETag` | passed — `304`, empty body |
+  | Cache validator moves when the stored tree changes | passed — `ETag` differed after the fixture edit |
+  | `rel="alternate"` in both the HTML head and the `Link:` HTTP header | passed |
+  | `/llms.txt` includes the Bricks page | passed |
+  | **The inverse fixture** — page 130, `_bricks_editor_mode = wordpress` with a full Bricks tree still stored — serves its `.md` from `post_content`, not through the adapter | passed |
+
+  Fixture note: page 18 (`_bricks_editor_mode = bricks`) started as a minimal
+  section/container/heading tree with no image or excluded element, so it was
+  extended in place with an image element (real attachment), an element
+  carrying `md-exclude`, and an element carrying `brxe-form`, to make every
+  row above exercisable. The enriched tree is left in place as a standing
+  fixture rather than reverted, matching what page 130 already is for the
+  inverse case.
 
 - **2026-08-20 — System Markdown Alternate 0.45.0 (page-builder veto)**
 

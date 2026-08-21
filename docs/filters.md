@@ -92,6 +92,9 @@ compatibility promise of any kind.
 | `sysmda_markdown_excluded_shortcodes` | Stable |
 | `sysmda_markdown_excluded_block_names` | Stable |
 | `sysmda_markdown_excluded_classes` | Stable |
+| `sysmda_markdown_excluded_builder_elements` | Stable |
+| `sysmda_markdown_builder_adapters` | Advanced |
+| `sysmda_markdown_builder_suppress_content_filters` | Advanced |
 | `sysmda_front_matter_enabled` | Stable |
 | `sysmda_front_matter_taxonomy_slugs` | Stable |
 | `sysmda_front_matter_taxonomies` | Advanced |
@@ -271,7 +274,14 @@ different caching design would replace.
 save, instead of on the first request. Off by default because cron has no
 request context: a dynamic block or shortcode inspecting `is_singular()` or the
 queried object can render differently there, and that difference is what would
-get cached. No-op when the TTL is `0`.
+get cached. No-op when the TTL is `0`. Applies to Bricks posts too, and for the
+same reason plus one of its own: an element's own visibility condition
+(Bricks' `_conditions`) reads only post/user/date/WooCommerce/dynamic-data/
+browser/referer/current-URL state — confirmed against the installed
+`\Bricks\Conditions::check()`, not assumed — but `current_url` (the parsed
+request path) genuinely differs between the `.md` suffix route and the
+negotiated permalink route, and stays unverified under cron's missing request
+context either way.
 
 ## The conversion pipeline
 
@@ -326,16 +336,46 @@ The final Markdown document, front matter included. Last hook of the build, and
 the one extension point that survives any change of engine: it receives a
 finished document and returns one.
 
+### Page builders
+
+Two more hooks sit inside the render step, before `sysmda_markdown_rendered_html`
+is reached — consulted only for a post a [page-builder adapter](#which-content-is-served)
+actually claims, which on a site with no builder content is never.
+
+```php
+apply_filters( 'sysmda_markdown_builder_adapters', $adapters, $post );
+```
+**[Advanced](#advanced)** — the list of `BuilderAdapter` instances tried, in
+order, before the block/classic branches. Ships with one entry, the Bricks
+adapter. A future conversion engine may have no concept of "adapters" at all,
+which is why this is Advanced rather than Stable even though it decides what
+gets served.
+
+```php
+apply_filters( 'sysmda_markdown_builder_suppress_content_filters', true, $post );
+```
+**[Advanced](#advanced)** — whether foreign `the_content` callbacks (a related-
+posts block, a CTA) are suppressed while a builder adapter's "Post Content"
+style element renders. Bricks' own `post-content` element calls the full
+`the_content` filter chain, which is exactly the class of interference
+`render_block()` is used instead of `the_content()` to avoid everywhere else in
+this pipeline (see "Technical notes" §4 in AGENTS.md). Default on; return
+`false` to accept whatever a real visitor sees there, related/CTA content
+included — a maintainer-reversible design choice, not a settled one, and
+documented as such where it is implemented (`BricksAdapter`).
+
 ### The cleaning filters, which are not points in that sequence
 
 ```php
 apply_filters( 'sysmda_markdown_excluded_shortcodes', $shortcodes );
 apply_filters( 'sysmda_markdown_excluded_block_names', $block_names );
 apply_filters( 'sysmda_markdown_excluded_classes', $css_classes );
+apply_filters( 'sysmda_markdown_excluded_builder_elements', $builder_selectors );
 ```
 
-Shortcodes, Gutenberg blocks and CSS classes dropped from the output. See
-[Default exclusions](#default-exclusions) for the values they receive.
+Shortcodes, Gutenberg blocks, CSS classes and page-builder chrome dropped from
+the output. See [Default exclusions](#default-exclusions) for the values they
+receive.
 
 These are **not** stages of the ordered sequence above. They are consulted
 wherever the plugin cleans content, which is more places than the body
@@ -347,6 +387,7 @@ and one on a different endpoint entirely. Known call sites:
 | `sysmda_markdown_excluded_shortcodes` | the post body; rendered preamble fragments; expanded synced patterns (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt`, for entries that carry a description |
 | `sysmda_markdown_excluded_block_names` | block cleaning — only when the post has blocks |
 | `sysmda_markdown_excluded_classes` | block cleaning (blocks only); every DOM pass, body and fragments alike, unless the HTML is empty or fails to parse |
+| `sysmda_markdown_excluded_builder_elements` | the same DOM pass as `sysmda_markdown_excluded_classes` (merged into one removal), applied to page-builder-rendered content; and the description fallback's exclusion pass, against the synthetic markup a builder adapter's `source_text()` produces |
 
 **Treat that column as illustrative, not as a contract.** It spans four classes
 and two endpoints, and it has been wrong every time it was written down as a
@@ -527,8 +568,9 @@ respectively.
 | Block names | `gravityforms/form`, `contact-form-7/contact-form-selector`, `wpforms/form-selector`, `ninja-forms/form`, `formidable/simple-form`, `mailerlite/form`, `luckywp/toc` |
 | Shortcodes | `contact-form-7`, `gravityform`, `wpforms`, `fluentform`, `ninja_form`, `formidable`, `mailerlite_form`, `mc4wp_form`, `mailpoet_form`, `newsletter_form`, `sibwp_form`, `lwptoc`, `ez-toc`, `ez-toc-widget-sticky`, `toc` |
 | CSS classes | `no-md`, `md-exclude`, `exclude-from-markdown` |
+| Builder elements | `brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`, `brxe-post-sharing`, `brxe-post-toc`, `brxe-breadcrumbs` (Bricks; see `BricksAdapter::DEFAULT_EXCLUDED_ELEMENTS`) |
 
-The panel's three exclusion textareas **add to** these lists rather than replace
+The panel's four exclusion textareas **add to** these lists rather than replace
 them (since `0.40.0`; before that, typing anything into a box dropped every
 default in it). So the filter is now the only way to *remove* a default — it runs
 at priority 10, before the closure that appends the saved lines at 20:

@@ -91,12 +91,20 @@ Two consequences worth knowing:
 
 - No post type is exposed until you enable it, and no taxonomy reaches the
   front matter until you tick it — nothing is ever inferred.
-- **Posts rendered by a page builder have no Markdown representation** and
-  return 404 rather than an empty or misleading document: Bricks, Elementor,
-  Divi, WPBakery, Oxygen, Beaver Builder and Breakdance keep their content
-  outside `post_content`, or keep it there as their own layout shortcodes, and
-  neither converts to anything worth publishing. The rule is per post and reads
-  the builder's render mode, so enabling a builder does not touch posts you did
+- **Bricks pages get a real `.md`**, rendered through Bricks' own
+  `\Bricks\Frontend::render_data()` rather than a re-implementation, with
+  Bricks' own image lazy-loading disabled for the render (otherwise every
+  image converts to a placeholder). A page switched back to *Render with
+  WordPress* is served from `post_content` as usual. `md-exclude` already
+  works as a Bricks element's CSS class; `sysmda_markdown_excluded_builder_elements`
+  additionally strips Bricks chrome (forms, nav menus, share bars, tables of
+  contents, breadcrumbs) by default, additive like the other exclusion lists.
+- **Posts rendered by any other page builder have no Markdown representation**
+  and return 404 rather than an empty or misleading document: Elementor, Divi,
+  WPBakery, Oxygen, Beaver Builder and Breakdance keep their content outside
+  `post_content`, or keep it there as their own layout shortcodes, and neither
+  converts to anything worth publishing. The rule is per post and reads the
+  builder's render mode, so enabling a builder does not touch posts you did
   not build with it, and it never inspects `post_content` — an article quoting
   `[et_pb_section]` is not a Divi page. Escape hatch:
   `sysmda_markdown_unsupported_builders`. The settings panel shows, per content

@@ -1,9 +1,9 @@
 # Page builders — Bricks first, a veto for the rest
 
-> Implementation plan. Status: **Phases 1 and 1b shipped** (the veto and the
-> panel breakdown); **Phase 0 is closed** (all seven reconnaissance questions
-> in §6.2 answered, August 2026); Phase 2 is not started. Written against
-> `main @ 0.45.1`.
+> Implementation plan. Status: **Phases 1, 1b, 0 and 2 are all shipped**
+> (`0.46.0`) — `bricks` has left `BuilderDetector::AWAITING_ADAPTER` and a
+> Bricks-mode post now produces a real `.md` through `BricksAdapter`. Written
+> against `main @ 0.45.1`, updated through `0.46.0`.
 >
 > Scope was fixed with the maintainer in August 2026 and is deliberately narrow:
 > **Bricks is the one builder to support.** Elementor is parked. Divi, WPBakery,
@@ -11,13 +11,15 @@
 > post built with one of them simply has no Markdown representation.
 >
 > Phase 1 (the veto) does not depend on the reconnaissance and shipped on its
-> own. The reconnaissance in §6 is now done: the main query is confirmed
-> irrelevant to `render_data()`, the render-mode meta and the AJAX-save
-> behaviour are confirmed, the exact `render_data()` signature is confirmed,
-> and — the one genuinely new finding — **Bricks' own image lazy-loading
-> silently breaks every image conversion unless the adapter disables it around
-> the render call.** Phase 2 (the adapter) can now start from evidence rather
-> than from a hypothesis.
+> own. The reconnaissance in §6 closed with one genuinely new finding —
+> **Bricks' own image lazy-loading silently breaks every image conversion
+> unless the adapter disables it around the render call** — which Phase 2 (§7)
+> then implemented as `BricksAdapter`, verified live against a real WordPress
+> attachment (a raw external image reference never triggers Bricks' own
+> lazy-load filter, so reproducing the bug at all requires one — see
+> docs/staging-acceptance.md). §10's open question was also resolved during
+> Phase 2: foreign `the_content` filters are suppressed while Bricks' Post
+> Content element renders, behind a maintainer-reversible filter default on.
 
 ## 1. The problem
 
@@ -486,7 +488,7 @@ to "are my articles affected?" should take three seconds, not an audit.
 | **1** ✅ | The veto: `BuilderDetector`, the rule in `is_servable()`, the Stable `sysmda_markdown_unsupported_builders`. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor in `AWAITING_ADAPTER` | nothing |
 | **1b** ✅ | Panel labels — `BuilderCensus`, one query, transient-cached, admin only | nothing |
 | **0** ✅ | Bricks reconnaissance (§6) — all seven questions in §6.2 answered, including the lazy-load image defect and fix | nothing |
-| **2** | Bricks adapter; Bricks leaves the unsupported list | nothing — Phase 0 is closed |
+| **2** ✅ | Bricks adapter (`BricksAdapter`); `bricks` left `AWAITING_ADAPTER` in `0.46.0` | nothing — done |
 | **3** | Elementor — only on real demand, and only with a Pro staging | — |
 
 Phases 1 and 1b are shippable on their own and are most of the value: the
@@ -498,10 +500,24 @@ published without anyone noticing.
 1. ~~In Phase 1, do Bricks and Elementor 404 immediately?~~ **Resolved: yes.**
    Both shipped in `AWAITING_ADAPTER`. Consistent with the rest, and better than
    the current emptiness.
-2. Edge case 6: accept the related/CTA content that `the_content` reintroduces
+2. ~~Edge case 6: accept the related/CTA content that `the_content` reintroduces
    through the Post content element, or suppress foreign filters around the
-   render? §6.2.7 confirmed the mechanism (Post Content does call the full
-   `the_content` chain) and recommends suppressing foreign filters there for
-   consistency with Technical notes §4 — final call belongs to the maintainer
-   when Phase 2 is scoped, since it trades adapter complexity against fidelity
-   to what a real visitor sees.
+   render?~~ **Resolved in Phase 2, as a maintainer-reversible default rather
+   than a settled answer.** `BricksAdapter::maybe_suppress_content_filters()`
+   removes every callback foreign to WordPress core from `the_content` for the
+   duration of the render, but only when the tree actually contains a
+   `post-content` element (the common case — a page with no Post Content
+   element pays nothing) and only when the new
+   `sysmda_markdown_builder_suppress_content_filters` filter (Advanced,
+   default `true`) allows it. Verified live on `sma-bricks-instawp-co`: a
+   foreign `the_content` callback appending a "SUBSCRIBE NOW" block is present
+   in the Post Content element's output without the suppression and absent
+   with it, while `wpautop`/`do_shortcode` still run either way — confirming
+   the mechanism does what §6.2.7 predicted without breaking ordinary content
+   processing. The snapshot-and-restore has one sharp edge, caught by testing
+   rather than reasoning about it: `$wp_filter['the_content']` is a `WP_Hook`
+   object, so the snapshot must be a `clone`, not a bare property read — a
+   bare read shares the same object `remove_all_filters()` then empties,
+   silently turning the restore into a no-op. If a real Bricks site's
+   experience argues the default should be reversed, that is one filter call
+   away, not a code change.

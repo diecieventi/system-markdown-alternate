@@ -38,9 +38,19 @@ class ContentRenderer {
 	/** @var ShortcodeCleaner */
 	private $shortcodes;
 
-	public function __construct( BlockCleaner $blocks, ShortcodeCleaner $shortcodes ) {
-		$this->blocks     = $blocks;
-		$this->shortcodes = $shortcodes;
+	/** @var BuilderAdapter[] */
+	private $builder_adapters;
+
+	/**
+	 * @param BuilderAdapter[] $builder_adapters Page-builder adapters consulted
+	 *                         before the has_blocks() branch (see render()).
+	 *                         Empty by default: a site with no builder content
+	 *                         pays nothing for this.
+	 */
+	public function __construct( BlockCleaner $blocks, ShortcodeCleaner $shortcodes, array $builder_adapters = array() ) {
+		$this->blocks           = $blocks;
+		$this->shortcodes       = $shortcodes;
+		$this->builder_adapters = $builder_adapters;
 	}
 
 	/**
@@ -54,8 +64,17 @@ class ContentRenderer {
 		// 1. Remove excluded shortcodes from the raw source (including inside blocks).
 		$content = $this->shortcodes->strip( $content );
 
-		// 2. Parse and clean blocks, then render only the remaining blocks.
-		if ( has_blocks( $content ) ) {
+		$adapter = $this->matching_builder_adapter( $post );
+
+		// 2. A page builder that claims this post renders through its own API;
+		// otherwise the ordinary block/classic branches, exactly as before.
+		// Deliberately NOT hung off sysmda_markdown_source_content: that hook
+		// already ran above, and already-rendered builder HTML falling into the
+		// classic branch would pick up wpautop() plus a second do_shortcode()
+		// pass over content the builder already expanded.
+		if ( null !== $adapter ) {
+			$html = $adapter->render( $post );
+		} elseif ( has_blocks( $content ) ) {
 			$blocks = $this->blocks->clean( parse_blocks( $content ) );
 
 			$html = '';
@@ -74,6 +93,108 @@ class ContentRenderer {
 
 		/** Filters rendered clean HTML before conversion. */
 		return (string) apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
+	}
+
+	/**
+	 * The page-builder adapters actually in effect: the constructor's list,
+	 * passed through the same filter every consumer of the adapter list must
+	 * go through, so none of them can drift from what render() itself uses.
+	 *
+	 * $post is optional because one caller — excluded_builder_elements(),
+	 * computing the default exclusion selectors rather than deciding who
+	 * renders a specific post — has no post in view. A site filtering the
+	 * list by post is expected to treat a null $post as "no post-specific
+	 * narrowing", the same way it would treat any other context-free caller.
+	 *
+	 * @return BuilderAdapter[]
+	 */
+	private function effective_builder_adapters( ?\WP_Post $post = null ): array {
+		/**
+		 * Filters the page-builder adapters consulted before the block/classic
+		 * branches of the render pipeline, and consulted for the default
+		 * page-builder exclusion selectors (see excluded_builder_elements()).
+		 * Anchored to a stage of the current implementation — a future engine
+		 * may not have "adapters" at all.
+		 *
+		 * @param BuilderAdapter[] $adapters Adapters, tried in order.
+		 * @param \WP_Post|null    $post     Post being rendered, or null when
+		 *                                    the caller has no specific post in
+		 *                                    view (computing defaults).
+		 */
+		return (array) apply_filters( 'sysmda_markdown_builder_adapters', $this->builder_adapters, $post );
+	}
+
+	/**
+	 * The page-builder adapter that renders this post, or null when none does.
+	 *
+	 * Both conditions matter and neither substitutes for the other (see
+	 * BuilderAdapter): is_active() is required because with no renderer
+	 * present post_content is the correct answer regardless of what handles()
+	 * says, and handles() is required because a post merely storing a
+	 * builder's data while rendering ordinary content (e.g. "Render with
+	 * WordPress") must take the normal branches below.
+	 */
+	private function matching_builder_adapter( \WP_Post $post ): ?BuilderAdapter {
+		foreach ( $this->effective_builder_adapters( $post ) as $adapter ) {
+			if ( $adapter instanceof BuilderAdapter && $adapter->is_active() && $adapter->handles( $post ) ) {
+				return $adapter;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Cache-validator inputs contributed by the page-builder adapter that
+	 * renders this post, or an empty array when none does. Consumed by
+	 * MetadataBuilder::dependencies_fingerprint(), the same way a synced
+	 * pattern or an ACF field already is: this class holds the adapter list,
+	 * MetadataBuilder holds the fingerprint scheme, and this is the seam
+	 * between the two so neither has to duplicate the adapter lookup.
+	 *
+	 * @return string[]
+	 */
+	public function builder_dependency_parts( \WP_Post $post ): array {
+		$adapter = $this->matching_builder_adapter( $post );
+
+		if ( null === $adapter ) {
+			return array();
+		}
+
+		$parts = array();
+
+		foreach ( $adapter->fingerprint( $post ) as $key => $value ) {
+			if ( is_scalar( $value ) ) {
+				$parts[] = 'builder:' . $key . ':' . (string) $value;
+			}
+		}
+
+		return $parts;
+	}
+
+	/**
+	 * The matching adapter's cheap, unrendered text approximation, or '' when
+	 * no adapter claims this post. See BuilderAdapter::source_text() and
+	 * MetadataBuilder::description(), which calls this as the last-resort
+	 * fallback, after Rank Math and the excerpt.
+	 */
+	public function builder_source_text( \WP_Post $post ): string {
+		$adapter = $this->matching_builder_adapter( $post );
+
+		return null !== $adapter ? $adapter->source_text( $post ) : '';
+	}
+
+	/**
+	 * Whether a page-builder adapter renders this post. Lets a caller that
+	 * derives text from stored data (MetadataBuilder::description()'s last
+	 * fallback) know when `post_content` must NOT be trusted at all — a
+	 * builder-rendered post can hold stale prose left over from before it was
+	 * rebuilt, and summarising that would reproduce, in the description field,
+	 * the exact "confidently wrong" failure the page-builder veto exists to
+	 * prevent in the body (see AGENTS.md, "Product decisions").
+	 */
+	public function builder_handles( \WP_Post $post ): bool {
+		return null !== $this->matching_builder_adapter( $post );
 	}
 
 	/**
@@ -155,13 +276,19 @@ class ContentRenderer {
 	 *
 	 * The DOM pass returns its input untouched when nothing matched, so content
 	 * carrying no excluded class is never round-tripped through the DOM.
+	 *
+	 * Also carries the excluded-builder-element list (`brxe-form` and
+	 * friends): `BuilderAdapter::source_text()` wraps each extracted text leaf
+	 * in a span bearing that same class, precisely so this one pass — already
+	 * the description fallback's exclusion mechanism — reaches builder chrome
+	 * too, with no separate exclusion logic to keep in step.
 	 */
 	public function strip_excluded_content( string $html ): string {
 		if ( has_blocks( $html ) ) {
 			$html = serialize_blocks( $this->blocks->clean( parse_blocks( $html ) ) );
 		}
 
-		$classes = $this->excluded_classes();
+		$classes = array_merge( $this->excluded_classes(), $this->excluded_builder_elements() );
 
 		if ( ! $this->mentions_class( $html, $classes ) ) {
 			return $html;
@@ -215,7 +342,8 @@ class ContentRenderer {
 			return $html;
 		}
 
-		$removed = $this->remove_excluded_nodes( $dom, $this->excluded_classes() );
+		$excluded = array_merge( $this->excluded_classes(), $this->excluded_builder_elements() );
+		$removed  = $this->remove_excluded_nodes( $dom, $excluded );
 		$this->flatten_definition_lists( $dom );
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
@@ -285,6 +413,53 @@ class ContentRenderer {
 	private function excluded_classes(): array {
 		/** Filters CSS classes whose elements are removed from Markdown output. */
 		return (array) apply_filters( 'sysmda_markdown_excluded_classes', self::EXCLUDED_CLASSES );
+	}
+
+	/**
+	 * Filterable list of page-builder chrome removed the same way an excluded
+	 * CSS class is: a form, a nav menu, a share bar, a table of contents, a
+	 * breadcrumb trail — the builder equivalent of `sysmda_markdown_excluded_classes`,
+	 * kept as a separate filter because its defaults come from the builder
+	 * adapters themselves (`BuilderAdapter::element_selectors()`) rather than a
+	 * class constant, and because it applies to markup no shortcode or block
+	 * name can identify: a builder renders its own form element as ordinary
+	 * HTML, not a `[contact-form-7]` shortcode this pipeline could otherwise
+	 * strip before rendering.
+	 *
+	 * Additive, like the other three exclusion lists (the 0.40.0 rule): a
+	 * site's own entries join what the active adapters suggest, they do not
+	 * replace it.
+	 *
+	 * Reads the SAME filtered adapter list matching_builder_adapter() does
+	 * (via effective_builder_adapters()), not the constructor's raw list: a
+	 * site adding an adapter through `sysmda_markdown_builder_adapters` gets
+	 * that adapter's default selectors for free, and one removed through the
+	 * same filter stops contributing its (now unreachable) defaults. Reading
+	 * the raw list here would silently diverge from what actually renders.
+	 *
+	 * @return string[]
+	 */
+	private function excluded_builder_elements(): array {
+		$defaults = array();
+
+		foreach ( $this->effective_builder_adapters() as $adapter ) {
+			if ( $adapter instanceof BuilderAdapter ) {
+				$defaults = array_merge( $defaults, $adapter->element_selectors() );
+			}
+		}
+
+		$defaults = array_values( array_unique( $defaults ) );
+
+		/**
+		 * Filters CSS class tokens identifying page-builder chrome (forms, nav
+		 * menus, share bars, tables of contents, breadcrumbs) removed from
+		 * Markdown output, the same way `sysmda_markdown_excluded_classes`
+		 * removes any other excluded class. Defaults to what the active builder
+		 * adapters suggest via `element_selectors()`.
+		 *
+		 * @param string[] $selectors CSS class tokens (e.g. `brxe-form`).
+		 */
+		return (array) apply_filters( 'sysmda_markdown_excluded_builder_elements', $defaults );
 	}
 
 	/**

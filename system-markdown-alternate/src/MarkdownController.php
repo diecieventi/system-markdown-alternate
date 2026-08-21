@@ -965,7 +965,7 @@ class MarkdownController {
 	 */
 	private function date_is_strong_validator( \WP_Post $post ): bool {
 		if ( '' !== MetadataBuilder::taxonomies_fingerprint( $post )
-			|| '' !== MetadataBuilder::dependencies_fingerprint( $post ) ) {
+			|| '' !== $this->metadata->dependencies_fingerprint( $post ) ) {
 			return false;
 		}
 
@@ -1177,7 +1177,7 @@ class MarkdownController {
 		$taxonomies = MetadataBuilder::taxonomies_fingerprint( $post );
 		$taxonomies = '' !== $taxonomies ? '|' . $taxonomies : '';
 
-		$dependencies = MetadataBuilder::dependencies_fingerprint( $post );
+		$dependencies = $this->metadata->dependencies_fingerprint( $post );
 		$dependencies = '' !== $dependencies ? '|' . $dependencies : '';
 
 		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt . $taxonomies . $dependencies );

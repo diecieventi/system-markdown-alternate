@@ -622,6 +622,8 @@ if ( $GLOBALS['sysmda_has_vendor'] ) {
 }
 require __DIR__ . '/../src/BuilderDetector.php';
 require __DIR__ . '/../src/BuilderCensus.php';
+require __DIR__ . '/../src/BuilderAdapter.php';
+require __DIR__ . '/../src/BricksAdapter.php';
 require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
@@ -635,6 +637,8 @@ require __DIR__ . '/../src/MarkdownActions.php';
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
+use Diecieventi\SystemMarkdownAlternate\BricksAdapter;
+use Diecieventi\SystemMarkdownAlternate\BuilderAdapter;
 use Diecieventi\SystemMarkdownAlternate\BuilderCensus;
 use Diecieventi\SystemMarkdownAlternate\BuilderDetector;
 use Diecieventi\SystemMarkdownAlternate\CodeElementConverter;
@@ -3039,6 +3043,8 @@ check( 'builder: an ordinary post is claimed by nobody', '', BuilderDetector::de
 check( 'builder: an ordinary post stays servable', true, PostSupport::is_servable( $sysmda_builder_post() ) );
 
 // Every builder, through the meta that declares it renders the front end.
+// Detection itself does not care whether an adapter exists — that is a
+// question for the veto list, checked separately below.
 $sysmda_builder_modes = array(
 	'bricks'         => array( '_bricks_editor_mode' => 'bricks' ),
 	'elementor'      => array( '_elementor_edit_mode' => 'builder' ),
@@ -3051,7 +3057,20 @@ $sysmda_builder_modes = array(
 
 foreach ( $sysmda_builder_modes as $sysmda_builder => $sysmda_meta ) {
 	check( "builder: {$sysmda_builder} detected", $sysmda_builder, BuilderDetector::detect( $sysmda_builder_post( $sysmda_meta ) ) );
-	check( "builder: {$sysmda_builder} is not servable", false, PostSupport::is_servable( $sysmda_builder_post( $sysmda_meta ) ) );
+
+	// Bricks shipped an adapter (Phase 2) and left AWAITING_ADAPTER: a
+	// bricks-mode post is no longer vetoed by is_servable() on its own —
+	// PostSupport has no notion of "adapter active", only ContentRenderer's
+	// matching_builder_adapter() does (is_active() && handles()), which is
+	// exactly the asymmetry docs/page-builders-plan.md §3.2 describes. Every
+	// other detectable builder stays vetoed.
+	$sysmda_builder_expected_servable = ( 'bricks' === $sysmda_builder );
+
+	check(
+		"builder: {$sysmda_builder} is " . ( $sysmda_builder_expected_servable ? 'servable' : 'not servable' ),
+		$sysmda_builder_expected_servable,
+		PostSupport::is_servable( $sysmda_builder_post( $sysmda_meta ) )
+	);
 }
 
 // Rule 2, the one that would silently deny ordinary posts if it were wrong:
@@ -3137,12 +3156,14 @@ check(
 
 // The escape hatch. Dropping a key serves that builder's posts again (with
 // whatever the ordinary pipeline makes of them, which is the caller's choice);
-// an empty list switches the veto off entirely.
-$GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] = array( 'divi', 'wpbakery', 'oxygen', 'beaver-builder', 'breakdance', 'elementor' );
+// an empty list switches the veto off entirely. Elementor is the fixture here
+// (not Bricks, which is unconditionally servable since Phase 2 and would
+// prove nothing about the filter).
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] = array( 'divi', 'wpbakery', 'oxygen', 'beaver-builder', 'breakdance' );
 check(
 	'builder: the filter can opt one builder back in',
 	true,
-	PostSupport::is_servable( $sysmda_builder_post( array( '_bricks_editor_mode' => 'bricks' ) ) )
+	PostSupport::is_servable( $sysmda_builder_post( array( '_elementor_edit_mode' => 'builder' ) ) )
 );
 check(
 	'builder: the others stay vetoed',
@@ -3167,14 +3188,18 @@ check(
 );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] );
 
-// The two lists together must cover every builder the detector can name, or a
-// builder would be detected and then served anyway — the silent half-failure.
+// The two lists together must cover every builder the detector can name,
+// except the ones that shipped an adapter (currently only Bricks) — or an
+// UNSHIPPED builder would be detected and then served anyway, the silent
+// half-failure this invariant exists to catch. Naming the exception here
+// rather than widening it to "any builder not in either list" keeps the
+// guard live: it still fails the moment some OTHER builder falls through.
 check(
-	'builder: every detectable builder is vetoed by default',
+	'builder: every detectable builder without a shipped adapter is vetoed by default',
 	array(),
 	array_diff(
 		array_keys( BuilderDetector::RENDER_MODE_META ),
-		array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER )
+		array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER, array( 'bricks' ) )
 	)
 );
 check(
@@ -3278,6 +3303,344 @@ check(
 		array( 'post' )
 	)
 );
+
+// ─── Phase 2: the Bricks adapter ───────────────────────────────────────────
+
+check( 'builder: bricks is no longer in AWAITING_ADAPTER', false, in_array( 'bricks', BuilderDetector::AWAITING_ADAPTER, true ) );
+
+/*
+ * BricksAdapter's pure logic: everything that does not need \Bricks\Frontend
+ * or \Bricks\Database, neither of which exists in this harness. render() and
+ * the the_content-suppression mechanics are validated on staging instead
+ * (docs/staging-acceptance.md) — including the lazy-load guard itself, which
+ * needs a real WordPress attachment to reproduce at all (a raw external URL
+ * never enters Bricks' own wp_get_attachment_image_attributes hook, so it
+ * never exercises the bug; that gap is exactly why this was verified live
+ * rather than assumed from the reconnaissance notes).
+ */
+
+$sysmda_bricks = new BricksAdapter();
+
+check( 'bricks adapter: inactive in a harness with no Bricks classes', false, $sysmda_bricks->is_active() );
+check( 'bricks adapter: default excluded-element selectors', BricksAdapter::DEFAULT_EXCLUDED_ELEMENTS, $sysmda_bricks->element_selectors() );
+
+$sysmda_bricks_post = static function ( $tree, $mode = 'bricks', $id = 950 ) {
+	$GLOBALS['sysmda_test_meta'][ $id ] = array(
+		'_bricks_editor_mode'    => $mode,
+		'_bricks_page_content_2' => $tree,
+	);
+
+	return new WP_Post(
+		array(
+			'ID'           => $id,
+			'post_type'    => 'page',
+			'post_status'  => 'publish',
+			// Deliberately stale: a real Bricks post's post_content is either
+			// empty or leftover prose from before it was rebuilt. The
+			// description-fallback test below asserts this is never read.
+			'post_content' => 'STALE PROSE FROM BEFORE THE REBUILD',
+		)
+	);
+};
+
+$sysmda_bricks_tree = array(
+	array(
+		'id'       => 'h1',
+		'name'     => 'heading',
+		'settings' => array( 'text' => 'A heading' ),
+	),
+	array(
+		'id'       => 'ex1',
+		'name'     => 'text-basic',
+		'settings' => array(
+			'text'        => 'Hidden text',
+			'_cssClasses' => 'md-exclude',
+		),
+	),
+	// No 'text' setting: contributes nothing to source_text(), same as a real
+	// form element (its fields carry no simple text leaf).
+	array(
+		'id'       => 'form1',
+		'name'     => 'form',
+		'settings' => array(),
+	),
+);
+
+$sysmda_bricks_page = $sysmda_bricks_post( $sysmda_bricks_tree );
+
+check( 'bricks adapter: handles a post in bricks render mode', true, $sysmda_bricks->handles( $sysmda_bricks_page ) );
+
+// Rule 2 (BuilderDetector): a post switched back to "Render with WordPress"
+// keeps its tree but must not be claimed.
+$sysmda_wp_mode_page = $sysmda_bricks_post( $sysmda_bricks_tree, 'wordpress', 951 );
+check( 'bricks adapter: does not handle a post switched to Render with WordPress', false, $sysmda_bricks->handles( $sysmda_wp_mode_page ) );
+
+// source_text(): only the claimed text leaves, each wrapped in the same
+// brxe-{name} class (plus any custom class) Bricks itself emits, so the
+// shared exclusion pass — not a separate one — can reach md-exclude here too.
+check(
+	'bricks adapter: source_text extracts brxe-classed spans for the leaves that carry text',
+	'<span class="brxe-heading">A heading</span> <span class="brxe-text-basic md-exclude">Hidden text</span>',
+	$sysmda_bricks->source_text( $sysmda_bricks_page )
+);
+check( 'bricks adapter: source_text is empty for a post it does not handle', '', $sysmda_bricks->source_text( $sysmda_wp_mode_page ) );
+
+// fingerprint(): empty when unclaimed (contributes nothing to a post it does
+// not render); mode + a blob hash when claimed.
+check( 'bricks adapter: fingerprint is empty when not handled', array(), $sysmda_bricks->fingerprint( $sysmda_wp_mode_page ) );
+
+$sysmda_fp1 = $sysmda_bricks->fingerprint( $sysmda_bricks_page );
+check( 'bricks adapter: fingerprint carries the render mode', 'bricks', isset( $sysmda_fp1['mode'] ) ? $sysmda_fp1['mode'] : null );
+check( 'bricks adapter: fingerprint carries a blob hash', true, isset( $sysmda_fp1['blob'] ) && '' !== $sysmda_fp1['blob'] );
+check( 'bricks adapter: fingerprint has no templates key without a template element', false, isset( $sysmda_fp1['templates'] ) );
+
+// Stable for an unchanged tree — a different post ID carrying the identical
+// tree and mode must reproduce it exactly, or the validator would drift on
+// every request for no reason.
+check(
+	'bricks adapter: fingerprint is stable for an unchanged tree',
+	$sysmda_fp1,
+	$sysmda_bricks->fingerprint( $sysmda_bricks_post( $sysmda_bricks_tree, 'bricks', 952 ) )
+);
+
+// A tree edit that touches only a setting source_text() never reads must
+// still move the blob hash: the rendered output can change from it.
+$sysmda_bricks_tree_2                            = $sysmda_bricks_tree;
+$sysmda_bricks_tree_2[0]['settings']['text']      = 'A different heading';
+$sysmda_fp2                                       = $sysmda_bricks->fingerprint( $sysmda_bricks_post( $sysmda_bricks_tree_2, 'bricks', 953 ) );
+check( 'bricks adapter: fingerprint moves when the tree changes', true, $sysmda_fp1['blob'] !== $sysmda_fp2['blob'] );
+
+// Edge case 11: a referenced `template` element's own post is out-of-post
+// data (confirmed live: the `template` element's `settings.template` holds
+// the referenced post ID), so its modification date has to enter the
+// fingerprint the same way a synced pattern's does in MetadataBuilder.
+$GLOBALS['sysmda_test_posts'][777] = new WP_Post(
+	array(
+		'ID'                => 777,
+		'post_type'         => 'bricks_template',
+		'post_modified_gmt' => '2026-08-01 10:00:00',
+	)
+);
+$sysmda_tpl_tree = array(
+	array(
+		'id'       => 't1',
+		'name'     => 'template',
+		'settings' => array( 'template' => 777 ),
+	),
+);
+
+$sysmda_tpl_page   = $sysmda_bricks_post( $sysmda_tpl_tree, 'bricks', 954 );
+$sysmda_tpl_before = $sysmda_bricks->fingerprint( $sysmda_tpl_page );
+check( 'bricks adapter: fingerprint carries a referenced template', true, isset( $sysmda_tpl_before['templates'] ) && '' !== $sysmda_tpl_before['templates'] );
+
+$GLOBALS['sysmda_test_posts'][777]->post_modified_gmt = '2026-08-02 11:00:00';
+check(
+	'bricks adapter: editing the referenced template moves the fingerprint even though the page tree is untouched',
+	true,
+	$sysmda_tpl_before['templates'] !== $sysmda_bricks->fingerprint( $sysmda_tpl_page )['templates']
+);
+
+// tree_has_post_content_element(): gates whether the_content suppression is
+// even attempted (see maybe_suppress_content_filters(), validated on staging
+// — it needs live WP_Hook/add_filter/remove_all_filters, none of which this
+// harness has).
+$sysmda_has_pc_method = sysmda_reflection_method( BricksAdapter::class, 'tree_has_post_content_element' );
+check( 'bricks adapter: detects a post-content element', true, $sysmda_has_pc_method->invoke( null, array( array( 'name' => 'post-content' ) ) ) );
+check( 'bricks adapter: an ordinary tree has none', false, $sysmda_has_pc_method->invoke( null, $sysmda_bricks_tree ) );
+
+// ─── ContentRenderer: the page-builder adapter seam ────────────────────────
+
+/*
+ * render_block() and wpautop() are never stubbed in this harness (nothing
+ * exercising the full public render() has needed them before), so every test
+ * below feeds render() a post the fake adapter claims — the one branch that
+ * never reaches either function. The "no adapter claims this post" behaviour
+ * is covered instead through the public builder_* accessors, which never
+ * touch the has_blocks()/classic branches at all.
+ */
+class SysmdaFakeBuilderAdapter implements BuilderAdapter {
+	public $active      = true;
+	public $claims_id   = null;
+	public $rendered    = '<p>FAKE BUILDER OUTPUT</p>';
+	public $fingerprint = array();
+	public $text        = '';
+	public $selectors   = array();
+
+	public function is_active(): bool {
+		return $this->active;
+	}
+
+	public function handles( \WP_Post $post ): bool {
+		return $post->ID === $this->claims_id;
+	}
+
+	public function render( \WP_Post $post ): string {
+		return $this->rendered;
+	}
+
+	public function fingerprint( \WP_Post $post ): array {
+		return $this->handles( $post ) ? $this->fingerprint : array();
+	}
+
+	public function source_text( \WP_Post $post ): string {
+		return $this->handles( $post ) ? $this->text : '';
+	}
+
+	public function element_selectors(): array {
+		return $this->selectors;
+	}
+}
+
+$sysmda_fake_adapter            = new SysmdaFakeBuilderAdapter();
+$sysmda_fake_adapter->claims_id = 960;
+
+$sysmda_adapter_renderer = new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner(), array( $sysmda_fake_adapter ) );
+
+$sysmda_claimed_post = new WP_Post(
+	array(
+		'ID'           => 960,
+		'permalink'    => 'https://example.com/claimed/',
+		'post_content' => 'IGNORED: THE ADAPTER RENDERS INSTEAD',
+	)
+);
+$sysmda_unclaimed_post = new WP_Post(
+	array(
+		'ID'        => 961,
+		'permalink' => 'https://example.com/other/',
+	)
+);
+
+check(
+	'renderer: a claimed post is rendered through the adapter, not has_blocks()/wpautop()',
+	'<p>FAKE BUILDER OUTPUT</p>',
+	$sysmda_adapter_renderer->render( $sysmda_claimed_post )
+);
+
+// is_active() gates the adapter just as much as handles() does: with the
+// vendor "unavailable", the ordinary pipeline is the correct answer — the
+// asymmetry docs/page-builders-plan.md §3.2 describes (adapter needs the
+// vendor active; the veto does not).
+$sysmda_fake_adapter->active = false;
+check( 'renderer: builder_handles is false when the adapter reports inactive', false, $sysmda_adapter_renderer->builder_handles( $sysmda_claimed_post ) );
+$sysmda_fake_adapter->active = true;
+check( 'renderer: builder_handles is true for a claimed, active adapter', true, $sysmda_adapter_renderer->builder_handles( $sysmda_claimed_post ) );
+
+check( 'renderer: builder_handles is false for a post no adapter claims', false, $sysmda_adapter_renderer->builder_handles( $sysmda_unclaimed_post ) );
+check( 'renderer: builder_source_text is empty for a post no adapter claims', '', $sysmda_adapter_renderer->builder_source_text( $sysmda_unclaimed_post ) );
+check( 'renderer: builder_dependency_parts is empty for a post no adapter claims', array(), $sysmda_adapter_renderer->builder_dependency_parts( $sysmda_unclaimed_post ) );
+
+// sysmda_markdown_builder_adapters lets a site replace the adapter list
+// entirely; an empty override means no post is ever claimed.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] = array();
+check( 'renderer: the adapter list filter can clear it entirely', false, $sysmda_adapter_renderer->builder_handles( $sysmda_claimed_post ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] );
+
+// builder_dependency_parts(): scalars only, prefixed so they cannot collide
+// with the other "kind:value" parts MetadataBuilder::dependencies_fingerprint()
+// already assembles from synced patterns, the featured image and ACF fields.
+$sysmda_fake_adapter->fingerprint = array(
+	'mode' => 'bricks',
+	'blob' => 'abc123',
+	'skip' => array( 'not a scalar' ), // Must be dropped, not fatal.
+);
+check(
+	'renderer: builder_dependency_parts prefixes scalars and drops the rest',
+	array( 'builder:mode:bricks', 'builder:blob:abc123' ),
+	$sysmda_adapter_renderer->builder_dependency_parts( $sysmda_claimed_post )
+);
+
+$sysmda_fake_adapter->text = 'adapter text';
+check( 'renderer: builder_source_text delegates to the adapter', 'adapter text', $sysmda_adapter_renderer->builder_source_text( $sysmda_claimed_post ) );
+
+// ─── ContentRenderer: excluded builder elements ────────────────────────────
+//
+// Additive to the ordinary excluded-classes list (the 0.40.0 rule), merged
+// into the SAME DOM removal pass process_dom() already runs — reusing the
+// reflection harness already established for it above.
+
+$sysmda_fake_adapter->selectors = array( 'brxe-form' );
+$sysmda_builder_dom_method      = sysmda_reflection_method( ContentRenderer::class, 'process_dom' );
+$sysmda_builder_dom             = static function ( $html ) use ( $sysmda_adapter_renderer, $sysmda_builder_dom_method ) {
+	return $sysmda_builder_dom_method->invoke( $sysmda_adapter_renderer, $html, 'https://example.com/claimed/' );
+};
+
+check(
+	'renderer: a default builder-element selector is removed, sibling kept',
+	'<p>keep</p>',
+	$sysmda_builder_dom( '<p>keep</p><div class="brxe-form">drop</div>' )
+);
+check(
+	'renderer: md-exclude keeps working alongside builder-element exclusion',
+	'<p>keep</p>',
+	$sysmda_builder_dom( '<p>keep</p><div class="md-exclude">drop</div>' )
+);
+
+// The panel's textarea adds to what the adapters suggest, exactly like the
+// other three exclusion lists — never replaces it.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_builder_elements'] = array( 'brxe-form', 'brxe-nav-menu' );
+check(
+	'renderer: the excluded-builder-elements filter can add another selector',
+	'<p>keep</p>',
+	$sysmda_builder_dom( '<p>keep</p><div class="brxe-nav-menu">drop</div>' )
+);
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_builder_elements'] );
+$sysmda_fake_adapter->selectors = array();
+
+// excluded_builder_elements() must read the SAME filtered adapter list
+// matching_builder_adapter() renders through, not the constructor's raw list
+// — otherwise an adapter added via sysmda_markdown_builder_adapters never
+// contributes its default selectors (its chrome leaks into every Markdown
+// document), and one removed through the same filter keeps contributing
+// selectors for content that can no longer even reach this pipeline (caught
+// by Codex on PR #103).
+$sysmda_extra_adapter            = new SysmdaFakeBuilderAdapter();
+$sysmda_extra_adapter->selectors = array( 'fake-extra-chrome' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] = array( $sysmda_fake_adapter, $sysmda_extra_adapter );
+
+check(
+	'renderer: a builder adapter ADDED only through the filter still contributes its default selectors',
+	'<p>keep</p>',
+	$sysmda_builder_dom( '<p>keep</p><div class="fake-extra-chrome">drop</div>' )
+);
+
+// The inverse: an adapter present in the constructor's list but dropped by
+// the filter must stop contributing its defaults too.
+$sysmda_fake_adapter->selectors = array( 'brxe-form' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] = array();
+check(
+	'renderer: a builder adapter REMOVED by the filter stops contributing its default selectors',
+	'<p>keep</p><div class="brxe-form">no longer excluded by default</div>',
+	$sysmda_builder_dom( '<p>keep</p><div class="brxe-form">no longer excluded by default</div>' )
+);
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] );
+$sysmda_fake_adapter->selectors = array();
+
+// ─── MetadataBuilder: builder fingerprint + description fallback ──────────
+
+$sysmda_builder_metadata = new MetadataBuilder( new ShortcodeCleaner(), $sysmda_adapter_renderer );
+
+check(
+	'metadata: dependencies_fingerprint folds in the builder adapter parts',
+	true,
+	'' !== $sysmda_builder_metadata->dependencies_fingerprint( $sysmda_claimed_post )
+);
+check(
+	'metadata: dependencies_fingerprint is empty for a post no adapter claims',
+	'',
+	$sysmda_builder_metadata->dependencies_fingerprint( $sysmda_unclaimed_post )
+);
+
+// description(): the last-resort fallback must NEVER read post_content for a
+// builder-handled post, even though it normally would — a builder post can
+// hold stale prose left over from before it was rebuilt (AGENTS.md, "Product
+// decisions": the exact "confidently wrong" failure the page-builder veto
+// exists to prevent, reproduced here in the description field rather than
+// the body if this were skipped).
+check( 'metadata: description prefers the adapter text over stale post_content', 'adapter text', $sysmda_builder_metadata->description( $sysmda_claimed_post ) );
+
+$sysmda_fake_adapter->text = '';
+check( 'metadata: description is empty rather than falling back to stale post_content', '', $sysmda_builder_metadata->description( $sysmda_claimed_post ) );
 
 // ─── Shortcodes::render_download ──────────────────────────────────────────────
 
@@ -4705,6 +5068,7 @@ $sysmda_stable_hooks = array(
 	'sysmda_markdown_excluded_shortcodes'   => 1,
 	'sysmda_markdown_excluded_block_names'  => 1,
 	'sysmda_markdown_excluded_classes'      => 1,
+	'sysmda_markdown_excluded_builder_elements' => 1,
 	'sysmda_front_matter_enabled'           => 2,
 	'sysmda_front_matter_taxonomy_slugs'    => 2,
 	'sysmda_acf_subtitle_key'               => 2,

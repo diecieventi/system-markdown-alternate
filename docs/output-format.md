@@ -345,10 +345,16 @@ Removed from the body unless the corresponding filter changes them:
   `formidable`, `mc4wp_form`, `mailpoet_form`, `newsletter_form`, `sibwp_form`.
 - **CSS classes** (`sysmda_markdown_excluded_classes`): `no-md`, `md-exclude`,
   `exclude-from-markdown`.
+- **Page-builder elements** (`sysmda_markdown_excluded_builder_elements`,
+  since `0.46.0`): `brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`,
+  `brxe-post-sharing`, `brxe-post-toc`, `brxe-breadcrumbs` — Bricks' own
+  chrome, removed by the same class-based DOM pass as the CSS classes above.
+  Defaults come from the active builder adapter(s)
+  (`BuilderAdapter::element_selectors()`), not a fixed constant.
 
-Since `0.40.0` the panel's three exclusion textareas **add to** these lists
-instead of replacing them, so the defaults above always apply; the matching
-filter is what removes one.
+Since `0.40.0` the panel's exclusion textareas **add to** these lists instead
+of replacing them, so the defaults above always apply; the matching filter is
+what removes one.
 
 **None of these are stripped inside `<pre>` or `<code>`** (also `0.40.0`): a tag
 in a code sample is being shown, not used, and the same masking already keeps it
@@ -383,7 +389,7 @@ non-standard post format** (aside, audio, chat, gallery, image, link, quote,
 status, video; filterable through `sysmda_markdown_excluded_post_formats`).
 
 Since `0.45.0` it also excludes any post **rendered by a page builder the
-plugin has no adapter for** — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver
+plugin has no adapter for** — Elementor, Divi, WPBakery, Oxygen, Beaver
 Builder and Breakdance, filterable through
 `sysmda_markdown_unsupported_builders`. Such a post has no Markdown
 representation: its content does not live in `post_content` at all, or lives
@@ -391,6 +397,15 @@ there as the builder's own layout shortcodes, and the document this format
 describes cannot be produced from either. Detection is per post and keys on the
 builder's render mode, so a post that merely *stores* builder data while
 rendering ordinary content is unaffected.
+
+Since `0.46.0` **Bricks is no longer in that list**: a Bricks-mode post is
+rendered through Bricks' own API (`BricksAdapter`) and produces a document with
+exactly the same shape described in this file — front matter, `# Title`, body.
+The body pipeline differs only in one respect worth knowing: the front-matter
+`description` fallback and `/llms.txt` entries may draw on a cheap, unrendered
+approximation of the post's text (`BuilderAdapter::source_text()`) rather than
+`post_content`, which a builder-rendered post cannot supply reliably. Nothing
+about the emitted keys, their order or the escaping rules changes.
 
 Markdown is served at the `.md` URL and, through negotiation, at the canonical
 permalink. It is **never** served at URL variants of the post — its feed, its

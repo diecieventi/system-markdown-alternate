@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.45.1
+Stable tag: 0.46.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,7 +33,8 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
 * **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
-* **Page builders are handled honestly**: a post rendered by Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance has no Markdown representation — its content is not in `post_content`, or is there as the builder's own layout shortcodes — so it returns 404 instead of an empty or misleading document, and it stays out of `/llms.txt`, the alternate links and the shortcodes. Detection is per post, never per post type: a site that builds its pages with a builder while its articles stay in the ordinary editor keeps every one of those articles.
+* **Bricks pages get a real `.md`**: rendered through Bricks' own API (never re-implemented), with the same excluded-shortcode/excluded-class rules as everything else, plus a new "excluded builder elements" list for Bricks chrome (forms, nav menus, share bars, tables of contents, breadcrumbs). A post switched back to *Render with WordPress* is unaffected. Detection is per post, never per post type: a site that builds its pages with Bricks while its articles stay in the ordinary editor keeps every one of those articles.
+* **Other page builders are handled honestly**: a post rendered by Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance has no Markdown representation — its content is not in `post_content`, or is there as the builder's own layout shortcodes — so it returns 404 instead of an empty or misleading document, and it stays out of `/llms.txt`, the alternate links and the shortcodes.
 * **Admin panel** to choose which post types are exposed and to tune cache, exclusions and headers — no post type is exposed until you pick one. Each type shows what its published posts are actually built with (for example *12 Bricks, 3 Gutenberg*), so a page builder that costs you the Markdown version is visible before it surprises you.
 * **Shortcodes** `[sysmda_md_url]` (the Markdown URL), `[sysmda_md_download]` (a bare download link), and `[sysmda_md_actions]` (an opt-in Copy as Markdown split button with copy, new-tab view and download actions).
 * **Optional integrations**, shown only when the related plugin is active:
@@ -64,9 +65,13 @@ Anything the endpoint would not be able to serve honestly:
 * drafts, pending and private content, and password-protected posts;
 * media attachments (always excluded);
 * posts with a **non-standard post format** — aside, status, quote, link, gallery, image, video, audio, chat. These are short snippets, usually untitled, with no editorial body worth serving as a document. Use the `sysmda_markdown_excluded_post_formats` filter to change that;
-* posts **rendered by a page builder** — Bricks, Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance. Their content is stored outside `post_content`, or stored in it as the builder's own layout shortcodes, so the Markdown would come out either empty or full of layout wrappers converted as prose. A 404 is the honest answer; use the `sysmda_markdown_unsupported_builders` filter if you would rather have the empty document.
+* posts **rendered by an unsupported page builder** — Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance. Their content is stored outside `post_content`, or stored in it as the builder's own layout shortcodes, so the Markdown would come out either empty or full of layout wrappers converted as prose. A 404 is the honest answer; use the `sysmda_markdown_unsupported_builders` filter if you would rather have the empty document. **Bricks pages are supported** and get a real `.md`, rendered through Bricks' own API — see the next question.
 
 That last rule is decided **per post**, from the builder's own render mode. Activating a builder does not affect posts you did not build with it, and a post you switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored. Nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page.
+
+= How does the Bricks `.md` work? =
+
+The `.md` is built by calling Bricks' own `\Bricks\Frontend::render_data()` on the page's stored element tree — the plugin never re-implements Bricks' elements. The existing `md-exclude` CSS class already works on any Bricks element (set it in the element's *CSS Classes* field); a new **Excluded builder elements** list under *Settings → Markdown Alternate → Markdown output* additionally strips Bricks chrome by default — forms, nav menus, share bars, tables of contents, breadcrumbs — the same way excluded CSS classes are stripped, and it only adds to that list, never replaces it. A page switched to *Render with WordPress* is served from `post_content` as usual, whether or not Bricks data is still stored on it.
 
 Markdown is also never served for URL *variants* of a post — its feed, its oEmbed view, its trackback endpoint, paged comments and the sub-pages of a post split with `<!--nextpage-->` — even with `Accept: text/markdown`. Only the canonical permalink and its `.md` URL return Markdown.
 
@@ -182,6 +187,14 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.46.0 =
+
+* Added: Bricks pages now get a real `.md`. Rendered through Bricks' own API, never re-implemented; a post switched back to *Render with WordPress* is unaffected. Fixes the one defect the reconnaissance found: Bricks' own image lazy-loading is disabled for the render, so every Bricks image converts to a normal `![](url)` instead of a meaningless placeholder.
+* Added: `sysmda_markdown_excluded_builder_elements` (Stable), a new panel field and filter that strips Bricks chrome (forms, nav menus, share bars, tables of contents, breadcrumbs) by default, additive to the built-in list like the other three exclusion filters. The existing `md-exclude` CSS class already worked on Bricks elements with no code change.
+* Added: the cache validator now covers Bricks content — render mode, tree hash and any referenced template's modification date — so a mode flip or a template edit moves the ETag correctly.
+* Added: the front-matter `description` fallback and `/llms.txt` entries have a Bricks-aware last resort (after Rank Math and the excerpt) that never reads a Bricks post's `post_content`, which can hold stale prose left over from before the page was rebuilt.
+* Added: `sysmda_markdown_builder_adapters` and `sysmda_markdown_builder_suppress_content_filters` (both Advanced) as the new extension points; the latter, default on, keeps related/CTA content out of Bricks' Post Content element the same way the rest of the pipeline avoids it.
+
 = 0.45.1 =
 
 * Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the button instead of below it. The menu was anchored to the small caret rather than to the split button as a whole, so it started halfway across the control and hung out over the text beside it. It now lines up with the button's own edge and drops straight below it. The fallbacks for a button close to the screen edge run only when they are actually needed: the menu switches to the opposite alignment, flips above the button when there is no room below, and where there is room on neither side it caps its height and scrolls instead of covering the button. Right-to-left sites mirror both alignments.
@@ -192,10 +205,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Added: posts rendered by a page builder no longer expose a Markdown version. Bricks, Elementor, Beaver Builder, Oxygen and Breakdance keep their content outside the post content, so the `.md` was front matter and a bare heading; Divi and WPBakery fill the post content with their own layout shortcodes, so the `.md` was layout scaffolding converted as prose. Such a post now returns 404 and leaves `/llms.txt`, the discovery links, the shortcodes and the dynamic tag — an honest "there isn't one" rather than an empty or misleading document. The rule is decided **per post**, from the builder's own render mode: activating a builder does not affect the posts you did not build with it, a post switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored, and nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page. New `sysmda_markdown_unsupported_builders` filter (Stable) serves them anyway if you prefer.
 * Added: the *Enabled content types* setting now shows what each type's published posts are actually built with — for example *12 Bricks, 3 Gutenberg* — with a warning naming any builder that costs the Markdown version. Advisory only: it never changes what is served.
 * Fixed: rebuilding `/llms.txt` primed the post meta cache only in enriched mode, so the new page-builder check cost one database query per candidate post on the basic path — up to 2500 per content type on a cold index. Both caches are now primed for the whole batch.
-
-= 0.44.0 =
-
-* Fixed: a link card whose whole surface is clickable — the "stretched link" pattern used by link-preview, related-posts and card plugins — no longer converts to a link with no text. The clickable area is an empty anchor laid over the card, with the title and summary as separate elements, so the Markdown carried `[](url "Title")` while the title sat in a paragraph of its own further down. An anchor that renders nothing now takes the accessible name its markup declares (`aria-label`, otherwise `title`) as its link text. Anchors with no declared name are left exactly as they were, so decorative links are never turned into visible URLs, and nothing is rewritten inside code samples.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
