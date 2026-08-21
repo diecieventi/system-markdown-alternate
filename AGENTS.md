@@ -656,6 +656,56 @@ The v1 scope is done and widely exceeded. Implemented:
   both, configurable per key?), whether serialized/array meta values need
   special handling before they can be treated as text, and whether this
   should subsume the two existing ACF-specific fields or sit beside them.
+- **Ideas surfaced by reviewing a comparable plugin** (`Serve Markdown` /
+  `serve-md`, wordpress.org, `akumarjain`, v1.0 — read in full August 2026;
+  not a plan, three separate candidates recorded for future evaluation, none
+  built). It is smaller and less mature than this plugin on every engineering
+  axis that matters here — regex-based HTML→Markdown conversion instead of a
+  DOM pipeline, `the_content` instead of `render_block()` (reintroducing
+  exactly the injected related/CTA content this plugin's rendering choice
+  avoids, see "Technical notes" 4), no caching, no `ETag`/`304`, and an
+  `Accept` parser that never compares against `text/html`'s own q-value and
+  sends no `Vary`. None of that is worth adopting. Three narrower ideas are:
+  - **Per-post opt-out.** A single postmeta checkbox in a meta box
+    (`_serve_md_disabled` in their plugin), independent of every exclusion
+    axis this plugin already has (post type, post format, taxonomy
+    inclusion, page-builder veto, password). None of those cover "this one
+    post, for an editorial reason, regardless of type or category." Cheap
+    and additive; the natural implementation reuses the existing
+    `sysmda_post_is_servable` veto filter (see the anonymous-representation
+    decision) rather than adding a new gate to `is_servable()`.
+  - **Category/tag exclusion.** Excluding whole taxonomy terms from being
+    served is an axis this plugin does not have at all: the only
+    taxonomy-shaped gates today are post format
+    (`PostSupport::EXCLUDED_POST_FORMATS`) and the opt-in custom-taxonomy
+    *inclusion* in front matter — neither lets an owner say "nothing in
+    category X is servable." Same discipline as the generic-meta-fields item
+    above: explicit, opt-in, additive, never auto-detected.
+  - **A per-request crawler log — evaluated and NOT proposed as their
+    plugin builds it, because it reopens a decision already made on
+    purpose.** Their `Serve_MD_Logger` stores, per Markdown request, the raw
+    IP address, the full User-Agent string and a day-resolution-or-finer
+    timestamp in a dedicated DB table (with retention/row-count/size caps
+    and a stats UI). That is exactly what "`.md` hit counter is count-only"
+    (Product decisions) forbids here, for a stated reason: aggregate-only,
+    no IP, no raw UA, no per-visitor identifier, so the feature stays
+    outside GDPR scope with no consent flow needed. It is also exactly the
+    shape "Server-side diagnostics" (below) already considered and
+    declined, closing with "the only shipped request-side telemetry remains
+    the count-only `.md` hit counter." Reopening either is not proposed.
+    What IS worth evaluating, because it stays inside both boundaries:
+    extending `HitCounter`'s daily buckets from the current bot/human split
+    to a **per-known-bot-name breakdown** (`ClaudeBot`/`GPTBot`/
+    `PerplexityBot`/… — the same detection list `is_bot()` already
+    classifies against, one level more specific), still aggregate-only,
+    still no IP or raw UA retained, same 90-day prune. This would also
+    sharpen exactly the signal the homepage-index postponement above is
+    explicitly waiting on ("re-evaluate only once the `.md` hit counter
+    provides real demand data") — which bot is asking matters for that
+    decision, not just how many. Not scoped further than this: whether the
+    panel shows a fixed bot list or only bots seen at least once, and how
+    far `sysmda_md_hits_bot_patterns` should reach into naming the buckets,
+    are both open.
 - Once live on wordpress.org: translate the strings into Italian on
   translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
   gets built — no translation files live in this repo.
