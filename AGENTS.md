@@ -624,6 +624,38 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ## Open / to do (towards wordpress.org)
 
+- **Generic "extra custom fields" mechanism** (proposed August 2026 — the next
+  priority candidate integration, superseding the vaguer "evaluate new
+  integrations" placeholder that used to sit in "To check next time" below).
+  Motivated by a real conversation about GeneratePress + Blocks sites: a page
+  built from a GeneratePress Elements template routinely mixes `post_content`
+  with pieces coming from ACF fields, JetEngine dynamic fields, or WordPress's
+  own native Custom Fields UI — and today only the two ACF fields the built-in
+  integration knows about (`sysmda_acf_subtitle_key`, `sysmda_acf_tldr_key`)
+  ever reach the document; everything else silently drops out, the same way
+  theme/template chrome correctly does (see "What about a single-post
+  template built with a page builder?" in the page-builders documentation —
+  this is the one case on the other side of that line, where the missing
+  piece is real content, not chrome).
+  The shape that follows from this: **one generic mechanism, not N per-plugin
+  integrations.** JetEngine, ACF and native Custom Fields are all, underneath,
+  ordinary `post meta` — a "JetEngine integration" and a "Meta Box
+  integration" would just be the same 20 lines wearing a different name. A
+  single panel field where the site owner lists the meta **keys** to pull in
+  — regardless of which plugin wrote them — covers all of them at once, feeds
+  the document through the same `sysmda_markdown_source_content` seam the ACF
+  integration already proves out, and costs nothing to sites that never touch
+  it (empty by default, exactly like the taxonomy selection).
+  **Explicit, opt-in, never auto-detected** — the same discipline as the
+  custom-taxonomy selection and every other place this file has that rule:
+  arbitrary post meta is full of internal/plugin-plumbing keys (cache
+  markers, internal IDs, serialized UI state) that would pollute the document
+  if the plugin tried to guess which ones are content. Not yet scoped, and
+  deliberately left open rather than guessed at here: where the pulled values
+  land in the document (front matter? a preamble like ACF's subtitle/TL;DR?
+  both, configurable per key?), whether serialized/array meta values need
+  special handling before they can be treated as text, and whether this
+  should subsume the two existing ACF-specific fields or sit beside them.
 - Once live on wordpress.org: translate the strings into Italian on
   translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
   gets built — no translation files live in this repo.
@@ -806,8 +838,6 @@ The v1 scope is done and widely exceeded. Implemented:
   class, not as a block renderer, so it covers embed blocks from other plugins
   and already-resolved markup for free. Nothing of the engine proposal survives
   it.
-- **Evaluate new integrations**: beyond ACF/GenerateBlocks, consider what else
-  might be worth a dedicated integration (candidates TBD).
 - **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
   mode, consider what else is worth adding (candidates TBD, see also the LLM
   signals idea above).
