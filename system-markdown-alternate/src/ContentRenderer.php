@@ -96,6 +96,35 @@ class ContentRenderer {
 	}
 
 	/**
+	 * The page-builder adapters actually in effect: the constructor's list,
+	 * passed through the same filter every consumer of the adapter list must
+	 * go through, so none of them can drift from what render() itself uses.
+	 *
+	 * $post is optional because one caller — excluded_builder_elements(),
+	 * computing the default exclusion selectors rather than deciding who
+	 * renders a specific post — has no post in view. A site filtering the
+	 * list by post is expected to treat a null $post as "no post-specific
+	 * narrowing", the same way it would treat any other context-free caller.
+	 *
+	 * @return BuilderAdapter[]
+	 */
+	private function effective_builder_adapters( ?\WP_Post $post = null ): array {
+		/**
+		 * Filters the page-builder adapters consulted before the block/classic
+		 * branches of the render pipeline, and consulted for the default
+		 * page-builder exclusion selectors (see excluded_builder_elements()).
+		 * Anchored to a stage of the current implementation — a future engine
+		 * may not have "adapters" at all.
+		 *
+		 * @param BuilderAdapter[] $adapters Adapters, tried in order.
+		 * @param \WP_Post|null    $post     Post being rendered, or null when
+		 *                                    the caller has no specific post in
+		 *                                    view (computing defaults).
+		 */
+		return (array) apply_filters( 'sysmda_markdown_builder_adapters', $this->builder_adapters, $post );
+	}
+
+	/**
 	 * The page-builder adapter that renders this post, or null when none does.
 	 *
 	 * Both conditions matter and neither substitutes for the other (see
@@ -106,17 +135,7 @@ class ContentRenderer {
 	 * WordPress") must take the normal branches below.
 	 */
 	private function matching_builder_adapter( \WP_Post $post ): ?BuilderAdapter {
-		/**
-		 * Filters the page-builder adapters consulted before the block/classic
-		 * branches of the render pipeline. Anchored to a stage of the current
-		 * implementation — a future engine may not have "adapters" at all.
-		 *
-		 * @param BuilderAdapter[] $adapters Adapters, tried in order.
-		 * @param \WP_Post         $post     Post being rendered.
-		 */
-		$adapters = apply_filters( 'sysmda_markdown_builder_adapters', $this->builder_adapters, $post );
-
-		foreach ( (array) $adapters as $adapter ) {
+		foreach ( $this->effective_builder_adapters( $post ) as $adapter ) {
 			if ( $adapter instanceof BuilderAdapter && $adapter->is_active() && $adapter->handles( $post ) ) {
 				return $adapter;
 			}
@@ -411,12 +430,19 @@ class ContentRenderer {
 	 * site's own entries join what the active adapters suggest, they do not
 	 * replace it.
 	 *
+	 * Reads the SAME filtered adapter list matching_builder_adapter() does
+	 * (via effective_builder_adapters()), not the constructor's raw list: a
+	 * site adding an adapter through `sysmda_markdown_builder_adapters` gets
+	 * that adapter's default selectors for free, and one removed through the
+	 * same filter stops contributing its (now unreachable) defaults. Reading
+	 * the raw list here would silently diverge from what actually renders.
+	 *
 	 * @return string[]
 	 */
 	private function excluded_builder_elements(): array {
 		$defaults = array();
 
-		foreach ( $this->builder_adapters as $adapter ) {
+		foreach ( $this->effective_builder_adapters() as $adapter ) {
 			if ( $adapter instanceof BuilderAdapter ) {
 				$defaults = array_merge( $defaults, $adapter->element_selectors() );
 			}

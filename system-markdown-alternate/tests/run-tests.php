@@ -3586,6 +3586,36 @@ check(
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_builder_elements'] );
 $sysmda_fake_adapter->selectors = array();
 
+// excluded_builder_elements() must read the SAME filtered adapter list
+// matching_builder_adapter() renders through, not the constructor's raw list
+// — otherwise an adapter added via sysmda_markdown_builder_adapters never
+// contributes its default selectors (its chrome leaks into every Markdown
+// document), and one removed through the same filter keeps contributing
+// selectors for content that can no longer even reach this pipeline (caught
+// by Codex on PR #103).
+$sysmda_extra_adapter            = new SysmdaFakeBuilderAdapter();
+$sysmda_extra_adapter->selectors = array( 'fake-extra-chrome' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] = array( $sysmda_fake_adapter, $sysmda_extra_adapter );
+
+check(
+	'renderer: a builder adapter ADDED only through the filter still contributes its default selectors',
+	'<p>keep</p>',
+	$sysmda_builder_dom( '<p>keep</p><div class="fake-extra-chrome">drop</div>' )
+);
+
+// The inverse: an adapter present in the constructor's list but dropped by
+// the filter must stop contributing its defaults too.
+$sysmda_fake_adapter->selectors = array( 'brxe-form' );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] = array();
+check(
+	'renderer: a builder adapter REMOVED by the filter stops contributing its default selectors',
+	'<p>keep</p><div class="brxe-form">no longer excluded by default</div>',
+	$sysmda_builder_dom( '<p>keep</p><div class="brxe-form">no longer excluded by default</div>' )
+);
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] );
+$sysmda_fake_adapter->selectors = array();
+
 // ─── MetadataBuilder: builder fingerprint + description fallback ──────────
 
 $sysmda_builder_metadata = new MetadataBuilder( new ShortcodeCleaner(), $sysmda_adapter_renderer );
