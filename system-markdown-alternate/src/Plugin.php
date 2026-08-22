@@ -56,6 +56,13 @@ class Plugin {
 		add_filter( 'sysmda_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
 		add_filter( 'sysmda_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
 
+		// Generic post-meta fields (opt-in through the "Extra custom fields" panel
+		// field / sysmda_markdown_extra_meta_keys). Registered AFTER the ACF
+		// integration: both sit at priority 20, so registration order decides,
+		// and ACF's own values keep the position they have always had.
+		$meta_fields = new MetaFields();
+		add_filter( 'sysmda_markdown_source_content', array( $meta_fields, 'append_fields' ), 20, 2 );
+
 		// [sysmda_md_url] shortcode for the dynamic .md URL.
 		( new Shortcodes() )->register();
 

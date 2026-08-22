@@ -148,6 +148,15 @@ function get_post_meta( $post_id, $key, $single = false ) {
 		: ( $single ? '' : array() );
 }
 
+/**
+ * Stub: whether the row exists at all, which is NOT the same question as
+ * whether the value is truthy — an empty string is a stored value, and the
+ * extra-meta fingerprint turns on exactly this distinction.
+ */
+function metadata_exists( $meta_type, $object_id, $meta_key ) {
+	return isset( $GLOBALS['sysmda_test_meta'][ $object_id ][ $meta_key ] );
+}
+
 /** Stub: ACF field values, available only where a fixture sets one. */
 function get_field( $key, $post_id = false ) {
 	return isset( $GLOBALS['sysmda_test_fields'][ $post_id ][ $key ] )
@@ -634,6 +643,7 @@ require __DIR__ . '/../src/AdminSettings.php';
 require __DIR__ . '/../src/Shortcodes.php';
 require __DIR__ . '/../src/MarkdownActions.php';
 require __DIR__ . '/../src/AcfIntegration.php';
+require __DIR__ . '/../src/MetaFields.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AcfIntegration;
@@ -654,6 +664,7 @@ use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
+use Diecieventi\SystemMarkdownAlternate\MetaFields;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
@@ -2534,6 +2545,35 @@ check( 'salt: emptying the featured-image dependency bumps', true, '0' !== get_o
 
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 
+// An extra custom field is the one dependency whose part appears only while the
+// post HAS the key, so deleting the last value can return the whole fingerprint
+// to empty — and date_is_strong_validator() would start trusting a
+// post_modified_gmt that a meta deletion never moved. Deletion therefore bumps.
+$GLOBALS['sysmda_test_options']['sysmda_extra_meta_keys'] = "spec\nintro";
+
+$sysmda_admin->bump_for_deleted_dependency_meta( array( 3 ), 61, 'spec', 'Old value' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: deleting a configured extra field bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// …and nothing else does. Every meta deletion on the site reaches this hook, so
+// a check that bumps for unrelated keys would flush the whole Markdown cache on
+// routine writes — the failure this list exists to prevent.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->bump_for_deleted_dependency_meta( array( 4 ), 61, '_edit_lock', '123' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: deleting an unconfigured meta key does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Emptying an extra field deliberately does NOT bump: the row survives, so
+// metadata_exists() stays true, the part is still emitted as the hash of an
+// empty value, and the ETag moves on its own.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->maybe_bump_for_empty_dependency_meta( 5, 61, 'spec', '' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: emptying an extra field does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+unset( $GLOBALS['sysmda_test_options']['sysmda_extra_meta_keys'] );
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+
 // The rename itself: the author line of every post by that user changes.
 $GLOBALS['sysmda_test_users'][7]->display_name = 'Jamie R.';
 $sysmda_admin->maybe_bump_for_author( 7, (object) array( 'display_name' => 'Jamie Rivers' ) );
@@ -3665,6 +3705,120 @@ check(
 
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] );
 $sysmda_fake_adapter->selectors = array();
+
+// ─── MetaFields: generic post-meta content (0.47.0) ───────────────────────
+
+// The two skip rules, now shared with AcfIntegration so they cannot drift.
+check( 'meta: values are wrapped and kept in order', '<div>first</div><div>second</div>', MetaFields::emit( array( 'first', 'second' ) ) );
+check( 'meta: an empty value is skipped', '<div>kept</div>', MetaFields::emit( array( '', 'kept' ) ) );
+check( 'meta: a whitespace-only value is skipped', '<div>kept</div>', MetaFields::emit( array( "  \n ", 'kept' ) ) );
+// The rule most likely to be rewritten from memory as empty(): "0" is a real
+// value, and a falsy test drops it.
+check( 'meta: the string 0 survives', '<div>0</div>', MetaFields::emit( array( '0' ) ) );
+// Structured data has a shape this plugin has no brief to invent a rendering
+// for, so it is skipped rather than guessed at.
+check( 'meta: a non-string value is skipped', '<div>kept</div>', MetaFields::emit( array( array( 'a', 'b' ), 'kept' ) ) );
+check( 'meta: an integer value is skipped', '', MetaFields::emit( array( 42 ) ) );
+
+$sysmda_meta_fields = new MetaFields();
+$sysmda_meta_post   = new WP_Post( array( 'ID' => 90, 'post_content' => '<p>Body.</p>' ) );
+
+// The two sources are given DIFFERENT values for the same key, so the assertion
+// says which branch actually ran rather than merely that something was read.
+$GLOBALS['sysmda_test_meta'][90]['spec']   = 'RAW from post meta';
+$GLOBALS['sysmda_test_fields'][90]['spec'] = 'FORMATTED by ACF';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+
+check(
+	'meta: ACF formatting wins while ACF is active',
+	'<p>Body.</p><div>FORMATTED by ACF</div>',
+	$sysmda_meta_fields->append_fields( '<p>Body.</p>', $sysmda_meta_post )
+);
+
+// The fallback branch needs a seam: a defined function cannot be undefined, so
+// the harness's get_field() stub can never be made to disappear. Without this
+// the get_post_meta() path — the one every non-ACF site takes — would ship
+// untested, which in a two-way fork is where the wrong value silently comes from.
+$sysmda_meta_no_acf = new class() extends MetaFields {
+	protected function acf_available(): bool {
+		return false;
+	}
+};
+
+check(
+	'meta: without ACF the stored value is used',
+	'<p>Body.</p><div>RAW from post meta</div>',
+	$sysmda_meta_no_acf->append_fields( '<p>Body.</p>', $sysmda_meta_post )
+);
+
+check(
+	'meta: no configured key leaves the content untouched',
+	'<p>Body.</p>',
+	( function () use ( $sysmda_meta_fields, $sysmda_meta_post ) {
+		unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] );
+		$out = $sysmda_meta_fields->append_fields( '<p>Body.</p>', $sysmda_meta_post );
+		$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+		return $out;
+	} )()
+);
+
+// Keys are emitted in the order they are listed, which is the only ordering
+// promise the panel field makes.
+$GLOBALS['sysmda_test_meta'][90]['intro']   = 'INTRO';
+$GLOBALS['sysmda_test_fields'][90]['intro'] = 'INTRO';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'intro', 'spec' );
+check(
+	'meta: values follow the listed order',
+	'<div>INTRO</div><div>FORMATTED by ACF</div>',
+	$sysmda_meta_fields->append_fields( '', $sysmda_meta_post )
+);
+
+// ─── MetaFields: the cache validator property (0.47.0) ────────────────────
+//
+// The whole design decision in one pair of assertions. A part is added only for
+// a post that ACTUALLY HAS the key, so a site that configures one key does not
+// make every post's fingerprint non-empty — which would switch
+// If-Modified-Since off site-wide, because date_is_strong_validator() refuses
+// the date on a merely non-empty fingerprint without comparing values.
+
+$sysmda_meta_metadata = new MetadataBuilder( new ShortcodeCleaner(), $sysmda_renderer );
+$sysmda_meta_absent   = new WP_Post( array( 'ID' => 91, 'post_content' => '<p>No extra fields here.</p>' ) );
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+
+check(
+	'meta: a post carrying the key gets a fingerprint part',
+	true,
+	'' !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post )
+);
+check(
+	'meta: a post WITHOUT the key keeps an empty fingerprint',
+	'',
+	$sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_absent )
+);
+
+// Presence is the row, not the value: an empty string is stored data, so it
+// still contributes — and the part changes when the value does.
+$sysmda_meta_before = $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post );
+$GLOBALS['sysmda_test_fields'][90]['spec'] = 'FORMATTED by ACF, revised';
+check(
+	'meta: changing the value moves the fingerprint',
+	true,
+	$sysmda_meta_before !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post )
+);
+
+$GLOBALS['sysmda_test_meta'][92]['spec']   = '';
+$GLOBALS['sysmda_test_fields'][92]['spec'] = '';
+$sysmda_meta_empty = new WP_Post( array( 'ID' => 92, 'post_content' => '<p>Empty value.</p>' ) );
+check(
+	'meta: an empty stored value still contributes a part',
+	true,
+	'' !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_empty )
+);
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] );
+unset( $GLOBALS['sysmda_test_meta'][90], $GLOBALS['sysmda_test_meta'][92] );
+unset( $GLOBALS['sysmda_test_fields'][90], $GLOBALS['sysmda_test_fields'][92] );
 
 // ─── MetadataBuilder: builder fingerprint + description fallback ──────────
 
@@ -5184,6 +5338,7 @@ $sysmda_stable_hooks = array(
 	'sysmda_markdown_excluded_block_names'  => 1,
 	'sysmda_markdown_excluded_classes'      => 1,
 	'sysmda_markdown_excluded_builder_elements' => 1,
+	'sysmda_markdown_extra_meta_keys'       => 2,
 	'sysmda_front_matter_enabled'           => 2,
 	'sysmda_front_matter_taxonomy_slugs'    => 2,
 	'sysmda_acf_subtitle_key'               => 2,

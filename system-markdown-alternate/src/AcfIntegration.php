@@ -64,25 +64,15 @@ class AcfIntegration {
 			return $content;
 		}
 
-		$extra = '';
+		$values = array();
 		foreach ( $keys as $key ) {
-			$value = get_field( (string) $key, $post->ID );
-
-			if ( ! is_string( $value ) ) {
-				continue;
-			}
-
-			// Explicit emptiness check: a falsy test would also drop the string
-			// "0", which is a perfectly valid field value.
-			$value = trim( $value );
-			if ( '' === $value ) {
-				continue;
-			}
-
-			$extra .= '<div>' . $value . '</div>';
+			$values[] = get_field( (string) $key, $post->ID );
 		}
 
-		return $content . $extra;
+		// Shared with MetaFields so the skip rules live in one place: the
+		// emptiness test is deliberately `'' === trim()` rather than a falsy
+		// one, and a second copy of that reasoning is exactly what drifts.
+		return $content . MetaFields::emit( $values );
 	}
 
 	/**

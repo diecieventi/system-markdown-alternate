@@ -21,6 +21,8 @@ $sysmda_options = array(
 	'sysmda_excluded_shortcodes',
 	'sysmda_excluded_block_names',
 	'sysmda_excluded_classes',
+	'sysmda_excluded_builder_elements',
+	'sysmda_extra_meta_keys',
 	'sysmda_supported_post_types',
 	'sysmda_robots_header',
 	'sysmda_front_matter_taxonomy_slugs',

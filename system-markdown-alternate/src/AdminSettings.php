@@ -52,6 +52,9 @@ class AdminSettings {
 	/** @var bool Whether this request still owes the cache salt a bump. */
 	private $salt_bump_pending = false;
 
+	/** @var string[]|null Saved extra meta keys, memoized (null = not read yet). */
+	private $extra_meta_keys = null;
+
 	public function boot(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -228,7 +231,51 @@ class AdminSettings {
 	public function bump_for_deleted_dependency_meta( $meta_ids, $post_id, $meta_key, $_meta_value ): void {
 		if ( in_array( $meta_key, array( '_thumbnail_id', 'rank_math_description' ), true ) ) {
 			$this->bump_cache_salt();
+			return;
 		}
+
+		// A configured extra field, deleted. Unlike the two above — whose
+		// fingerprint parts are emitted unconditionally — an extra field
+		// contributes a part only while the post HAS the key
+		// (`MetadataBuilder::collect_meta_dependencies()`), so deleting the last
+		// one can return the whole dependencies fingerprint to empty. That makes
+		// `date_is_strong_validator()` trust `post_modified_gmt` again, which a
+		// meta deletion never moves: a client sending only `If-Modified-Since`
+		// would be told `304` while holding a body that has lost a section.
+		//
+		// Emptying a value needs nothing, and that asymmetry is the reason this
+		// lives here and not in maybe_bump_for_empty_dependency_meta(): an empty
+		// value leaves the row in place, so `metadata_exists()` stays true, the
+		// part survives as the hash of an empty value, and the ETag moves on its
+		// own.
+		if ( in_array( (string) $meta_key, $this->extra_meta_keys(), true ) ) {
+			$this->bump_cache_salt();
+		}
+	}
+
+	/**
+	 * The saved extra meta keys, memoized for the request.
+	 *
+	 * Reads the OPTION rather than applying `sysmda_markdown_extra_meta_keys`,
+	 * on purpose. This runs inside a metadata-write hook that fires for every
+	 * meta deletion on the site, and calling an arbitrary site filter from there
+	 * — with the `WP_Post` it would first have to fetch — invites both cost and
+	 * re-entrancy in somebody else's callback for a check that has to stay
+	 * trivial.
+	 *
+	 * The documented consequence: a key added through the filter ALONE, with no
+	 * panel entry, is not covered by this bump. `docs/filters.md` says so, and
+	 * points at `sysmda_markdown_cache_dependencies`, which is the standing
+	 * answer for "my output changes and the `.md` does not".
+	 *
+	 * @return string[]
+	 */
+	private function extra_meta_keys(): array {
+		if ( null === $this->extra_meta_keys ) {
+			$this->extra_meta_keys = $this->option_lines( 'sysmda_extra_meta_keys' );
+		}
+
+		return $this->extra_meta_keys;
 	}
 
 	/**
@@ -467,6 +514,14 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
+			'sysmda_extra_meta_keys',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_meta_key_lines' ),
+			)
+		);
+		register_setting(
+			self::OPTION_GROUP,
 			'sysmda_supported_post_types',
 			array(
 				'type'              => 'array',
@@ -579,6 +634,7 @@ class AdminSettings {
 		add_settings_field( 'sysmda_excluded_block_names', __( 'Excluded blocks', 'system-markdown-alternate' ), array( $this, 'field_excluded_block_names' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_classes', __( 'Excluded CSS classes', 'system-markdown-alternate' ), array( $this, 'field_excluded_classes' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_excluded_builder_elements', __( 'Excluded builder elements', 'system-markdown-alternate' ), array( $this, 'field_excluded_builder_elements' ), self::PAGE, 'sysmda_markdown' );
+		add_settings_field( 'sysmda_extra_meta_keys', __( 'Extra custom fields', 'system-markdown-alternate' ), array( $this, 'field_extra_meta_keys' ), self::PAGE, 'sysmda_markdown' );
 		add_settings_field( 'sysmda_front_matter_taxonomies', __( 'Custom taxonomies', 'system-markdown-alternate' ), array( $this, 'field_front_matter_taxonomies' ), self::PAGE, 'sysmda_markdown' );
 
 		if ( $this->acf_active() ) {
@@ -749,6 +805,37 @@ class AdminSettings {
 	}
 
 	/**
+	 * One post meta key per line, normalized rather than rejected.
+	 *
+	 * Deliberately NOT `sanitize_key()`, which lowercases: meta keys are
+	 * case-sensitive and plugins do ship camelCase ones, so lowercasing would
+	 * silently point the setting at a key that does not exist. The charset is
+	 * the same ASCII letter/digit/underscore/hyphen subset the class sanitizer
+	 * uses, with a leading underscore preserved — protected keys are exactly
+	 * what a page builder or a plugin stores its content in, and naming one is a
+	 * deliberate choice the owner is entitled to make.
+	 *
+	 * Splitting on any whitespace, like the class lists, so a pasted list on one
+	 * line still yields one key per entry.
+	 *
+	 * @param mixed $value
+	 */
+	public function sanitize_meta_key_lines( $value ): string {
+		$tokens = preg_split( '/\s+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY );
+		$out    = array();
+
+		foreach ( (array) $tokens as $token ) {
+			$key = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $token );
+
+			if ( is_string( $key ) && '' !== $key && ! in_array( $key, $out, true ) ) {
+				$out[] = $key;
+			}
+		}
+
+		return implode( "\n", $out );
+	}
+
+	/**
 	 * @param mixed $value
 	 */
 	public function sanitize_checkbox( $value ): string {
@@ -856,6 +943,18 @@ class AdminSettings {
 			'sysmda_markdown_excluded_builder_elements',
 			function ( $defaults ) {
 				return $this->option_to_merged_list( 'sysmda_excluded_builder_elements', $defaults );
+			},
+			20
+		);
+
+		add_filter(
+			'sysmda_markdown_extra_meta_keys',
+			function ( $defaults ) {
+				// REPLACE, not merge: this is a curated inclusion list with no
+				// built-in defaults, so the saved value is the whole answer.
+				// The 0.40.0 accumulate rule covers the EXCLUSION lists, where
+				// losing an entry means publishing something that should not be.
+				return $this->option_to_list( 'sysmda_extra_meta_keys', $defaults );
 			},
 			20
 		);
@@ -1239,6 +1338,24 @@ class AdminSettings {
 	 */
 	public function field_excluded_builder_elements(): void {
 		$this->render_exclusion_field( 'sysmda_excluded_builder_elements', BricksAdapter::DEFAULT_EXCLUDED_ELEMENTS );
+	}
+
+	/**
+	 * Meta keys whose values are pulled into the document.
+	 *
+	 * No "built-in defaults" disclosure here, unlike the exclusion fields: there
+	 * are none, and there never will be. Which meta keys hold content is a
+	 * property of the site, not of WordPress — post meta is mostly internal
+	 * plumbing — so a default would be a guess with a published document as its
+	 * cost. Same discipline as the taxonomy selection: the plugin offers the
+	 * box, the owner fills it in.
+	 */
+	public function field_extra_meta_keys(): void {
+		$v = (string) get_option( 'sysmda_extra_meta_keys', '' );
+		echo '<textarea name="sysmda_extra_meta_keys" rows="4" class="code sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description sysmda-help">' . wp_kses_post(
+			__( 'One post meta key per line, empty by default. Their values are appended to the end of the Markdown body, in the order listed. Works with any plugin that stores post meta — ACF, JetEngine, Meta Box — and with the native Custom Fields box. Values that are not text (a repeater, an image, anything stored as an array) are skipped.', 'system-markdown-alternate' )
+		) . '</p>';
 	}
 
 	/**
