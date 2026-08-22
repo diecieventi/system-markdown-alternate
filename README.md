@@ -18,7 +18,7 @@ The Markdown is built from the post content itself, through a pipeline the
 plugin controls end to end:
 
 ```text
-post content (blocks, shortcodes, ACF fields)
+post content (blocks, shortcodes) + configured custom fields
       ↓
 cleaning — excluded blocks, shortcodes and CSS classes removed
       ↓
@@ -55,6 +55,11 @@ Two consequences worth knowing:
 - Links that render nothing — the invisible overlay anchor a clickable card is
   built from — take the accessible name their markup declares, instead of
   converting to a link with no text.
+- **Extra custom fields**: a list of post meta keys whose values are appended to
+  the body — one setting for ACF, JetEngine, Meta Box and the native Custom
+  Fields box alike, since all of them store post meta. Empty by default, never
+  auto-detected, and a post without the field keeps its document and its cache
+  validator byte-identical.
 - **Advanced Custom Fields** (when active): a subtitle and a TL;DR as a
   preamble between the H1 and the body.
 

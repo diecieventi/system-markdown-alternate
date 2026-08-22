@@ -178,7 +178,15 @@ text.
 ## Body
 
 The body is produced from the post content, not from `the_content`, so
-theme/plugin-injected related-posts and CTA blocks are not reintroduced:
+theme/plugin-injected related-posts and CTA blocks are not reintroduced.
+
+Since `0.47.0` the source may be **post content plus configured custom fields**:
+the values of the post meta keys listed in *Extra custom fields* are appended to
+the end, in the order listed, before any of the steps below — so they are subject
+to every rule in this section exactly as the post content is. Values that are not
+strings (an array from a repeater or a serialized value) are skipped. The setting
+is empty by default, and with nothing listed the body is byte-identical to a site
+that never had it.
 
 1. **Block pipeline** — Gutenberg blocks are parsed and cleaned
    (`BlockCleaner`): excluded blocks are dropped, synced patterns

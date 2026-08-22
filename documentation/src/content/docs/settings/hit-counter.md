@@ -2,7 +2,7 @@
 title: "Hit counter"
 description: "Counts how often the Markdown endpoint is used, split bot versus human. Aggregate daily totals only — no visitor data of any kind."
 sidebar:
-  order: 7
+  order: 8
 ---
 
 **Settings → Markdown Alternate → Advanced**
