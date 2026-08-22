@@ -9,6 +9,25 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.47.0
+
+* Added: **Extra custom fields** — a new setting listing the post meta keys whose
+  values belong in the Markdown. Their content is appended to the end of the
+  body, in the order listed. One setting covers ACF, JetEngine, Meta Box and
+  WordPress's own Custom Fields box, because underneath they all store post meta,
+  so a page whose text comes partly from a template's fields is no longer
+  published half missing. Empty by default and never detected automatically: a
+  field starts appearing when you type its key into the box, and not before.
+  Values that are not text — an image, a repeater, anything stored as an array —
+  are skipped rather than guessed at.
+* Added: `sysmda_markdown_extra_meta_keys` (Stable) as the filter behind the new
+  setting, so the list can be varied per post from code.
+* Changed: a post that does **not** carry any of the configured keys keeps its
+  document *and* its cache validator byte-identical, so configuring a field for a
+  couple of landing pages does not make every article on the site revalidate.
+* Fixed: the *Excluded builder elements* setting added in 0.46.0 was not removed
+  on uninstall.
+
 ## 0.46.1
 
 * Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of
