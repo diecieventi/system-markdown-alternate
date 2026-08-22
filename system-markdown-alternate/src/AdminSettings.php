@@ -947,6 +947,12 @@ class AdminSettings {
 			20
 		);
 
+		// Priority 5, before the default 10, for the same reason as the taxonomy
+		// slugs above: this callback REPLACES rather than merges, so at 20 it
+		// would run after site code and throw its additions away — the saved
+		// list has to arrive as the filter's *default* for anyone hooking at 10
+		// to narrow or extend it. The three exclusion filters can sit at 20
+		// precisely because they merge, which preserves whatever ran earlier.
 		add_filter(
 			'sysmda_markdown_extra_meta_keys',
 			function ( $defaults ) {
@@ -956,7 +962,7 @@ class AdminSettings {
 				// losing an entry means publishing something that should not be.
 				return $this->option_to_list( 'sysmda_extra_meta_keys', $defaults );
 			},
-			20
+			5
 		);
 
 		add_filter(

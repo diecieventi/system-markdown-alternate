@@ -88,11 +88,57 @@ class ContentRenderer {
 			$html = wpautop( $this->expand_shortcodes( $content ) );
 		}
 
+		/**
+		 * Filters HTML appended after the main content, on every render branch.
+		 *
+		 * This exists because appending is not the same operation as replacing
+		 * the source, and only one of the two survives the adapter branch above.
+		 * Content added through `sysmda_markdown_source_content` is discarded
+		 * for a post a page-builder adapter claims — the adapter renders from
+		 * the builder's own tree and never looks at `$content` — so anything
+		 * that means "add this to the document" belongs here instead.
+		 */
+		$appended = (string) apply_filters( 'sysmda_markdown_appended_html', '', $post );
+
+		if ( '' !== $appended ) {
+			$html .= $this->render_appended( $appended );
+		}
+
 		// 3-5. DOM pass: normalize code blocks, remove excluded classes, absolutize URLs.
+		// Deliberately after the append, so appended content is class-excluded and
+		// absolutized by the same single pass rather than a second one of its own.
 		$html = $this->process_dom( $html, (string) get_permalink( $post ) );
 
 		/** Filters rendered clean HTML before conversion. */
 		return (string) apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
+	}
+
+	/**
+	 * Renders appended content with the same two branches the main path uses.
+	 *
+	 * Mirroring them is what makes moving a producer onto the appended seam
+	 * free: block markup in an ACF field is still cleaned by `BlockCleaner` and
+	 * still has its synced patterns expanded, which is the behaviour
+	 * `collect_acf_dependencies()` walks the pattern references for. A helper
+	 * that only ever ran `wpautop()` would silently drop that.
+	 *
+	 * No `process_dom()` here: the caller runs it once over the whole document.
+	 */
+	private function render_appended( string $html ): string {
+		$html = $this->shortcodes->strip( $html );
+
+		if ( has_blocks( $html ) ) {
+			$blocks = $this->blocks->clean( parse_blocks( $html ) );
+
+			$out = '';
+			foreach ( $blocks as $block ) {
+				$out .= render_block( $block );
+			}
+
+			return $this->expand_shortcodes( $out );
+		}
+
+		return wpautop( $this->expand_shortcodes( $html ) );
 	}
 
 	/**

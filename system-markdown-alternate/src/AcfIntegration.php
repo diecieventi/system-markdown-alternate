@@ -39,17 +39,27 @@ class AcfIntegration {
 	}
 
 	/**
-	 * Appends configured ACF field content to the source.
+	 * The configured ACF field values, as HTML appended to the document.
 	 *
-	 * Hook: sysmda_markdown_source_content (priority 20).
+	 * Hook: sysmda_markdown_appended_html (priority 20).
 	 *
-	 * @param string   $content Current source content.
-	 * @param \WP_Post $post    Reference post.
-	 * @return string Content with appended ACF fields.
+	 * Moved off `sysmda_markdown_source_content` in 0.47.0, and it was a real
+	 * defect rather than tidying: a post claimed by a page-builder adapter is
+	 * rendered from the builder's own tree, so the filtered source — and every
+	 * ACF value appended to it — was discarded. Silent since 0.46.0.
+	 *
+	 * Nothing else changes: ContentRenderer::render_appended() runs the same
+	 * block branch the source path did, so a synced pattern referenced from an
+	 * ACF field is still expanded, exactly as collect_acf_dependencies() assumes
+	 * when it walks those references for the cache validator.
+	 *
+	 * @param string   $appended Current appended HTML.
+	 * @param \WP_Post $post     Reference post.
+	 * @return string Appended HTML with the ACF field values.
 	 */
-	public function append_fields( string $content, \WP_Post $post ): string {
+	public function appended_html( string $appended, \WP_Post $post ): string {
 		if ( ! function_exists( 'get_field' ) ) {
-			return $content;
+			return $appended;
 		}
 
 		/**
@@ -61,7 +71,7 @@ class AcfIntegration {
 		$keys = (array) apply_filters( 'sysmda_acf_field_keys', array(), $post );
 
 		if ( empty( $keys ) ) {
-			return $content;
+			return $appended;
 		}
 
 		$values = array();
@@ -72,7 +82,7 @@ class AcfIntegration {
 		// Shared with MetaFields so the skip rules live in one place: the
 		// emptiness test is deliberately `'' === trim()` rather than a falsy
 		// one, and a second copy of that reasoning is exactly what drifts.
-		return $content . MetaFields::emit( $values );
+		return $appended . MetaFields::emit( $values );
 	}
 
 	/**

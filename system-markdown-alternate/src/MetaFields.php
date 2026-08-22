@@ -37,20 +37,28 @@ defined( 'ABSPATH' ) || exit;
 class MetaFields {
 
 	/**
-	 * Appends configured meta values to the source content.
+	 * The configured meta values, as HTML appended to the document.
 	 *
-	 * Hook: sysmda_markdown_source_content (priority 20, after AcfIntegration so
+	 * Hook: sysmda_markdown_appended_html (priority 20, after AcfIntegration so
 	 * ACF's own fields keep their existing position).
 	 *
-	 * @param string   $content Current source content.
-	 * @param \WP_Post $post    Reference post.
-	 * @return string Content with the configured meta values appended.
+	 * Deliberately NOT `sysmda_markdown_source_content`, which is where this
+	 * started and where it did not work: a post claimed by a page-builder
+	 * adapter is rendered from the builder's own tree, so the filtered source is
+	 * discarded and every configured value silently vanished from the document
+	 * while still moving the cache validator. A Bricks page is precisely the
+	 * "the template holds the content" case this feature exists for, so that was
+	 * the motivating scenario failing. Appending is not replacing the source.
+	 *
+	 * @param string   $appended Current appended HTML.
+	 * @param \WP_Post $post     Reference post.
+	 * @return string Appended HTML with the configured meta values.
 	 */
-	public function append_fields( string $content, \WP_Post $post ): string {
+	public function appended_html( string $appended, \WP_Post $post ): string {
 		$keys = self::keys( $post );
 
 		if ( empty( $keys ) ) {
-			return $content;
+			return $appended;
 		}
 
 		$values = array();
@@ -58,7 +66,7 @@ class MetaFields {
 			$values[] = $this->value( $key, $post );
 		}
 
-		return $content . self::emit( $values );
+		return $appended . self::emit( $values );
 	}
 
 	/**
@@ -110,9 +118,26 @@ class MetaFields {
 	 * @return mixed The stored value, of whatever type.
 	 */
 	public function value( string $key, \WP_Post $post ) {
-		return $this->acf_available()
-			? get_field( $key, $post->ID )
-			: get_post_meta( $post->ID, $key, true );
+		if ( ! $this->acf_available() ) {
+			return get_post_meta( $post->ID, $key, true );
+		}
+
+		$value = get_field( $key, $post->ID );
+
+		// Measured on ACF 6.8.8: for a key ACF has no definition for, get_field()
+		// returns the stored value, so this fallback does not fire. `null` is
+		// what it returns for a key that is ABSENT — and what it would return for
+		// an unregistered one were a future ACF to start refusing those. Reading
+		// the row directly answers both and costs nothing.
+		//
+		// Keyed on strict null, never on falsiness: a registered true/false field
+		// legitimately returns false, and falling back there would publish the
+		// raw "0" that ACF meant to suppress.
+		if ( null === $value ) {
+			$value = get_post_meta( $post->ID, $key, true );
+		}
+
+		return $value;
 	}
 
 	/**
