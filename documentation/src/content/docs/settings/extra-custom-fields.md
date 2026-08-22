@@ -71,8 +71,8 @@ gallery — anything stored as an array — is left out rather than rendered.
 That is deliberate. A repeater is a structure, and there is no single right way
 to turn it into prose; the plugin would have to invent one, and would then be
 confidently wrong in every document on the site. If you need structured fields in
-the Markdown, format them yourself with the
-[`sysmda_markdown_source_content`](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/filters.md#the-conversion-pipeline)
+the Markdown, format them yourself and add the result with the
+[`sysmda_markdown_appended_html`](https://github.com/diecieventi/system-markdown-alternate/blob/main/docs/filters.md#the-conversion-pipeline)
 filter.
 
 An empty field is skipped too. A field containing just `0` is **not** — that is a
@@ -137,7 +137,7 @@ add_filter( 'sysmda_markdown_extra_meta_keys', function ( array $keys, WP_Post $
 }, 10, 2 );
 ```
 
-The panel field feeds this filter at priority 20, so site code at the default
+The panel field feeds this filter at priority 5, so site code at the default
 priority 10 sees the saved list and can narrow or extend it per post.
 
 Note that the list **replaces** rather than adds to a default — unlike the

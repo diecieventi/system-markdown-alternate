@@ -180,13 +180,15 @@ text.
 The body is produced from the post content, not from `the_content`, so
 theme/plugin-injected related-posts and CTA blocks are not reintroduced.
 
-Since `0.47.0` the source may be **post content plus configured custom fields**:
-the values of the post meta keys listed in *Extra custom fields* are appended to
-the end, in the order listed, before any of the steps below — so they are subject
-to every rule in this section exactly as the post content is. Values that are not
-strings (an array from a repeater or a serialized value) are skipped. The setting
-is empty by default, and with nothing listed the body is byte-identical to a site
-that never had it.
+Since `0.47.0` the document may be **post content plus configured custom
+fields**: the values of the post meta keys listed in *Extra custom fields* are
+appended to the end, in the order listed. They are rendered with the same block
+and classic branches the post content uses, and join the same HTML cleanup pass,
+so every rule in this section applies to them too — including on a page rendered
+by a page-builder adapter, where the post content itself is not read at all.
+Values that are not strings (an array from a repeater or a serialized value) are
+skipped. The setting is empty by default, and with nothing listed the body is
+byte-identical to a site that never had it.
 
 1. **Block pipeline** — Gutenberg blocks are parsed and cleaned
    (`BlockCleaner`): excluded blocks are dropped, synced patterns

@@ -25,6 +25,12 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
 * Changed: a post that does **not** carry any of the configured keys keeps its
   document *and* its cache validator byte-identical, so configuring a field for a
   couple of landing pages does not make every article on the site revalidate.
+* Fixed: ACF field values added through `sysmda_acf_field_keys` never reached a
+  Bricks page's Markdown. Such a page is rendered through Bricks' own API, which
+  does not read the post content the values were appended to, so they were
+  dropped silently — since 0.46.0. Both they and the new custom fields now go
+  through a dedicated `sysmda_markdown_appended_html` filter (Advanced) that is
+  honoured on every render path.
 * Fixed: the *Excluded builder elements* setting added in 0.46.0 was not removed
   on uninstall.
 

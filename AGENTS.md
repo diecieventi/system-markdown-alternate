@@ -594,9 +594,10 @@ The v1 scope is done and widely exceeded. Implemented:
   silently dropped.
 - **Extra custom fields** (`0.47.0`, `MetaFields`): a panel textarea of post
   **meta keys** whose values are appended to the end of the body, in the order
-  listed, through `sysmda_markdown_source_content` at priority 20 (registered
+  listed, through **`sysmda_markdown_appended_html`** at priority 20 (registered
   after `AcfIntegration`, so ACF's own fields keep their position). Empty by
-  default; new Stable filter `sysmda_markdown_extra_meta_keys`. Motivated by a
+  default; new Stable filter `sysmda_markdown_extra_meta_keys`, fed by the panel
+  at **priority 5**. Motivated by a
   real case: a page built from a GeneratePress Elements template mixes
   `post_content` with pieces held in ACF/JetEngine/native Custom Fields, and
   none of it reached the `.md`.
@@ -644,11 +645,51 @@ The v1 scope is done and widely exceeded. Implemented:
     emptiness test is an explicit `'' === trim()` precisely so the string `"0"`
     survives — a rule got right once, easy to rewrite from memory as `empty()`,
     and therefore worth exactly one copy (the `CodeRegions` argument).
+  - **Appending is not replacing the source, and the seam has to say so**
+    (`ContentRenderer::render_appended()`, filter
+    `sysmda_markdown_appended_html`, Advanced). This started on
+    `sysmda_markdown_source_content` and was caught by Codex on PR #107: a post
+    a page-builder adapter claims is rendered from the builder's own tree, so
+    `render()` discards the filtered source entirely — every configured value
+    vanished from a Bricks page while still moving the cache validator. A Bricks
+    page is *precisely* the "the template holds the content" case this feature
+    exists for, so the motivating scenario was the one that failed. The same
+    defect had been silently true of `AcfIntegration::append_fields()` since
+    `0.46.0`; both moved. `render_appended()` mirrors the main path's own
+    block/classic branches, and that is what makes the ACF move free — a synced
+    pattern referenced from an ACF field is still expanded, which is what
+    `collect_acf_dependencies()` assumes when it walks those references. It runs
+    **before** the single outer `process_dom()`, so appended content is
+    class-excluded and absolutized by the same pass rather than a second one.
+  - **The panel feeds the key list at priority 5, not 20** (also Codex, PR #107).
+    The callback REPLACES its input, so at 20 it runs after site code hooking at
+    the default 10 and throws that code's additions away. Priority 5 makes the
+    saved list the filter's *default*, which is what lets site code narrow **and**
+    extend it — the same reasoning, and the same number, as
+    `sysmda_front_matter_taxonomy_slugs`. The three exclusion filters can sit at
+    20 only because they merge. Rule of thumb: **a replacing callback goes before
+    site code, a merging one after.**
   Deliberately out of scope: the front-matter `description` fallback does not see
   these values (it reads `post_content` directly), exactly as
   `sysmda_acf_field_keys` already behaves; and there is no per-key placement —
   the plugin cannot know where in a template's layout a field renders, so
   appending is the honest answer rather than a guessed one.
+  **Not adopted, and why** (the third Codex finding, P1): that `get_field()`
+  refuses keys which are not registered ACF fields since 5.11, making the
+  cross-plugin mechanism work only without ACF. Measured against the live ACF
+  6.8.8 staging on six unregistered keys, on a site with no field groups and no
+  `_{key}` reference rows at all: `get_field()` and `get_post_meta()` returned
+  **identical** values every time, protected and serialized keys included. The
+  claim does not reproduce. What was taken instead is a narrower insulation — a
+  strict `null === $value` fallback to `get_post_meta()`, since `null` is what
+  ACF returns for an absent key and what it *would* return if a future version
+  started refusing unregistered ones. Keyed on `null`, never on falsiness: a
+  registered true/false field returns `false` on purpose, and falling back there
+  would publish the raw `"0"` ACF meant to suppress. Codex's own suggestion
+  (detect ownership with `acf_get_field()`) was rejected: whether that resolves a
+  *registered* field by name outside a post context is unverified, with no ACF
+  field group on either staging to test against, and getting it wrong breaks the
+  ACF formatting path.
 - **Shortcodes**: `[sysmda_md_url]` (+ `id="123"`), always a bare URL; and
   `[sysmda_md_download]` (+ `id`, `text`), always markup — an anchor that saves
   the file instead of opening it. See the decision below for why they are two.
@@ -1922,7 +1963,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
         ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link, invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
-        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles())
+        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles()); render_appended() honours sysmda_markdown_appended_html on every branch
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── BuilderDetector.php     ← per-post page-builder detection (render mode, from meta) + the veto list
         ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)

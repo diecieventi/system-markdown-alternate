@@ -86,6 +86,7 @@ compatibility promise of any kind.
 | `sysmda_markdown_cache_dependencies` | Stable |
 | `sysmda_markdown_prewarm` | Advanced |
 | `sysmda_markdown_source_content` | Advanced |
+| `sysmda_markdown_appended_html` | Advanced |
 | `sysmda_markdown_rendered_html` | Advanced |
 | `sysmda_markdown_preamble` | Advanced |
 | `sysmda_markdown_output` | Stable |
@@ -302,8 +303,26 @@ precisely because it does not depend on how the document was produced.
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 ```
-**[Advanced](#advanced)** — raw source content, before any rendering. This is
-where the ACF integration and the extra custom fields append their values.
+**[Advanced](#advanced)** — raw source content, before any rendering.
+
+**It replaces the source; it does not append to the document.** For a post a
+page-builder adapter claims, the adapter renders from the builder's own stored
+tree and this filtered value is never read, so anything concatenated here is
+silently dropped. To *add* content to the document, use the hook below, which is
+honoured on every branch.
+
+```php
+apply_filters( 'sysmda_markdown_appended_html', '', $post );
+```
+**[Advanced](#advanced)** — HTML appended after the main content, on all three
+render branches (page-builder adapter, blocks, classic). Added in `0.47.0`; it
+is where the ACF integration and the extra custom fields put their values.
+
+The returned HTML is rendered with the same two branches the main path uses —
+block markup is parsed and cleaned by the block rules, anything else goes through
+`wpautop()` — and then joins the single DOM pass, so excluded shortcodes, excluded
+CSS classes and absolute URLs all apply to it exactly as they do to the post
+content.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
@@ -490,8 +509,14 @@ apply_filters( 'sysmda_markdown_extra_meta_keys', array(), $post );
 ```
 **[Stable](#stable)** — post meta keys whose values are appended to the end of
 the Markdown body, in the order listed. Fed by the **Extra custom fields** panel
-field at priority 20, and Stable because it is anchored to that field: it lasts
-exactly as long as the setting does.
+field at **priority 5**, and Stable because it is anchored to that field: it
+lasts exactly as long as the setting does.
+
+Priority 5, not the 20 the exclusion filters use, and the difference is not
+cosmetic: this callback *replaces* the incoming list, so running it after site
+code would discard whatever that code returned. Feeding the saved list in as the
+filter's **default** is what lets a callback at the ordinary priority 10 narrow
+or extend it. The exclusion filters can sit at 20 precisely because they merge.
 
 Works with anything that stores post meta — ACF, JetEngine, Meta Box, or the
 native Custom Fields box — because underneath they all do. With ACF active the
