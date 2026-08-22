@@ -4030,6 +4030,22 @@ check(
 	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
 );
 
+// Mixed content (0.47.1): has_blocks() is a substring test over the WHOLE
+// fragment, so one value carrying block markup sends every plain-text sibling
+// down the block branch too. parse_blocks() wraps those in a freeform block
+// (blockName === null) that render_block() returns verbatim — confirmed against
+// real WordPress — so without paragraph-wrapping them the converter collapses
+// the blank line and publishes two fields as one run-on line.
+$GLOBALS['sysmda_test_parsed']['<!-- wp:paragraph -->MIXED'] = array(
+	array( 'blockName' => null, 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => "First value\n\nSecond value\n\n" ),
+	array( 'blockName' => 'core/paragraph', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => '<p>Block content.</p>' ),
+);
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = '<!-- wp:paragraph -->MIXED';
+$sysmda_mixed = $sysmda_adapter_renderer->render( $sysmda_appended_classic_post );
+
+check( 'appended mixed: text siblings become their own paragraphs', true, false !== strpos( $sysmda_mixed, '<p>First value</p>' ) && false !== strpos( $sysmda_mixed, '<p>Second value</p>' ) );
+check( 'appended mixed: the block sibling still renders', true, false !== strpos( $sysmda_mixed, '<p>Block content.</p>' ) );
+
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] );
 
 check(
@@ -4847,6 +4863,16 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_appended_e2e( MetaFields::emit( array( 'First value', 'Second value' ) ) )
 	);
 	// A WYSIWYG value is markup and must not be re-wrapped or escaped away.
+	// Codex read the mixed case as an escaping regression on PR #108. It is not:
+	// escaping depends on the text node's parent not being a `div`, and at root
+	// level there is no div — with or without wpautop. Pinned so the claim is not
+	// re-derived from the code by the next reader.
+	check(
+		'appended mixed: text is still escaped beside a block sibling',
+		"Classic body.\n\nA \\*literal\\* marker\n\nBlock content.\n",
+		$sysmda_appended_e2e( "A *literal* marker\n\n<p>Block content.</p>" )
+	);
+
 	check(
 		'appended markup: a WYSIWYG value converts normally',
 		"Classic body.\n\nText with a [link](https://example.com/x).\n\n- One\n",

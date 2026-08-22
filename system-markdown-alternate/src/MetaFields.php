@@ -78,7 +78,9 @@ class MetaFields {
 		/**
 		 * Filters the post meta keys whose values are pulled into the Markdown.
 		 *
-		 * Fed by the "Extra custom fields" panel field at priority 20. The list
+		 * Fed by the "Extra custom fields" panel field at priority 5 — before site
+		 * code at the default 10, because this callback replaces rather than
+		 * merges and would otherwise discard whatever that code returned. The list
 		 * REPLACES rather than accumulates, unlike the three exclusion filters:
 		 * this is a curated inclusion list with no built-in defaults, so the
 		 * value supplied is the whole answer (same semantics as

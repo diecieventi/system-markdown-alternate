@@ -191,6 +191,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.47.1 =
 
 * Fixed: a text custom field containing Markdown punctuation was published with that punctuation active — a field reading `A *literal* marker` arrived with one word in italics instead of the asterisks the author typed. Underscores, brackets and backslashes were the same case. Each value was wrapped in a `<div>`, and that wrapper silently switched off the escaping every other piece of text in the document gets. Values are now separated by a blank line instead, which restores the escaping and keeps them apart; markup from a WYSIWYG field is unaffected and still converts as before.
+* Fixed: listing a custom field whose value contains Gutenberg block markup alongside plain-text fields ran those text fields together on one line. One block-valued field sent every sibling down the block path, where plain text is emitted without paragraphs.
 
 = 0.47.0 =
 

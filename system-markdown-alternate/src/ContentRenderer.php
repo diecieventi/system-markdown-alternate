@@ -122,6 +122,18 @@ class ContentRenderer {
 	 * `collect_acf_dependencies()` walks the pattern references for. A helper
 	 * that only ever ran `wpautop()` would silently drop that.
 	 *
+	 * **Freeform blocks are paragraph-wrapped individually.** `has_blocks()` is a
+	 * substring test over the whole fragment, so ONE value carrying block markup
+	 * sends every plain-text sibling down this branch too — where `parse_blocks()`
+	 * wraps them in a freeform block (`blockName === null`) that `render_block()`
+	 * returns verbatim. Core gets its paragraphs back through `do_blocks()`'s
+	 * `wpautop` hook dance, which this pipeline skips by design, so without this
+	 * the converter collapses the blank line between two text values and publishes
+	 * them as one run-on line — the very merging `MetaFields::append()`'s
+	 * separator exists to prevent, arriving through another door. Verified against
+	 * real `parse_blocks()`: the text portion comes back as `blockName => null`
+	 * with the newlines intact, and `wpautop()` on it yields the two paragraphs.
+	 *
 	 * No `process_dom()` here: the caller runs it once over the whole document.
 	 */
 	private function render_appended( string $html ): string {
@@ -132,7 +144,10 @@ class ContentRenderer {
 
 			$out = '';
 			foreach ( $blocks as $block ) {
-				$out .= render_block( $block );
+				$rendered = render_block( $block );
+				$name     = isset( $block['blockName'] ) ? $block['blockName'] : null;
+
+				$out .= ( null === $name ) ? wpautop( $rendered ) : $rendered;
 			}
 
 			return $this->expand_shortcodes( $out );

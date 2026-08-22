@@ -19,6 +19,10 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   of text in the document gets. Values are now separated by a blank line instead,
   which restores the escaping and keeps them apart; markup from a WYSIWYG field
   is unaffected and still converts as before.
+* Fixed: listing a custom field whose value contains Gutenberg block markup
+  alongside plain-text fields ran those text fields together on one line. One
+  block-valued field sent every sibling down the block path, where plain text is
+  emitted without paragraphs.
 
 ## 0.47.0
 
