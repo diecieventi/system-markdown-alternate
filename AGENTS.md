@@ -221,7 +221,16 @@ The v1 scope is done and widely exceeded. Implemented:
     - **emptiness is what the anchor RENDERS**, not whether it holds text: an
       anchor wrapping an image is named by that image's alt and already converts
       correctly, and one holding an empty `<span>` may be a CSS-drawn icon. Only
-      an anchor with no element children at all is claimed.
+      an anchor with no element children at all is claimed. And *rendering
+      nothing* is decided in PHP, Unicode-aware, never by XPath (`0.46.1`,
+      `renders_nothing()`): `normalize-space()` knows only XML whitespace, so an
+      anchor holding `&nbsp;` — which is what a card generator reaches for when a
+      link needs a body it does not have — was never selected and came back out
+      as the very `[](url "Name")` this pass exists to prevent. Separators are
+      matched as `\p{Z}` and the zero-width characters are listed one by one
+      rather than swept up as `\p{C}`, which would also claim private-use code
+      points: an icon font's glyph is invisible to a whitespace test and not to
+      the reader.
     - **the consumed `title` is removed.** The library emits `title` as a
       Markdown link title, so keeping it prints the name twice —
       `[The Name](url "The Name")`. An `aria-label` it never emits, so that one
@@ -569,6 +578,20 @@ The v1 scope is done and widely exceeded. Implemented:
   translate.wordpress.org and WP loads them automatically (≥ 4.6).
 - **ACF**: subtitle (text) + TL;DR (WYSIWYG, goes through the DOM pipeline) as a
   preamble between the H1 and the body; field names configurable from the panel.
+  **A text field is text, and the delimiters are chosen after escaping what they
+  wrap** (`0.46.1`, `MarkdownConverter::escape_inline()`): the subtitle used to
+  be interpolated raw between `*`, so `A *literal* marker` published as
+  `*A *literal* marker*` — the reader's own asterisks parsed as formatting, one
+  emphasized line arriving as three. The same rule as `CodeFence`, one construct
+  over. Two properties are load-bearing: the escaping is **the library's**,
+  obtained by handing it the value as a text node, so the subtitle escapes
+  exactly what the body escapes and no second copy of the rule can drift from it
+  (a backtick pair still forms a code span, and `&` still comes back as `&amp;`,
+  in a subtitle for the same reason they do in a paragraph); and the emphasis
+  delimiters are added by the **caller**, never by converting an `<em>`, because
+  the library's emphasis converter tests its value with `! trim( $value )` and a
+  subtitle of exactly `0` is falsy — measured, it comes back with the delimiters
+  silently dropped.
 - **Shortcodes**: `[sysmda_md_url]` (+ `id="123"`), always a bare URL; and
   `[sysmda_md_download]` (+ `id`, `text`), always markup — an anchor that saves
   the file instead of opening it. See the decision below for why they are two.
@@ -1851,7 +1874,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 ├── CHANGELOG.md                   ← full release history (NOT shipped; readme.txt links here)
 ├── LICENSE                       ← GPL-2.0 (full text)
 ├── .gitignore
-├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
+├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4, + the docs-site build (required check)
 ├── .github/workflows/docs-site.yml    ← builds documentation/ and deploys it to GitHub Pages
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
@@ -2006,6 +2029,18 @@ Two things about it are load-bearing:
   gets them and can be merged. Adding a path filter to a *required* check would
   leave it permanently pending and block every PR that does not touch the
   filtered paths. Do not add one to `ci.yml`.
+- **The Astro build itself is a pull-request gate, and it lives inside the
+  `PHP 7.4` job** (`0.46.1`): `docs-site.yml` builds only on a push to `main`, so
+  a malformed config, component or frontmatter entry passed every PR check and
+  failed while deploying the public site — with most of #82–#93 being
+  documentation work, and #91 having made multi-surface documentation a
+  requirement of feature PRs. It is a *step* in an already-required check rather
+  than a job of its own for the reason stated two bullets up: a new job gates
+  nothing until its name is added to branch protection, and the same file already
+  carries the shell lint and the release-tag regression on that argument. Verified
+  to fire rather than assumed: a deliberately malformed article exits the build
+  non-zero. Node 22 and `npm ci` are kept identical to the deploy workflow, so
+  what passes here is what gets deployed there.
 
 ## Code conventions
 

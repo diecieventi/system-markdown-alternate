@@ -633,8 +633,10 @@ require __DIR__ . '/../src/HitCounter.php';
 require __DIR__ . '/../src/AdminSettings.php';
 require __DIR__ . '/../src/Shortcodes.php';
 require __DIR__ . '/../src/MarkdownActions.php';
+require __DIR__ . '/../src/AcfIntegration.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
+use Diecieventi\SystemMarkdownAlternate\AcfIntegration;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
 use Diecieventi\SystemMarkdownAlternate\BlockCleaner;
 use Diecieventi\SystemMarkdownAlternate\BricksAdapter;
@@ -2809,6 +2811,54 @@ check(
 	$sysmda_dom( '<div class="card"><a href="https://example.com/post/" title="Post title"></a><div class="card-title">Post title</div><div class="card-summary">A summary.</div></div>' )
 );
 
+// An anchor filled with an invisible character renders nothing, so it is the
+// same defect wearing a disguise (0.46.1). XPath 1.0's normalize-space() knows
+// only XML whitespace, so `&nbsp;` — what a card generator reaches for when a
+// link needs a body it does not have — was never selected, and the converter
+// trimmed it back to the unnamed link this pass exists to prevent.
+check(
+	'dom: nbsp-only anchor counts as empty',
+	'<a href="https://example.com/x">The Name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="The Name">&nbsp;</a>' )
+);
+check(
+	'dom: literal U+00A0 anchor counts as empty',
+	'<a href="https://example.com/x">The Name</a>',
+	$sysmda_dom( "<a href=\"https://example.com/x\" title=\"The Name\">\xc2\xa0</a>" )
+);
+check(
+	'dom: zero-width space anchor counts as empty',
+	'<a href="https://example.com/x" aria-label="Accessible name">Accessible name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" aria-label="Accessible name">&#8203;</a>' )
+);
+check(
+	'dom: nbsp mixed with spaces still counts as empty',
+	'<a href="https://example.com/x">The Name</a>',
+	$sysmda_dom( '<a href="https://example.com/x" title="The Name"> &nbsp; </a>' )
+);
+// The widened test claims no anchor that renders something: a nbsp *between*
+// two words is a rendered space, not an empty link.
+check(
+	'dom: nbsp between words is not an empty anchor',
+	"<a href=\"https://example.com/x\" title=\"Tip\">Real\xc2\xa0text</a>",
+	$sysmda_dom( '<a href="https://example.com/x" title="Tip">Real&nbsp;text</a>' )
+);
+// An icon font draws its glyph from a private-use code point, which is
+// invisible to a whitespace test but not to a reader — which is why the
+// zero-width characters are listed rather than swept up as \p{C}.
+check(
+	'dom: private-use glyph is rendered content',
+	"<a href=\"https://example.com/x\" title=\"Menu\">\xef\x83\x89</a>",
+	$sysmda_dom( "<a href=\"https://example.com/x\" title=\"Menu\">\xef\x83\x89</a>" )
+);
+// And an invisible-only anchor with no declared name stays exactly as it was:
+// widening what counts as empty must not widen what gets a name invented.
+check(
+	'dom: nameless nbsp anchor is left alone',
+	"<a href=\"https://example.com/x\">\xc2\xa0</a>",
+	$sysmda_dom( '<a href="https://example.com/x">&nbsp;</a>' )
+);
+
 // Disclosures (0.38.0): core/details came out as "MoreHidden body" — summary
 // and body concatenated with nothing between them.
 check(
@@ -4306,6 +4356,62 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 	// The separation fixes live in the DOM pass and only pay off once the
 	// converter has run, so the two are pinned together: asserting the HTML
 	// alone would not have caught a converter that glues the pieces back.
+	// ─── escape_inline(): a text value stays text (0.46.1) ──────────────────
+	//
+	// The ACF subtitle was emitted raw between `*` delimiters, so a value
+	// carrying Markdown punctuation was parsed rather than read: the single
+	// emphasized line `A *literal* marker` came out as `*A *literal* marker*`,
+	// which is three runs of emphasis and not the subtitle at all.
+	$sysmda_inline = static function ( $text ) use ( $sysmda_conv ) {
+		return '*' . $sysmda_conv->escape_inline( $text ) . '*';
+	};
+
+	check( 'inline: asterisks stay literal', '*A \*literal\* marker*', $sysmda_inline( 'A *literal* marker' ) );
+	check( 'inline: underscores stay literal', '*Snake\_case\_name*', $sysmda_inline( 'Snake_case_name' ) );
+	check( 'inline: backslash is doubled', '*Back\\\\slash*', $sysmda_inline( 'Back\\slash' ) );
+	check( 'inline: brackets stay literal', '*Ends with \[brackets\]*', $sysmda_inline( 'Ends with [brackets]' ) );
+	check( 'inline: a leading hash is not a heading', '*\# not a heading*', $sysmda_inline( '# not a heading' ) );
+	// Unicode is not punctuation and must survive untouched.
+	check( 'inline: unicode passes through', '*Perché è così — davvero*', $sysmda_inline( 'Perché è così — davvero' ) );
+	// The library's emphasis converter tests its value with `! trim( $value )`,
+	// so a subtitle of exactly "0" is falsy and comes back with the delimiters
+	// dropped. That is why the caller adds them and this method does not.
+	check( 'inline: the string 0 keeps its delimiters', '*0*', $sysmda_inline( '0' ) );
+	check( 'inline: an empty value stays empty', '', $sysmda_conv->escape_inline( '' ) );
+	// A newline in a text field would otherwise put the second line at the start
+	// of a line, where Markdown reads block punctuation.
+	check( 'inline: newlines collapse to a space', '*Line one Line two*', $sysmda_inline( "Line one\nLine two" ) );
+	// Characterization, not an endorsement: `&` and a backtick pair behave here
+	// exactly as they do in the body, because the rule applied is the library's
+	// own. A second, stricter copy of it for subtitles alone is the drift this
+	// method exists to avoid.
+	check( 'inline: entities match body behaviour', '*Tom &amp; Jerry*', $sysmda_inline( 'Tom & Jerry' ) );
+	check( 'inline: backticks match body behaviour', '*A `span` sample*', $sysmda_inline( 'A `span` sample' ) );
+	// An invalid UTF-8 byte costs that byte and nothing else. htmlspecialchars()
+	// returns an empty string for such a value, so without ENT_SUBSTITUTE the
+	// whole subtitle would disappear over one bad character.
+	check( 'inline: an invalid byte does not empty the value', true, false !== strpos( $sysmda_conv->escape_inline( "Caf\xe9 latte" ), 'latte' ) );
+
+	// And the same through the ACF integration, which is where it reaches a
+	// document. build_preamble() reads its keys from filters and its values from
+	// get_field(), so both are driven from the fixtures.
+	$sysmda_acf = new AcfIntegration( $sysmda_conv, $sysmda_renderer );
+	$GLOBALS['sysmda_test_filters']['sysmda_acf_subtitle_key'] = 'subtitle';
+	$GLOBALS['sysmda_test_fields'][77]['subtitle']             = 'A *literal* marker';
+	$sysmda_acf_post     = new WP_Post( array( 'ID' => 77 ) );
+	$sysmda_acf_preamble = $sysmda_acf->build_preamble( '', $sysmda_acf_post );
+
+	check( 'acf: subtitle punctuation is escaped in the preamble', "*A \*literal\* marker*\n\n", $sysmda_acf_preamble );
+
+	$GLOBALS['sysmda_test_fields'][77]['subtitle'] = '0';
+	check( 'acf: a subtitle of "0" is still emitted', "*0*\n\n", $sysmda_acf->build_preamble( '', $sysmda_acf_post ) );
+
+	$GLOBALS['sysmda_test_fields'][77]['subtitle'] = '   ';
+	check( 'acf: a blank subtitle emits nothing', '', $sysmda_acf->build_preamble( '', $sysmda_acf_post ) );
+
+	unset( $GLOBALS['sysmda_test_filters']['sysmda_acf_subtitle_key'] );
+	unset( $GLOBALS['sysmda_test_fields'][77] );
+
 	$sysmda_e2e = static function ( $html ) use ( $sysmda_dom, $sysmda_conv ) {
 		return $sysmda_conv->convert( $sysmda_dom( $html ) );
 	};
@@ -4349,6 +4455,15 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'e2e: nameless overlay anchor is not invented a name',
 		"[](https://example.com/x)\n",
 		$sysmda_e2e( '<a href="https://example.com/x"></a>' )
+	);
+	// The whole defect end to end (0.46.1): the anchor is filled with a
+	// non-breaking space, the naming pass did not select it, and the converter
+	// trimmed the character away — leaving exactly the unnamed link the pass
+	// exists to prevent, with the name sitting in the link title.
+	check(
+		'e2e: nbsp-filled overlay anchor converts to a named link',
+		"[The Name](https://example.com/x)\n",
+		$sysmda_e2e( '<a href="https://example.com/x" title="The Name">&nbsp;</a>' )
 	);
 	// The real shape, as a link-preview plugin renders it on a live site: the
 	// card's heading and summary stay where they are, and the address arrives

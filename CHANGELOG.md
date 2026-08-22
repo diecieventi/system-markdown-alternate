@@ -9,6 +9,23 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.46.1
+
+* Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of
+  read. A subtitle of `A *literal* marker` was emitted raw between the emphasis
+  delimiters, so the reader's own asterisks took part in the formatting and the
+  single italic line came out as three runs of emphasis. Subtitle text is now
+  escaped the same way the article body is, so it reads back exactly as typed —
+  asterisks, underscores, brackets, backslashes and a leading `#` included.
+* Fixed: a link whose body is a non-breaking space (or another invisible
+  character) is now named from its `aria-label` or `title` like any other link
+  that renders nothing. Card and link-preview plugins fill an overlay link with
+  `&nbsp;` rather than leaving it truly empty, and those links were still
+  arriving as `[](url "Name")` — with the name in the tooltip and nothing tying
+  it to the address.
+* Changed: the documentation site is now built on every pull request instead of
+  only after merging, so a broken page cannot reach the published site.
+
 ## 0.46.0
 
 * **Bricks pages now get a real `.md`** (Phase 2 of the page-builder plan;
