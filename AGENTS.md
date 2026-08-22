@@ -639,6 +639,26 @@ The v1 scope is done and widely exceeded. Implemented:
     meta deletion site-wide and must stay trivial, so a key added through the
     filter alone is not covered — documented in `docs/filters.md`, pointing at
     `sysmda_markdown_cache_dependencies`.
+  - **A text value is text, and no wrapper may quietly say otherwise**
+    (`0.47.1`, `MetaFields::emit()`). Each value used to be wrapped in a `<div>`,
+    and the conversion library escapes a text node only when its parent is *not*
+    a `div` — so a field reading `A *literal* marker` was published with the
+    asterisks live and one word in italics, while the identical text inside
+    `post_content` (which reaches `<p>`) was escaped correctly. The wrapper was
+    disabling the escaping, invisibly. Values are separated by a blank line
+    instead, so `wpautop()` gives a bare value the paragraph the escaping needs
+    and leaves a WYSIWYG field's block markup alone; the `div` contributed
+    nothing to the Markdown either way. **Exactly the `0.46.1` ACF-subtitle
+    defect, one construct over** — which is the argument for
+    `MarkdownConverter::escape_inline()` existing at all, and worth remembering
+    the next time a value is placed into the document by hand. Caught by the
+    staging acceptance run, not by review or by the suite: the pure suite stubs
+    `wpautop()`, so the shape that matters was outside what it could model, and
+    the confirmation was run against real WordPress
+    (`render_fragment()` on the live install, `<div>`-wrapped vs bare).
+    `MetaFields::append()` owns the separator for the same reason `emit()` owns
+    the skip rules: two producers feed this seam, and without one shared rule
+    one producer's last value glues to the next producer's first.
   - **Non-strings are skipped, and the skip rules are SHARED with
     `AcfIntegration`** (`MetaFields::emit()`). A repeater or a serialized value
     has a structure this plugin has no brief to invent a rendering for. And the

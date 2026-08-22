@@ -66,7 +66,7 @@ class MetaFields {
 			$values[] = $this->value( $key, $post );
 		}
 
-		return $appended . self::emit( $values );
+		return self::append( $appended, $values );
 	}
 
 	/**
@@ -154,6 +154,28 @@ class MetaFields {
 	}
 
 	/**
+	 * Adds values to whatever is already appended, keeping them apart.
+	 *
+	 * The separator lives here rather than in each caller because there are two
+	 * of them — this class and `AcfIntegration` — and with the `<div>` wrapper
+	 * gone (see `emit()`) nothing else keeps one producer's last value from
+	 * being glued to the next producer's first. One rule, one place: two copies
+	 * of it would drift, and the symptom would be two fields silently merged
+	 * into one paragraph.
+	 *
+	 * @param mixed[] $values Raw values, of any type.
+	 */
+	public static function append( string $appended, array $values ): string {
+		$new = self::emit( $values );
+
+		if ( '' === $new ) {
+			return $appended;
+		}
+
+		return '' === $appended ? $new : $appended . "\n\n" . $new;
+	}
+
+	/**
 	 * Wraps values for the source content, applying the two skip rules.
 	 *
 	 * Shared with `AcfIntegration::append_fields()` rather than written twice.
@@ -169,11 +191,27 @@ class MetaFields {
 	 * has a structure this plugin has no brief to invent a rendering for, and
 	 * guessing one would publish something confidently wrong.
 	 *
+	 * **Values are separated by a blank line and NOT wrapped in an element**
+	 * (0.47.1). They used to be wrapped in a `<div>`, and that wrapper silently
+	 * disabled Markdown escaping for every plain-text value: the conversion
+	 * library escapes text nodes only when their parent is not a `div`, so a
+	 * field containing `A *literal* marker` was published with the asterisks
+	 * live and the reader saw one word in italics. Measured on staging, and the
+	 * same defect the ACF subtitle had in 0.46.1 — a text value must reach the
+	 * document as text.
+	 *
+	 * A blank line is what fixes it and what keeps the values apart: the caller
+	 * hands the result to `wpautop()`, which wraps a bare value in a paragraph —
+	 * where the library does escape — and leaves block markup from a WYSIWYG
+	 * field alone. The `div` contributed nothing to the Markdown either way; the
+	 * converter discards unknown wrappers, so removing it changes no output
+	 * except the escaping this exists to restore.
+	 *
 	 * @param mixed[] $values Raw values, of any type.
 	 * @return string HTML fragment, empty when nothing survived.
 	 */
 	public static function emit( array $values ): string {
-		$out = '';
+		$parts = array();
 
 		foreach ( $values as $value ) {
 			if ( ! is_string( $value ) ) {
@@ -185,9 +223,9 @@ class MetaFields {
 				continue;
 			}
 
-			$out .= '<div>' . $value . '</div>';
+			$parts[] = $value;
 		}
 
-		return $out;
+		return implode( "\n\n", $parts );
 	}
 }

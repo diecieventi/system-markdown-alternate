@@ -187,8 +187,10 @@ and classic branches the post content uses, and join the same HTML cleanup pass,
 so every rule in this section applies to them too — including on a page rendered
 by a page-builder adapter, where the post content itself is not read at all.
 Values that are not strings (an array from a repeater or a serialized value) are
-skipped. The setting is empty by default, and with nothing listed the body is
-byte-identical to a site that never had it.
+skipped, and a plain-text value is escaped like any other text in the document —
+punctuation an author typed (`*`, `_`, `[`, `]`) reads back as typed rather than
+as formatting. The setting is empty by default, and with nothing listed the body
+is byte-identical to a site that never had it.
 
 1. **Block pipeline** — Gutenberg blocks are parsed and cleaned
    (`BlockCleaner`): excluded blocks are dropped, synced patterns
