@@ -2,7 +2,7 @@
 title: "X-Robots-Tag"
 description: "The header that keeps Markdown responses out of search results, and why changing it is almost always the wrong move."
 sidebar:
-  order: 5
+  order: 6
 ---
 
 **Settings → Markdown Alternate → Advanced**

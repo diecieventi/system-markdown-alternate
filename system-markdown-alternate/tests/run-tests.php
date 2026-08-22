@@ -36,6 +36,7 @@ ob_start();
 
 $GLOBALS['sysmda_test_posts']       = array(); // id → WP_Post
 $GLOBALS['sysmda_test_parsed']      = array(); // content → blocks
+$GLOBALS['sysmda_test_registered_filters'] = array(); // hook → registered priorities
 $GLOBALS['sysmda_test_options']     = array(); // option → value
 $GLOBALS['sysmda_test_meta']        = array(); // post ID => meta key => value
 $GLOBALS['sysmda_test_fields']      = array(); // post ID => ACF field key => value
@@ -148,9 +149,24 @@ function get_post_meta( $post_id, $key, $single = false ) {
 		: ( $single ? '' : array() );
 }
 
-/** Stub: ACF field values, available only where a fixture sets one. */
+/**
+ * Stub: whether the row exists at all, which is NOT the same question as
+ * whether the value is truthy — an empty string is a stored value, and the
+ * extra-meta fingerprint turns on exactly this distinction.
+ */
+function metadata_exists( $meta_type, $object_id, $meta_key ) {
+	return isset( $GLOBALS['sysmda_test_meta'][ $object_id ][ $meta_key ] );
+}
+
+/**
+ * Stub: ACF field values, available only where a fixture sets one.
+ *
+ * array_key_exists(), not isset(): ACF returns null for a key it cannot resolve,
+ * and isset() is false for a stored null — so a fixture pinning that behaviour
+ * would never reach the code under test.
+ */
 function get_field( $key, $post_id = false ) {
-	return isset( $GLOBALS['sysmda_test_fields'][ $post_id ][ $key ] )
+	return array_key_exists( $key, $GLOBALS['sysmda_test_fields'][ $post_id ] ?? array() )
 		? $GLOBALS['sysmda_test_fields'][ $post_id ][ $key ]
 		: false;
 }
@@ -175,6 +191,35 @@ function strip_shortcodes( $content ) {
  */
 function do_shortcode( $content ) {
 	return str_replace( '[demo]', 'EXPANDED', $content );
+}
+
+/**
+ * Stub: an approximation of core's paragraph wrapping, faithful for the shapes
+ * these fixtures use and no further. Core leaves existing block-level markup
+ * alone and wraps bare text in a paragraph; it also splits on blank lines,
+ * which nothing here depends on. Named as an approximation on purpose — a stub
+ * that pretended to be complete would be the more dangerous kind.
+ */
+function wpautop( $text, $br = true ) {
+	$text = trim( (string) $text );
+
+	if ( '' === $text ) {
+		return '';
+	}
+
+	if ( preg_match( '~^<(p|div|figure|ul|ol|table|pre|blockquote|h[1-6])\b~i', $text ) ) {
+		return $text;
+	}
+
+	return '<p>' . $text . '</p>';
+}
+
+/**
+ * Stub: core returns a static block's saved markup, which is what the render
+ * pipeline concatenates. Dynamic blocks (a callback) are out of scope here.
+ */
+function render_block( $block ) {
+	return isset( $block['innerHTML'] ) ? (string) $block['innerHTML'] : '';
 }
 
 function wp_strip_all_tags( $text ) {
@@ -468,6 +513,18 @@ function add_action( $hook_name, $callback, $priority = 10, $accepted_args = 1 )
 	return true;
 }
 
+/**
+ * Stub: records the registration only. Dispatch is not modelled — apply_filters()
+ * above serves forced values — but WHERE a callback sits in the priority order
+ * is a property of the registration, and it is the property that was wrong: a
+ * callback that REPLACES its input has to run before site code, or it discards
+ * whatever that code returned.
+ */
+function add_filter( $hook_name, $callback, $priority = 10, $accepted_args = 1 ) {
+	$GLOBALS['sysmda_test_registered_filters'][ $hook_name ][] = $priority;
+	return true;
+}
+
 /** Stub: dispatches registered callbacks by priority and tracks nested hooks. */
 function do_action( $hook_name, ...$args ) {
 	$GLOBALS['sysmda_test_did_actions'][ $hook_name ] = did_action( $hook_name ) + 1;
@@ -634,6 +691,7 @@ require __DIR__ . '/../src/AdminSettings.php';
 require __DIR__ . '/../src/Shortcodes.php';
 require __DIR__ . '/../src/MarkdownActions.php';
 require __DIR__ . '/../src/AcfIntegration.php';
+require __DIR__ . '/../src/MetaFields.php';
 
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AcfIntegration;
@@ -654,6 +712,7 @@ use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
+use Diecieventi\SystemMarkdownAlternate\MetaFields;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
@@ -2532,6 +2591,68 @@ $sysmda_admin->maybe_bump_for_empty_dependency_meta( 1, 61, '_thumbnail_id', 0 )
 $sysmda_admin->flush_cache_salt();
 check( 'salt: emptying the featured-image dependency bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
 
+// ─── Filter registration priorities (0.47.0) ──────────────────────────────
+//
+// hook_filters() is private and inert (the closures read their options only when
+// a filter actually runs), so a reflection call registers without side effects.
+$sysmda_hook_filters = sysmda_reflection_method( AdminSettings::class, 'hook_filters' );
+$sysmda_hook_filters->invoke( $sysmda_admin );
+
+// The one that was wrong. This callback REPLACES the incoming list, so at the
+// usual priority 20 it runs after site code hooking at the default 10 and throws
+// that code's additions away — while both the panel article and docs/filters.md
+// promise the opposite. Priority 5 makes the saved list the filter's *default*,
+// which is what lets site code narrow or extend it.
+check(
+	'filters: the extra meta keys are fed in before site code',
+	array( 5 ),
+	$GLOBALS['sysmda_test_registered_filters']['sysmda_markdown_extra_meta_keys'] ?? array()
+);
+
+// Same shape, same reason — the precedent this follows.
+check(
+	'filters: the taxonomy slugs are fed in before site code',
+	array( 5 ),
+	$GLOBALS['sysmda_test_registered_filters']['sysmda_front_matter_taxonomy_slugs'] ?? array()
+);
+
+// And the contrast that makes the rule legible: the exclusion lists MERGE, so
+// running after site code preserves whatever it added. 20 is correct for them.
+check(
+	'filters: an accumulating exclusion list is fed in after site code',
+	array( 20 ),
+	$GLOBALS['sysmda_test_registered_filters']['sysmda_markdown_excluded_classes'] ?? array()
+);
+
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+
+// An extra custom field is the one dependency whose part appears only while the
+// post HAS the key, so deleting the last value can return the whole fingerprint
+// to empty — and date_is_strong_validator() would start trusting a
+// post_modified_gmt that a meta deletion never moved. Deletion therefore bumps.
+$GLOBALS['sysmda_test_options']['sysmda_extra_meta_keys'] = "spec\nintro";
+
+$sysmda_admin->bump_for_deleted_dependency_meta( array( 3 ), 61, 'spec', 'Old value' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: deleting a configured extra field bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// …and nothing else does. Every meta deletion on the site reaches this hook, so
+// a check that bumps for unrelated keys would flush the whole Markdown cache on
+// routine writes — the failure this list exists to prevent.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->bump_for_deleted_dependency_meta( array( 4 ), 61, '_edit_lock', '123' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: deleting an unconfigured meta key does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// Emptying an extra field deliberately does NOT bump: the row survives, so
+// metadata_exists() stays true, the part is still emitted as the hash of an
+// empty value, and the ETag moves on its own.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->maybe_bump_for_empty_dependency_meta( 5, 61, 'spec', '' );
+$sysmda_admin->flush_cache_salt();
+check( 'salt: emptying an extra field does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+unset( $GLOBALS['sysmda_test_options']['sysmda_extra_meta_keys'] );
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 
 // The rename itself: the author line of every post by that user changes.
@@ -3501,12 +3622,14 @@ check( 'bricks adapter: an ordinary tree has none', false, $sysmda_has_pc_method
 // ─── ContentRenderer: the page-builder adapter seam ────────────────────────
 
 /*
- * render_block() and wpautop() are never stubbed in this harness (nothing
- * exercising the full public render() has needed them before), so every test
- * below feeds render() a post the fake adapter claims — the one branch that
- * never reaches either function. The "no adapter claims this post" behaviour
- * is covered instead through the public builder_* accessors, which never
- * touch the has_blocks()/classic branches at all.
+ * The tests below feed render() a post the fake adapter claims, so they exercise
+ * the adapter branch alone; "no adapter claims this post" is covered through the
+ * public builder_* accessors.
+ *
+ * render_block() and wpautop() went unstubbed until 0.47.0, because nothing had
+ * exercised the full public render() on the other two branches. The
+ * appended-content tests further down do, so both now have stubs — approximate
+ * ones, documented as such where they are defined.
  */
 class SysmdaFakeBuilderAdapter implements BuilderAdapter {
 	public $active      = true;
@@ -3665,6 +3788,236 @@ check(
 
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_builder_adapters'] );
 $sysmda_fake_adapter->selectors = array();
+
+// ─── MetaFields: generic post-meta content (0.47.0) ───────────────────────
+
+// The two skip rules, now shared with AcfIntegration so they cannot drift.
+check( 'meta: values are wrapped and kept in order', '<div>first</div><div>second</div>', MetaFields::emit( array( 'first', 'second' ) ) );
+check( 'meta: an empty value is skipped', '<div>kept</div>', MetaFields::emit( array( '', 'kept' ) ) );
+check( 'meta: a whitespace-only value is skipped', '<div>kept</div>', MetaFields::emit( array( "  \n ", 'kept' ) ) );
+// The rule most likely to be rewritten from memory as empty(): "0" is a real
+// value, and a falsy test drops it.
+check( 'meta: the string 0 survives', '<div>0</div>', MetaFields::emit( array( '0' ) ) );
+// Structured data has a shape this plugin has no brief to invent a rendering
+// for, so it is skipped rather than guessed at.
+check( 'meta: a non-string value is skipped', '<div>kept</div>', MetaFields::emit( array( array( 'a', 'b' ), 'kept' ) ) );
+check( 'meta: an integer value is skipped', '', MetaFields::emit( array( 42 ) ) );
+
+$sysmda_meta_fields = new MetaFields();
+$sysmda_meta_post   = new WP_Post( array( 'ID' => 90, 'post_content' => '<p>Body.</p>' ) );
+
+// The two sources are given DIFFERENT values for the same key, so the assertion
+// says which branch actually ran rather than merely that something was read.
+$GLOBALS['sysmda_test_meta'][90]['spec']   = 'RAW from post meta';
+$GLOBALS['sysmda_test_fields'][90]['spec'] = 'FORMATTED by ACF';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+
+check(
+	'meta: ACF formatting wins while ACF is active',
+	'<div>FORMATTED by ACF</div>',
+	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
+);
+
+// The fallback branch needs a seam: a defined function cannot be undefined, so
+// the harness's get_field() stub can never be made to disappear. Without this
+// the get_post_meta() path — the one every non-ACF site takes — would ship
+// untested, which in a two-way fork is where the wrong value silently comes from.
+$sysmda_meta_no_acf = new class() extends MetaFields {
+	protected function acf_available(): bool {
+		return false;
+	}
+};
+
+check(
+	'meta: without ACF the stored value is used',
+	'<div>RAW from post meta</div>',
+	$sysmda_meta_no_acf->appended_html( '', $sysmda_meta_post )
+);
+
+// get_field() returning null is what ACF answers for an absent key, and what it
+// would answer for an unregistered one if a future version started refusing
+// those. Measured on 6.8.8 it does NOT, so this fallback is insulation rather
+// than a fix — but it costs one comparison and removes the dependency.
+$GLOBALS['sysmda_test_fields'][90]['nullish'] = null;
+$GLOBALS['sysmda_test_meta'][90]['nullish']   = 'STORED value';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'nullish' );
+check(
+	'meta: a null from the ACF reader falls back to the stored value',
+	'<div>STORED value</div>',
+	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
+);
+
+// …and false does NOT fall back: a registered true/false field returns false on
+// purpose, and reading the row instead would publish the raw "0" ACF suppressed.
+$GLOBALS['sysmda_test_fields'][90]['nullish'] = false;
+$GLOBALS['sysmda_test_meta'][90]['nullish']   = '0';
+check(
+	'meta: a false from the ACF reader is not overridden',
+	'',
+	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
+);
+unset( $GLOBALS['sysmda_test_fields'][90]['nullish'], $GLOBALS['sysmda_test_meta'][90]['nullish'] );
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+
+check(
+	'meta: no configured key appends nothing',
+	'',
+	( function () use ( $sysmda_meta_fields, $sysmda_meta_post ) {
+		unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] );
+		$out = $sysmda_meta_fields->appended_html( '', $sysmda_meta_post );
+		$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+		return $out;
+	} )()
+);
+
+// Keys are emitted in the order they are listed, which is the only ordering
+// promise the panel field makes.
+$GLOBALS['sysmda_test_meta'][90]['intro']   = 'INTRO';
+$GLOBALS['sysmda_test_fields'][90]['intro'] = 'INTRO';
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'intro', 'spec' );
+check(
+	'meta: values follow the listed order',
+	'<div>INTRO</div><div>FORMATTED by ACF</div>',
+	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
+);
+
+// ─── MetaFields: the cache validator property (0.47.0) ────────────────────
+//
+// The whole design decision in one pair of assertions. A part is added only for
+// a post that ACTUALLY HAS the key, so a site that configures one key does not
+// make every post's fingerprint non-empty — which would switch
+// If-Modified-Since off site-wide, because date_is_strong_validator() refuses
+// the date on a merely non-empty fingerprint without comparing values.
+
+$sysmda_meta_metadata = new MetadataBuilder( new ShortcodeCleaner(), $sysmda_renderer );
+$sysmda_meta_absent   = new WP_Post( array( 'ID' => 91, 'post_content' => '<p>No extra fields here.</p>' ) );
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spec' );
+
+check(
+	'meta: a post carrying the key gets a fingerprint part',
+	true,
+	'' !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post )
+);
+check(
+	'meta: a post WITHOUT the key keeps an empty fingerprint',
+	'',
+	$sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_absent )
+);
+
+// Presence is the row, not the value: an empty string is stored data, so it
+// still contributes — and the part changes when the value does.
+$sysmda_meta_before = $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post );
+$GLOBALS['sysmda_test_fields'][90]['spec'] = 'FORMATTED by ACF, revised';
+check(
+	'meta: changing the value moves the fingerprint',
+	true,
+	$sysmda_meta_before !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_post )
+);
+
+$GLOBALS['sysmda_test_meta'][92]['spec']   = '';
+$GLOBALS['sysmda_test_fields'][92]['spec'] = '';
+$sysmda_meta_empty = new WP_Post( array( 'ID' => 92, 'post_content' => '<p>Empty value.</p>' ) );
+check(
+	'meta: an empty stored value still contributes a part',
+	true,
+	'' !== $sysmda_meta_metadata->dependencies_fingerprint( $sysmda_meta_empty )
+);
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] );
+unset( $GLOBALS['sysmda_test_meta'][90], $GLOBALS['sysmda_test_meta'][92] );
+unset( $GLOBALS['sysmda_test_fields'][90], $GLOBALS['sysmda_test_fields'][92] );
+
+// ─── The appended-content seam (0.47.0) ───────────────────────────────────
+//
+// The defect this exists for: content appended through
+// sysmda_markdown_source_content is DISCARDED for a post a page-builder adapter
+// claims, because that branch renders from the builder's own tree and never
+// looks at the filtered source. Every configured meta value silently vanished
+// from a Bricks page while still moving the cache validator — and a Bricks page
+// is precisely the "the template holds the content" case the feature is for.
+// Appending is not the same operation as replacing the source, so it has its
+// own seam, honoured on all three branches.
+
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = '<p>APPENDED</p>';
+
+check(
+	'appended: an adapter-rendered post still receives it',
+	'<p>FAKE BUILDER OUTPUT</p><p>APPENDED</p>',
+	$sysmda_adapter_renderer->render( $sysmda_claimed_post )
+);
+
+// The two ordinary branches must be unchanged by the move, which is the other
+// half of the regression: a fix that only worked for builders would be a
+// different bug.
+$GLOBALS['sysmda_test_parsed']['<!-- wp:paragraph -->BLOCK BODY'] = array(
+	array( 'blockName' => 'core/paragraph', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => '<p>Body.</p>' ),
+);
+$sysmda_appended_block_post = new WP_Post(
+	array(
+		'ID'           => 962,
+		'permalink'    => 'https://example.com/blocky/',
+		'post_content' => '<!-- wp:paragraph -->BLOCK BODY',
+	)
+);
+check(
+	'appended: a block post still receives it',
+	'<p>Body.</p><p>APPENDED</p>',
+	$sysmda_adapter_renderer->render( $sysmda_appended_block_post )
+);
+
+$sysmda_appended_classic_post = new WP_Post(
+	array(
+		'ID'           => 963,
+		'permalink'    => 'https://example.com/classic/',
+		'post_content' => '<p>Classic body.</p>',
+	)
+);
+check(
+	'appended: a classic post still receives it',
+	'<p>Classic body.</p><p>APPENDED</p>',
+	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
+);
+
+// render_appended() mirrors the main path's two branches, and this is what makes
+// moving the ACF integration onto the seam free: block markup in an appended
+// value is still cleaned by BlockCleaner — the behaviour
+// collect_acf_dependencies() assumes when it walks pattern references. A helper
+// that only ever ran wpautop() would drop the cleaning silently.
+$GLOBALS['sysmda_test_parsed']['<!-- wp:paragraph -->APPENDED BLOCKS'] = array(
+	array( 'blockName' => 'core/paragraph', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => '<p>Kept.</p>' ),
+	array( 'blockName' => 'wpforms/form-selector', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => '<p>A FORM</p>' ),
+);
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = '<!-- wp:paragraph -->APPENDED BLOCKS';
+check(
+	'appended: block markup is cleaned, not pasted through',
+	'<p>Classic body.</p><p>Kept.</p>',
+	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
+);
+
+// Running before the single outer process_dom() is what keeps class exclusion
+// and URL absolutization applying to appended content, with no second DOM pass.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] =
+	'<p><a href="/relative">link</a></p><div class="md-exclude">secret</div>';
+$sysmda_appended_dom = $sysmda_adapter_renderer->render( $sysmda_appended_classic_post );
+check( 'appended: URLs are absolutized', true, false !== strpos( $sysmda_appended_dom, 'https://example.com/relative' ) );
+check( 'appended: excluded classes are removed', false, strpos( $sysmda_appended_dom, 'secret' ) );
+
+// And an excluded shortcode in appended content is stripped, like anywhere else.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = '<p>Before [lwptoc] after.</p>';
+check(
+	'appended: excluded shortcodes are stripped',
+	'<p>Classic body.</p><p>Before  after.</p>',
+	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
+);
+
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] );
+
+check(
+	'appended: nothing appended leaves the document alone',
+	'<p>Classic body.</p>',
+	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
+);
 
 // ─── MetadataBuilder: builder fingerprint + description fallback ──────────
 
@@ -5184,6 +5537,7 @@ $sysmda_stable_hooks = array(
 	'sysmda_markdown_excluded_block_names'  => 1,
 	'sysmda_markdown_excluded_classes'      => 1,
 	'sysmda_markdown_excluded_builder_elements' => 1,
+	'sysmda_markdown_extra_meta_keys'       => 2,
 	'sysmda_front_matter_enabled'           => 2,
 	'sysmda_front_matter_taxonomy_slugs'    => 2,
 	'sysmda_acf_subtitle_key'               => 2,

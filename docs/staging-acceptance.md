@@ -72,6 +72,21 @@ the server.
 - The *Enabled content types* rows show the real per-type breakdown (for example
   *Pages — 1 Bricks, 3 Gutenberg*) with the warning on the builder part, and
   revisions of a builder page do not inflate its count.
+- **Extra custom fields** (since `0.47.0`). Needs a fixture that does not exist
+  on either site yet: **neither staging has a single ACF field group**
+  (`acf_get_field_groups()` returned `[]` on both, August 2026), so create one
+  with a text, a WYSIWYG, an image and a repeater field, and separately write a
+  plain non-ACF meta key with `update_post_meta()` so the non-ACF read path is
+  exercised on a real install too. Then: list the text and WYSIWYG keys in the
+  panel and confirm both land at the end of the body, in the listed order, with
+  the WYSIWYG's links and lists converted; list the image and repeater keys and
+  confirm they are **skipped** rather than rendered as an ID or a count; confirm
+  the plain meta key behaves the same with ACF active as the ACF ones do. Then
+  the validator half, which is the point of the design: `curl -sI` a post that
+  has none of the configured keys and confirm its `ETag` is unchanged from
+  before the keys were configured and that `If-Modified-Since` still answers
+  `304`; edit a configured value on a post that has it and confirm its `ETag`
+  moves; delete that value entirely and confirm the `ETag` moves again.
 - `/llms.txt` is healthy and excludes ineligible content.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).

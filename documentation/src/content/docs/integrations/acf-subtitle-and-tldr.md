@@ -44,7 +44,11 @@ The section disappears from the settings page and the fields stop being read —
 
 ## Other fields
 
-Two fields cover the common case; anything further is a filter. To append a third field to the source content before conversion:
+Two settings cover the two positions in the document that need one. For an ACF field that is simply *part of the article* — a standfirst, a specification table, a disclaimer — use [Extra custom fields](/settings/extra-custom-fields/) instead: it takes a list of meta keys from the settings page, appends their values to the end of the body, and works for JetEngine and native Custom Fields too.
+
+The difference is position. Subtitle and TL;DR have one, and it is why they are separate settings; a generic field has none, so it goes at the end.
+
+There is also a filter, predating the panel field and still supported, which appends ACF field values to the source content:
 
 ```
 add_filter( 'sysmda_acf_field_keys', function ( array $keys ) {

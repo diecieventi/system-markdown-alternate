@@ -592,6 +592,104 @@ The v1 scope is done and widely exceeded. Implemented:
   the library's emphasis converter tests its value with `! trim( $value )` and a
   subtitle of exactly `0` is falsy — measured, it comes back with the delimiters
   silently dropped.
+- **Extra custom fields** (`0.47.0`, `MetaFields`): a panel textarea of post
+  **meta keys** whose values are appended to the end of the body, in the order
+  listed, through **`sysmda_markdown_appended_html`** at priority 20 (registered
+  after `AcfIntegration`, so ACF's own fields keep their position). Empty by
+  default; new Stable filter `sysmda_markdown_extra_meta_keys`, fed by the panel
+  at **priority 5**. Motivated by a
+  real case: a page built from a GeneratePress Elements template mixes
+  `post_content` with pieces held in ACF/JetEngine/native Custom Fields, and
+  none of it reached the `.md`.
+  **One generic mechanism, not N per-plugin integrations** — ACF, JetEngine,
+  Meta Box and the native Custom Fields box all store ordinary post meta, so a
+  "JetEngine integration" would be the same twenty lines wearing a different
+  name. Explicit and opt-in, never auto-detected: post meta is mostly internal
+  plumbing, and no rule can tell which keys are content (same discipline as the
+  taxonomy selection).
+  Four properties are load-bearing:
+  - **The value is read with `get_field()` when ACF is active, `get_post_meta()`
+    otherwise** — and this costs nothing for non-ACF sources, which was measured
+    rather than assumed. Against ACF 6.8.8, for a key ACF has *no field
+    definition* for, the two functions returned **identical** values: an
+    unregistered key, a protected `_`-prefixed key and a serialized one alike. So
+    a JetEngine or native key behaves the same whether ACF is installed or not,
+    while a registered ACF field arrives formatted the way ACF renders it. They
+    diverge only on an **absent** key (`''` vs `null`), which is why presence is
+    never inferred from the value.
+  - **A fingerprint part is added only when the post ACTUALLY HAS the key**
+    (`MetadataBuilder::collect_meta_dependencies()`, gated on
+    `metadata_exists()`), deliberately departing from
+    `collect_acf_dependencies()` one method up, which adds a part per configured
+    key regardless. That is harmless for ACF, whose key list is filter-only and
+    rarely set; it would not be harmless here, because a panel field is
+    site-wide and `date_is_strong_validator()` refuses `If-Modified-Since` on a
+    *merely non-empty* fingerprint without comparing values. One key typed into
+    the box would otherwise switch the date validator off for every post on the
+    site, including the ones that never had the field. Off has to mean
+    byte-identical output **and** byte-identical validator, as it does for the
+    optional taxonomies.
+  - **Deletion bumps the salt; emptying does not**, and the asymmetry is the
+    whole reason only `bump_for_deleted_dependency_meta()` was extended. An empty
+    value leaves the row in place, so `metadata_exists()` stays true, the part
+    survives as the hash of an empty value and the ETag moves by itself. A
+    deletion removes the row, can return the fingerprint to empty, and
+    `post_modified_gmt` never moved — the stale-`304` shape from "Technical
+    notes" 6. That hook reads the **option**, not the filter: it fires on every
+    meta deletion site-wide and must stay trivial, so a key added through the
+    filter alone is not covered — documented in `docs/filters.md`, pointing at
+    `sysmda_markdown_cache_dependencies`.
+  - **Non-strings are skipped, and the skip rules are SHARED with
+    `AcfIntegration`** (`MetaFields::emit()`). A repeater or a serialized value
+    has a structure this plugin has no brief to invent a rendering for. And the
+    emptiness test is an explicit `'' === trim()` precisely so the string `"0"`
+    survives — a rule got right once, easy to rewrite from memory as `empty()`,
+    and therefore worth exactly one copy (the `CodeRegions` argument).
+  - **Appending is not replacing the source, and the seam has to say so**
+    (`ContentRenderer::render_appended()`, filter
+    `sysmda_markdown_appended_html`, Advanced). This started on
+    `sysmda_markdown_source_content` and was caught by Codex on PR #107: a post
+    a page-builder adapter claims is rendered from the builder's own tree, so
+    `render()` discards the filtered source entirely — every configured value
+    vanished from a Bricks page while still moving the cache validator. A Bricks
+    page is *precisely* the "the template holds the content" case this feature
+    exists for, so the motivating scenario was the one that failed. The same
+    defect had been silently true of `AcfIntegration::append_fields()` since
+    `0.46.0`; both moved. `render_appended()` mirrors the main path's own
+    block/classic branches, and that is what makes the ACF move free — a synced
+    pattern referenced from an ACF field is still expanded, which is what
+    `collect_acf_dependencies()` assumes when it walks those references. It runs
+    **before** the single outer `process_dom()`, so appended content is
+    class-excluded and absolutized by the same pass rather than a second one.
+  - **The panel feeds the key list at priority 5, not 20** (also Codex, PR #107).
+    The callback REPLACES its input, so at 20 it runs after site code hooking at
+    the default 10 and throws that code's additions away. Priority 5 makes the
+    saved list the filter's *default*, which is what lets site code narrow **and**
+    extend it — the same reasoning, and the same number, as
+    `sysmda_front_matter_taxonomy_slugs`. The three exclusion filters can sit at
+    20 only because they merge. Rule of thumb: **a replacing callback goes before
+    site code, a merging one after.**
+  Deliberately out of scope: the front-matter `description` fallback does not see
+  these values (it reads `post_content` directly), exactly as
+  `sysmda_acf_field_keys` already behaves; and there is no per-key placement —
+  the plugin cannot know where in a template's layout a field renders, so
+  appending is the honest answer rather than a guessed one.
+  **Not adopted, and why** (the third Codex finding, P1): that `get_field()`
+  refuses keys which are not registered ACF fields since 5.11, making the
+  cross-plugin mechanism work only without ACF. Measured against the live ACF
+  6.8.8 staging on six unregistered keys, on a site with no field groups and no
+  `_{key}` reference rows at all: `get_field()` and `get_post_meta()` returned
+  **identical** values every time, protected and serialized keys included. The
+  claim does not reproduce. What was taken instead is a narrower insulation — a
+  strict `null === $value` fallback to `get_post_meta()`, since `null` is what
+  ACF returns for an absent key and what it *would* return if a future version
+  started refusing unregistered ones. Keyed on `null`, never on falsiness: a
+  registered true/false field returns `false` on purpose, and falling back there
+  would publish the raw `"0"` ACF meant to suppress. Codex's own suggestion
+  (detect ownership with `acf_get_field()`) was rejected: whether that resolves a
+  *registered* field by name outside a post context is unverified, with no ACF
+  field group on either staging to test against, and getting it wrong breaks the
+  ACF formatting path.
 - **Shortcodes**: `[sysmda_md_url]` (+ `id="123"`), always a bare URL; and
   `[sysmda_md_download]` (+ `id`, `text`), always markup — an anchor that saves
   the file instead of opening it. See the decision below for why they are two.
@@ -647,55 +745,6 @@ The v1 scope is done and widely exceeded. Implemented:
 
 ## Open / to do (towards wordpress.org)
 
-- **Generic "extra custom fields" mechanism** (proposed August 2026 — the next
-  priority candidate integration, superseding the vaguer "evaluate new
-  integrations" placeholder that used to sit in "To check next time" below).
-  Motivated by a real conversation about GeneratePress + Blocks sites: a page
-  built from a GeneratePress Elements template routinely mixes `post_content`
-  with pieces coming from ACF fields, JetEngine dynamic fields, or WordPress's
-  own native Custom Fields UI. **Correction, caught by Codex on PR #104**: the
-  paragraph originally shipped here claimed only the two ACF preamble fields
-  ever reach the document, which is false for a site already using the
-  developer API — `AcfIntegration::append_fields()` accepts arbitrary ACF
-  text/WYSIWYG field keys through the existing `sysmda_acf_field_keys` filter
-  (Advanced), appends their values and folds them into the cache fingerprint
-  (`MetadataBuilder::collect_acf_dependencies()`). What is actually missing is
-  narrower: that path is filter-only (no panel field lists arbitrary keys),
-  ACF-only (gated on `function_exists('get_field')`, so JetEngine and native
-  Custom Fields — both plain `get_post_meta()`, no ACF involved — cannot reach
-  it at all), and text/WYSIWYG-only by design. The missing piece is a panel UI
-  plus a source that isn't gated on ACF being active, not the ability to pull
-  extra fields into the document at all (see "What about a single-post
-  template built with a page builder?" in the page-builders documentation —
-  this is the one case on the other side of that line, where the missing
-  piece is real content, not chrome).
-  The shape that follows from this: **one generic mechanism, not N per-plugin
-  integrations.** JetEngine, ACF and native Custom Fields are all, underneath,
-  ordinary `post meta` — a "JetEngine integration" and a "Meta Box
-  integration" would just be the same 20 lines wearing a different name. A
-  single panel field where the site owner lists the meta **keys** to pull in
-  — regardless of which plugin wrote them — covers all of them at once, feeds
-  the document through the same `sysmda_markdown_source_content` seam the ACF
-  integration already proves out, and costs nothing to sites that never touch
-  it (empty by default, exactly like the taxonomy selection).
-  **Explicit, opt-in, never auto-detected** — the same discipline as the
-  custom-taxonomy selection and every other place this file has that rule:
-  arbitrary post meta is full of internal/plugin-plumbing keys (cache
-  markers, internal IDs, serialized UI state) that would pollute the document
-  if the plugin tried to guess which ones are content. Not yet scoped, and
-  deliberately left open rather than guessed at here: where the pulled values
-  land in the document (front matter? a preamble like ACF's subtitle/TL;DR?
-  both, configurable per key?), whether serialized/array meta values need
-  special handling before they can be treated as text, and whether this
-  should subsume the two existing ACF-specific fields or sit beside them.
-  **Not optional, and not merely a design question** (also caught by Codex on
-  PR #104): whatever shape ships must feed
-  `MetadataBuilder::dependencies_fingerprint()` the same way
-  `collect_acf_dependencies()` already does for `sysmda_acf_field_keys` —
-  editing a pulled meta value does not move `post_modified_gmt`, so skipping
-  this would let a client holding a stale `ETag` keep getting `304` with an
-  outdated body, exactly the failure mode "Technical notes" 6 exists to rule
-  out. `collect_acf_dependencies()` is the template to follow, keys and all.
 - **Ideas surfaced by reviewing a comparable plugin** (`Serve Markdown` /
   `serve-md`, wordpress.org, `akumarjain`, v1.0 — read in full August 2026;
   not a plan, three separate candidates recorded for future evaluation, none
@@ -1914,7 +1963,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
         ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link, invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
-        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles())
+        ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles()); render_appended() honours sysmda_markdown_appended_html on every branch
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
         ├── BuilderDetector.php     ← per-post page-builder detection (render mode, from meta) + the veto list
         ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)
@@ -1922,13 +1971,14 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── BricksAdapter.php       ← BuilderAdapter for Bricks (render_data(), lazy-load fix, fingerprint, source_text)
         ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, sanitize_types: attachment always stripped)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
-        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static); dependencies_fingerprint() is an instance method (needs ContentRenderer's builder adapter list)
+        ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static); dependencies_fingerprint() is an instance method (needs ContentRenderer's builder adapter list); collect_meta_dependencies() gates on metadata_exists()
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + code/paragraph safety overrides)
         ├── CodeFence.php           ← content-sized code delimiters (pure logic, no WP/library deps)
         ├── CodeElementConverter.php ← independently designed <code>/<pre> converter using public library interfaces
         ├── CodeRegions.php         ← masks <pre>/<code> around a transform; shared by shortcode expansion AND removal
         ├── SafeParagraphConverter.php   ← wraps the library's <p> converter (escapes a prose fence)
-        ├── AcfIntegration.php      ← subtitle + TL;DR (preamble)
+        ├── AcfIntegration.php      ← subtitle + TL;DR (preamble); ACF source fields
+        ├── MetaFields.php          ← generic post-meta content (panel key list; emit() shared with AcfIntegration)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
         ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)
         ├── AdminSettings.php       ← settings page (Settings API)
@@ -2229,8 +2279,8 @@ not exist as far as the public API is concerned.
    `cache_version()` produces the ETag, so it runs before the cache lookup and
    before any header, and the filters it reads run with it —
    `sysmda_front_matter_taxonomy_slugs`, `sysmda_front_matter_taxonomies`,
-   `sysmda_markdown_cache_dependencies` and — while ACF is active — the three
-   `sysmda_acf_*` keys. Route eligibility gets there first, so
+   `sysmda_markdown_cache_dependencies`, `sysmda_markdown_extra_meta_keys` and —
+   while ACF is active — the three `sysmda_acf_*` keys. Route eligibility gets there first, so
    `sysmda_markdown_supported_post_types` and
    `sysmda_markdown_excluded_post_formats` are on that path too. Adding
    an input therefore adds cost to responses that send no body at all, which is

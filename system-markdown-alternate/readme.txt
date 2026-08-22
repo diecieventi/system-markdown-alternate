@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.46.1
+Stable tag: 0.47.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -31,6 +31,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Clean conversion**: Gutenberg blocks are rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code blocks become fenced blocks, URLs are made absolute, and an embedded video, tweet or track leaves a link to what it embeds rather than an empty gap. Clickable link cards keep their name too: the invisible overlay link such cards are built from takes the name the markup declares, instead of arriving with no text at all.
 * **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
+* **Extra custom fields** (optional, empty by default): list the post meta keys whose values belong in the document and they are appended to the body. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta — so a page whose text comes partly from a template's fields is no longer published half missing. Nothing is detected automatically, and posts without the field keep their document and their cache validator untouched.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
 * **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
 * **Bricks pages get a real `.md`**: rendered through Bricks' own API (never re-implemented), with the same excluded-shortcode/excluded-class rules as everything else, plus a new "excluded builder elements" list for Bricks chrome (forms, nav menus, share bars, tables of contents, breadcrumbs). A post switched back to *Render with WordPress* is unaffected. Detection is per post, never per post type: a site that builds its pages with Bricks while its articles stay in the ordinary editor keeps every one of those articles.
@@ -187,6 +188,14 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.47.0 =
+
+* Added: **Extra custom fields** — a new setting listing the post meta keys whose values belong in the Markdown. Their content is appended to the end of the body, in the order listed. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta, so a page whose text comes partly from a template's fields is no longer published half missing. Empty by default and never detected automatically: a field starts appearing when you type its key into the box, and not before. Values that are not text — an image, a repeater, anything stored as an array — are skipped rather than guessed at.
+* Added: `sysmda_markdown_extra_meta_keys` (Stable) as the filter behind the new setting, so the list can be varied per post from code.
+* Changed: a post that does **not** carry any of the configured keys keeps its document *and* its cache validator byte-identical, so configuring a field for a couple of landing pages does not make every article on the site revalidate.
+* Fixed: ACF field values added through `sysmda_acf_field_keys` never reached a Bricks page's Markdown. Such a page is rendered through Bricks' own API, which does not read the post content the values were appended to, so they were dropped silently — since 0.46.0. Both they and the new custom fields now go through a dedicated `sysmda_markdown_appended_html` filter (Advanced) that is honoured on every render path.
+* Fixed: the *Excluded builder elements* setting added in 0.46.0 was not removed on uninstall.
+
 = 0.46.1 =
 
 * Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of read. A subtitle of `A *literal* marker` was emitted raw between the emphasis delimiters, so the reader's own asterisks took part in the formatting and the single italic line came out as three runs of emphasis. Subtitle text is now escaped the same way the article body is, so it reads back exactly as typed.
@@ -200,11 +209,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Added: the cache validator now covers Bricks content — render mode, tree hash and any referenced template's modification date — so a mode flip or a template edit moves the ETag correctly.
 * Added: the front-matter `description` fallback and `/llms.txt` entries have a Bricks-aware last resort (after Rank Math and the excerpt) that never reads a Bricks post's `post_content`, which can hold stale prose left over from before the page was rebuilt.
 * Added: `sysmda_markdown_builder_adapters` and `sysmda_markdown_builder_suppress_content_filters` (both Advanced) as the new extension points; the latter, default on, keeps related/CTA content out of Bricks' Post Content element the same way the rest of the pipeline avoids it.
-
-= 0.45.1 =
-
-* Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the button instead of below it. The menu was anchored to the small caret rather than to the split button as a whole, so it started halfway across the control and hung out over the text beside it. It now lines up with the button's own edge and drops straight below it. The fallbacks for a button close to the screen edge run only when they are actually needed: the menu switches to the opposite alignment, flips above the button when there is no room below, and where there is room on neither side it caps its height and scrolls instead of covering the button. Right-to-left sites mirror both alignments.
-* Changed: the menu is sized to its own content rather than to a fixed width, so a longer translated label is no longer squeezed into two lines, while a narrow screen still keeps the menu inside the viewport.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

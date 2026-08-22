@@ -2,7 +2,7 @@
 title: "LiteSpeed cache compatibility"
 description: "An opt-in .htaccess rule that stops a LiteSpeed page cache from answering Markdown requests with the HTML page."
 sidebar:
-  order: 6
+  order: 7
 ---
 
 **Settings → Markdown Alternate → Advanced**

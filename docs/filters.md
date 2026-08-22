@@ -86,6 +86,7 @@ compatibility promise of any kind.
 | `sysmda_markdown_cache_dependencies` | Stable |
 | `sysmda_markdown_prewarm` | Advanced |
 | `sysmda_markdown_source_content` | Advanced |
+| `sysmda_markdown_appended_html` | Advanced |
 | `sysmda_markdown_rendered_html` | Advanced |
 | `sysmda_markdown_preamble` | Advanced |
 | `sysmda_markdown_output` | Stable |
@@ -98,6 +99,7 @@ compatibility promise of any kind.
 | `sysmda_front_matter_enabled` | Stable |
 | `sysmda_front_matter_taxonomy_slugs` | Stable |
 | `sysmda_front_matter_taxonomies` | Advanced |
+| `sysmda_markdown_extra_meta_keys` | Stable |
 | `sysmda_acf_field_keys` | Advanced |
 | `sysmda_acf_subtitle_key` | Stable |
 | `sysmda_acf_tldr_key` | Stable |
@@ -301,8 +303,26 @@ precisely because it does not depend on how the document was produced.
 ```php
 apply_filters( 'sysmda_markdown_source_content', $post->post_content, $post );
 ```
-**[Advanced](#advanced)** — raw source content, before any rendering. This is
-where the ACF integration appends its fields.
+**[Advanced](#advanced)** — raw source content, before any rendering.
+
+**It replaces the source; it does not append to the document.** For a post a
+page-builder adapter claims, the adapter renders from the builder's own stored
+tree and this filtered value is never read, so anything concatenated here is
+silently dropped. To *add* content to the document, use the hook below, which is
+honoured on every branch.
+
+```php
+apply_filters( 'sysmda_markdown_appended_html', '', $post );
+```
+**[Advanced](#advanced)** — HTML appended after the main content, on all three
+render branches (page-builder adapter, blocks, classic). Added in `0.47.0`; it
+is where the ACF integration and the extra custom fields put their values.
+
+The returned HTML is rendered with the same two branches the main path uses —
+block markup is parsed and cleaned by the block rules, anything else goes through
+`wpautop()` — and then joins the single DOM pass, so excluded shortcodes, excluded
+CSS classes and absolute URLs all apply to it exactly as they do to the post
+content.
 
 ```php
 apply_filters( 'sysmda_markdown_rendered_html', $html, $post );
@@ -424,6 +444,7 @@ body at all. The filters they read are reached with them:
 | `sysmda_front_matter_taxonomy_slugs` | `cache_version()` → `taxonomies_fingerprint()` |
 | `sysmda_front_matter_taxonomies` | same |
 | `sysmda_markdown_cache_dependencies` | `cache_version()` → `dependencies_fingerprint()` |
+| `sysmda_markdown_extra_meta_keys` | `cache_version()` → `dependencies_fingerprint()` |
 | `sysmda_acf_field_keys` | same, and only while ACF is active |
 | `sysmda_acf_subtitle_key` | same |
 | `sysmda_acf_tldr_key` | same |
@@ -480,6 +501,57 @@ opting a non-public taxonomy in is a deliberate choice. Return `[]` to opt out
 for a post. `category`, `post_tag`, `post_format` and invalid slugs are always
 stripped afterwards, so this filter can neither duplicate the dedicated keys nor
 break the YAML.
+
+## Extra custom fields
+
+```php
+apply_filters( 'sysmda_markdown_extra_meta_keys', array(), $post );
+```
+**[Stable](#stable)** — post meta keys whose values are appended to the end of
+the Markdown body, in the order listed. Fed by the **Extra custom fields** panel
+field at **priority 5**, and Stable because it is anchored to that field: it
+lasts exactly as long as the setting does.
+
+Priority 5, not the 20 the exclusion filters use, and the difference is not
+cosmetic: this callback *replaces* the incoming list, so running it after site
+code would discard whatever that code returned. Feeding the saved list in as the
+filter's **default** is what lets a callback at the ordinary priority 10 narrow
+or extend it. The exclusion filters can sit at 20 precisely because they merge.
+
+Works with anything that stores post meta — ACF, JetEngine, Meta Box, or the
+native Custom Fields box — because underneath they all do. With ACF active the
+value is read with `get_field()`, so a registered ACF field arrives formatted the
+way ACF would render it; for a key ACF has no field definition for, `get_field()`
+returns the stored value, so a JetEngine or native key behaves identically
+whether or not ACF is installed.
+
+Values that are not strings are skipped: an array from a serialized value or a
+repeater has a structure this plugin has no brief to invent a rendering for.
+
+The list **replaces** rather than accumulates, unlike the three exclusion
+filters. There are no built-in defaults to preserve, and a curated inclusion list
+is the caller's whole answer — the same semantics as
+`sysmda_llms_txt_key_content`.
+
+```php
+// Pull two fields into every post's Markdown.
+add_filter( 'sysmda_markdown_extra_meta_keys', function ( array $keys, WP_Post $post ) {
+    $keys[] = 'product_specification';
+    return $keys;
+}, 10, 2 );
+```
+
+**One caveat if you use this filter without the panel field.** A configured key
+contributes to the cache validator only while the post actually has that meta
+key — which is what keeps posts that never use the field on the faster
+`If-Modified-Since` path. Deleting the last such value can therefore return the
+fingerprint to empty without `post_modified_gmt` moving, and the plugin covers
+that by bumping the global cache salt when a key **saved in the panel** is
+deleted. It does not apply this filter from inside that hook, deliberately: it
+fires on every meta deletion on the site and must stay trivial. So if you add
+keys through the filter alone, declare them through
+[`sysmda_markdown_cache_dependencies`](#caching) as well, or bump the salt
+yourself when one is deleted.
 
 ## ACF integration
 

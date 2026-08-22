@@ -380,6 +380,7 @@ class MetadataBuilder {
 		}
 
 		self::collect_acf_dependencies( $post, $seen, $parts );
+		self::collect_meta_dependencies( $post, $seen, $parts );
 
 		foreach ( $this->renderer->builder_dependency_parts( $post ) as $part ) {
 			$parts[] = $part;
@@ -486,6 +487,58 @@ class MetadataBuilder {
 			$parts[] = 'acf:' . $key . ':' . md5( (string) wp_json_encode( $value ) );
 
 			if ( in_array( $key, $source_keys, true ) && is_string( $value ) && has_blocks( $value ) ) {
+				self::collect_pattern_refs( parse_blocks( $value ), $seen, $parts );
+			}
+		}
+	}
+
+	/**
+	 * Adds a part for each configured extra meta key the post ACTUALLY HAS.
+	 *
+	 * The presence test is the whole design, and it is where this deliberately
+	 * departs from `collect_acf_dependencies()` above, which adds a part for
+	 * every configured key whether the post carries a value or not.
+	 *
+	 * That is harmless for ACF, whose key list is filter-only and rarely set. It
+	 * would not be harmless here: this list comes from a panel field, so one key
+	 * typed into the box would make this fingerprint non-empty for EVERY post on
+	 * the site — and `MarkdownController::date_is_strong_validator()` refuses
+	 * `If-Modified-Since` on a merely non-empty fingerprint, without comparing
+	 * values. A single configured key would therefore switch the date validator
+	 * off site-wide, including for the posts that never had the field. Off has
+	 * to mean byte-identical output AND byte-identical validator, exactly as it
+	 * does for the optional taxonomies.
+	 *
+	 * Presence is `metadata_exists()`, never a test on the value: an empty
+	 * string is a legitimate stored value, and the two read paths disagree on an
+	 * absent key anyway (`''` from `get_post_meta()`, `null` from `get_field()`).
+	 * It reads the meta cache the post's other lookups already primed, so it
+	 * costs no additional query.
+	 *
+	 * The corollary lives in `AdminSettings::bump_for_deleted_dependency_meta()`:
+	 * DELETING a value drops the part, which can return this fingerprint to
+	 * empty while `post_modified_gmt` has not moved — so deletion bumps the
+	 * global salt, the same way a removed featured image already does. Emptying
+	 * a value needs nothing: the row survives, so the part does too.
+	 *
+	 * @param array<string,bool> $seen  Pattern-reference cycle guard.
+	 * @param string[]           $parts Accumulator.
+	 */
+	private static function collect_meta_dependencies( \WP_Post $post, array &$seen, array &$parts ): void {
+		$fields = new MetaFields();
+
+		foreach ( MetaFields::keys( $post ) as $key ) {
+			if ( ! metadata_exists( 'post', $post->ID, $key ) ) {
+				continue;
+			}
+
+			$value   = $fields->value( $key, $post );
+			$parts[] = 'meta:' . $key . ':' . md5( (string) wp_json_encode( $value ) );
+
+			// These values join the block source before rendering, so a synced
+			// pattern referenced inside one is a real out-of-post dependency —
+			// the same reason the ACF source keys are walked above.
+			if ( is_string( $value ) && has_blocks( $value ) ) {
 				self::collect_pattern_refs( parse_blocks( $value ), $seen, $parts );
 			}
 		}

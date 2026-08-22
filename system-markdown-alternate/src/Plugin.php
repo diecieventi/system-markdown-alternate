@@ -53,8 +53,15 @@ class Plugin {
 
 		// ACF integration (opt-in through sysmda_acf_field_keys, sysmda_acf_subtitle_key, and sysmda_acf_tldr_key filters).
 		$acf = new AcfIntegration( $converter, $renderer );
-		add_filter( 'sysmda_markdown_source_content', array( $acf, 'append_fields' ), 20, 2 );
+		add_filter( 'sysmda_markdown_appended_html', array( $acf, 'appended_html' ), 20, 2 );
 		add_filter( 'sysmda_markdown_preamble', array( $acf, 'build_preamble' ), 20, 2 );
+
+		// Generic post-meta fields (opt-in through the "Extra custom fields" panel
+		// field / sysmda_markdown_extra_meta_keys). Registered AFTER the ACF
+		// integration: both sit at priority 20, so registration order decides,
+		// and ACF's own values keep the position they have always had.
+		$meta_fields = new MetaFields();
+		add_filter( 'sysmda_markdown_appended_html', array( $meta_fields, 'appended_html' ), 20, 2 );
 
 		// [sysmda_md_url] shortcode for the dynamic .md URL.
 		( new Shortcodes() )->register();
