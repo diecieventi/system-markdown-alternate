@@ -639,6 +639,26 @@ The v1 scope is done and widely exceeded. Implemented:
     meta deletion site-wide and must stay trivial, so a key added through the
     filter alone is not covered — documented in `docs/filters.md`, pointing at
     `sysmda_markdown_cache_dependencies`.
+  - **A text value is text, and no wrapper may quietly say otherwise**
+    (`0.47.1`, `MetaFields::emit()`). Each value used to be wrapped in a `<div>`,
+    and the conversion library escapes a text node only when its parent is *not*
+    a `div` — so a field reading `A *literal* marker` was published with the
+    asterisks live and one word in italics, while the identical text inside
+    `post_content` (which reaches `<p>`) was escaped correctly. The wrapper was
+    disabling the escaping, invisibly. Values are separated by a blank line
+    instead, so `wpautop()` gives a bare value the paragraph the escaping needs
+    and leaves a WYSIWYG field's block markup alone; the `div` contributed
+    nothing to the Markdown either way. **Exactly the `0.46.1` ACF-subtitle
+    defect, one construct over** — which is the argument for
+    `MarkdownConverter::escape_inline()` existing at all, and worth remembering
+    the next time a value is placed into the document by hand. Caught by the
+    staging acceptance run, not by review or by the suite: the pure suite stubs
+    `wpautop()`, so the shape that matters was outside what it could model, and
+    the confirmation was run against real WordPress
+    (`render_fragment()` on the live install, `<div>`-wrapped vs bare).
+    `MetaFields::append()` owns the separator for the same reason `emit()` owns
+    the skip rules: two producers feed this seam, and without one shared rule
+    one producer's last value glues to the next producer's first.
   - **Non-strings are skipped, and the skip rules are SHARED with
     `AcfIntegration`** (`MetaFields::emit()`). A repeater or a serialized value
     has a structure this plugin has no brief to invent a rendering for. And the
@@ -661,6 +681,20 @@ The v1 scope is done and widely exceeded. Implemented:
     `collect_acf_dependencies()` assumes when it walks those references. It runs
     **before** the single outer `process_dom()`, so appended content is
     class-excluded and absolutized by the same pass rather than a second one.
+    `render_appended()` also **paragraph-wraps freeform blocks individually**
+    (`0.47.1`, Codex on PR #108): `has_blocks()` is a substring test over the
+    whole fragment, so one value carrying block markup sends every plain-text
+    sibling down the block branch, where `parse_blocks()` returns them as a
+    `blockName === null` block that `render_block()` emits verbatim. Core gets
+    its paragraphs back through `do_blocks()`'s `wpautop` dance, which this
+    pipeline skips by design — so without the wrap the converter collapses the
+    blank line and publishes two fields as one run-on line, which is the merging
+    `MetaFields::append()` exists to prevent arriving through another door.
+    Codex read that case as an **escaping** regression; it is not, and the
+    measurement is worth keeping so it is not re-derived: escaping depends on the
+    text node's parent not being a `div`, and at root level there is none, so
+    bare text is escaped with or without `wpautop` (`A \*literal\* marker` in
+    both). Only the `div` wrapper ever suppressed it.
   - **The panel feeds the key list at priority 5, not 20** (also Codex, PR #107).
     The callback REPLACES its input, so at 20 it runs after site code hooking at
     the default 10 and throws that code's additions away. Priority 5 makes the
@@ -857,6 +891,18 @@ The v1 scope is done and widely exceeded. Implemented:
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
 ### To check next time (not urgent, parked here)
+
+- **Freeform content in a mixed post never gets `wpautop()` on the main render
+  path either** (noticed August 2026 while fixing the appended path in `0.47.1`;
+  recorded, deliberately not changed). `ContentRenderer::render()`'s block branch
+  calls `render_block()` in a loop rather than `do_blocks()`, so a `blockName
+  === null` block's text is emitted verbatim — the same gap the appended path
+  had. It rarely shows there because a freeform block's saved markup usually
+  already contains its own `<p>` tags; the appended path bites because its input
+  is genuinely bare text. Changing how every mixed post's body renders is not a
+  patch-release change and needs its own verification against real content, so
+  it is a separate decision rather than a silent fix. If picked up, the shape is
+  the same three lines `render_appended()` now uses.
 
 - **The caching contract is done; the `304` is a host property, not a gap.**
   Measured on webdietrolequinte.it (RunCloud/nginx behind Cloudflare) right

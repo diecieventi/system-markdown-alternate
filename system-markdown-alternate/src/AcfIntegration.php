@@ -79,10 +79,11 @@ class AcfIntegration {
 			$values[] = get_field( (string) $key, $post->ID );
 		}
 
-		// Shared with MetaFields so the skip rules live in one place: the
-		// emptiness test is deliberately `'' === trim()` rather than a falsy
-		// one, and a second copy of that reasoning is exactly what drifts.
-		return $appended . MetaFields::emit( $values );
+		// Shared with MetaFields so the skip rules and the separator live in one
+		// place: the emptiness test is deliberately `'' === trim()` rather than
+		// a falsy one, and a second copy of that reasoning is exactly what
+		// drifts.
+		return MetaFields::append( $appended, $values );
 	}
 
 	/**

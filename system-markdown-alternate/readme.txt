@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.47.0
+Stable tag: 0.47.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -188,6 +188,11 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.47.1 =
+
+* Fixed: a text custom field containing Markdown punctuation was published with that punctuation active — a field reading `A *literal* marker` arrived with one word in italics instead of the asterisks the author typed. Underscores, brackets and backslashes were the same case. Each value was wrapped in a `<div>`, and that wrapper silently switched off the escaping every other piece of text in the document gets. Values are now separated by a blank line instead, which restores the escaping and keeps them apart; markup from a WYSIWYG field is unaffected and still converts as before.
+* Fixed: listing a custom field whose value contains Gutenberg block markup alongside plain-text fields ran those text fields together on one line. One block-valued field sent every sibling down the block path, where plain text is emitted without paragraphs.
+
 = 0.47.0 =
 
 * Added: **Extra custom fields** — a new setting listing the post meta keys whose values belong in the Markdown. Their content is appended to the end of the body, in the order listed. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta, so a page whose text comes partly from a template's fields is no longer published half missing. Empty by default and never detected automatically: a field starts appearing when you type its key into the box, and not before. Values that are not text — an image, a repeater, anything stored as an array — are skipped rather than guessed at.
@@ -201,14 +206,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of read. A subtitle of `A *literal* marker` was emitted raw between the emphasis delimiters, so the reader's own asterisks took part in the formatting and the single italic line came out as three runs of emphasis. Subtitle text is now escaped the same way the article body is, so it reads back exactly as typed.
 * Fixed: a link whose body is a non-breaking space (or another invisible character) is now named from its `aria-label` or `title` like any other link that renders nothing. Card and link-preview plugins fill an overlay link with `&nbsp;` rather than leaving it truly empty, and those links were still arriving as `[](url "Name")` — with the name in the tooltip and nothing tying it to the address.
 * Changed: the documentation site is now built on every pull request instead of only after merging, so a broken page cannot reach the published site.
-
-= 0.46.0 =
-
-* Added: Bricks pages now get a real `.md`. Rendered through Bricks' own API, never re-implemented; a post switched back to *Render with WordPress* is unaffected. Fixes the one defect the reconnaissance found: Bricks' own image lazy-loading is disabled for the render, so every Bricks image converts to a normal `![](url)` instead of a meaningless placeholder.
-* Added: `sysmda_markdown_excluded_builder_elements` (Stable), a new panel field and filter that strips Bricks chrome (forms, nav menus, share bars, tables of contents, breadcrumbs) by default, additive to the built-in list like the other three exclusion filters. The existing `md-exclude` CSS class already worked on Bricks elements with no code change.
-* Added: the cache validator now covers Bricks content — render mode, tree hash and any referenced template's modification date — so a mode flip or a template edit moves the ETag correctly.
-* Added: the front-matter `description` fallback and `/llms.txt` entries have a Bricks-aware last resort (after Rank Math and the excerpt) that never reads a Bricks post's `post_content`, which can hold stale prose left over from before the page was rebuilt.
-* Added: `sysmda_markdown_builder_adapters` and `sysmda_markdown_builder_suppress_content_filters` (both Advanced) as the new extension points; the latter, default on, keeps related/CTA content out of Bricks' Post Content element the same way the rest of the pipeline avoids it.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

@@ -195,10 +195,12 @@ function do_shortcode( $content ) {
 
 /**
  * Stub: an approximation of core's paragraph wrapping, faithful for the shapes
- * these fixtures use and no further. Core leaves existing block-level markup
- * alone and wraps bare text in a paragraph; it also splits on blank lines,
- * which nothing here depends on. Named as an approximation on purpose — a stub
- * that pretended to be complete would be the more dangerous kind.
+ * these fixtures use and no further. It models the two behaviours the tests
+ * turn on — splitting on blank lines, and leaving existing block-level markup
+ * alone while wrapping bare text in a paragraph — and nothing else. Named as an
+ * approximation on purpose: a stub that pretended to be complete would be the
+ * more dangerous kind, and the escaping this enables was ultimately confirmed
+ * against real WordPress on staging rather than here.
  */
 function wpautop( $text, $br = true ) {
 	$text = trim( (string) $text );
@@ -207,11 +209,20 @@ function wpautop( $text, $br = true ) {
 		return '';
 	}
 
-	if ( preg_match( '~^<(p|div|figure|ul|ol|table|pre|blockquote|h[1-6])\b~i', $text ) ) {
-		return $text;
+	$out = '';
+	foreach ( preg_split( '~\n\s*\n~', $text ) as $chunk ) {
+		$chunk = trim( $chunk );
+
+		if ( '' === $chunk ) {
+			continue;
+		}
+
+		$out .= preg_match( '~^<(p|div|figure|ul|ol|table|pre|blockquote|h[1-6])\b~i', $chunk )
+			? $chunk
+			: '<p>' . $chunk . '</p>';
 	}
 
-	return '<p>' . $text . '</p>';
+	return $out;
 }
 
 /**
@@ -3792,16 +3803,24 @@ $sysmda_fake_adapter->selectors = array();
 // ─── MetaFields: generic post-meta content (0.47.0) ───────────────────────
 
 // The two skip rules, now shared with AcfIntegration so they cannot drift.
-check( 'meta: values are wrapped and kept in order', '<div>first</div><div>second</div>', MetaFields::emit( array( 'first', 'second' ) ) );
-check( 'meta: an empty value is skipped', '<div>kept</div>', MetaFields::emit( array( '', 'kept' ) ) );
-check( 'meta: a whitespace-only value is skipped', '<div>kept</div>', MetaFields::emit( array( "  \n ", 'kept' ) ) );
+check( 'meta: values are separated by a blank line, in order', "first\n\nsecond", MetaFields::emit( array( 'first', 'second' ) ) );
+check( 'meta: an empty value is skipped', 'kept', MetaFields::emit( array( '', 'kept' ) ) );
+check( 'meta: a whitespace-only value is skipped', 'kept', MetaFields::emit( array( "  \n ", 'kept' ) ) );
 // The rule most likely to be rewritten from memory as empty(): "0" is a real
 // value, and a falsy test drops it.
-check( 'meta: the string 0 survives', '<div>0</div>', MetaFields::emit( array( '0' ) ) );
+check( 'meta: the string 0 survives', '0', MetaFields::emit( array( '0' ) ) );
 // Structured data has a shape this plugin has no brief to invent a rendering
 // for, so it is skipped rather than guessed at.
-check( 'meta: a non-string value is skipped', '<div>kept</div>', MetaFields::emit( array( array( 'a', 'b' ), 'kept' ) ) );
+check( 'meta: a non-string value is skipped', 'kept', MetaFields::emit( array( array( 'a', 'b' ), 'kept' ) ) );
 check( 'meta: an integer value is skipped', '', MetaFields::emit( array( 42 ) ) );
+
+// append() is where the separator lives, because there are two producers — this
+// class and AcfIntegration — and with the wrapper gone nothing else keeps one
+// producer's last value from being glued to the next producer's first.
+check( 'meta: append separates from what is already there', "ACF value\n\nmeta value", MetaFields::append( 'ACF value', array( 'meta value' ) ) );
+check( 'meta: append with nothing already there adds no separator', 'meta value', MetaFields::append( '', array( 'meta value' ) ) );
+check( 'meta: append with nothing to add leaves the input alone', 'ACF value', MetaFields::append( 'ACF value', array() ) );
+check( 'meta: append skips its way to nothing without adding a separator', 'ACF value', MetaFields::append( 'ACF value', array( '', array( 'x' ) ) ) );
 
 $sysmda_meta_fields = new MetaFields();
 $sysmda_meta_post   = new WP_Post( array( 'ID' => 90, 'post_content' => '<p>Body.</p>' ) );
@@ -3814,7 +3833,7 @@ $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'spe
 
 check(
 	'meta: ACF formatting wins while ACF is active',
-	'<div>FORMATTED by ACF</div>',
+	'FORMATTED by ACF',
 	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
 );
 
@@ -3830,7 +3849,7 @@ $sysmda_meta_no_acf = new class() extends MetaFields {
 
 check(
 	'meta: without ACF the stored value is used',
-	'<div>RAW from post meta</div>',
+	'RAW from post meta',
 	$sysmda_meta_no_acf->appended_html( '', $sysmda_meta_post )
 );
 
@@ -3843,7 +3862,7 @@ $GLOBALS['sysmda_test_meta'][90]['nullish']   = 'STORED value';
 $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'nullish' );
 check(
 	'meta: a null from the ACF reader falls back to the stored value',
-	'<div>STORED value</div>',
+	'STORED value',
 	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
 );
 
@@ -3877,7 +3896,7 @@ $GLOBALS['sysmda_test_fields'][90]['intro'] = 'INTRO';
 $GLOBALS['sysmda_test_filters']['sysmda_markdown_extra_meta_keys'] = array( 'intro', 'spec' );
 check(
 	'meta: values follow the listed order',
-	'<div>INTRO</div><div>FORMATTED by ACF</div>',
+	"INTRO\n\nFORMATTED by ACF",
 	$sysmda_meta_fields->appended_html( '', $sysmda_meta_post )
 );
 
@@ -4010,6 +4029,22 @@ check(
 	'<p>Classic body.</p><p>Before  after.</p>',
 	$sysmda_adapter_renderer->render( $sysmda_appended_classic_post )
 );
+
+// Mixed content (0.47.1): has_blocks() is a substring test over the WHOLE
+// fragment, so one value carrying block markup sends every plain-text sibling
+// down the block branch too. parse_blocks() wraps those in a freeform block
+// (blockName === null) that render_block() returns verbatim — confirmed against
+// real WordPress — so without paragraph-wrapping them the converter collapses
+// the blank line and publishes two fields as one run-on line.
+$GLOBALS['sysmda_test_parsed']['<!-- wp:paragraph -->MIXED'] = array(
+	array( 'blockName' => null, 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => "First value\n\nSecond value\n\n" ),
+	array( 'blockName' => 'core/paragraph', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array(), 'innerHTML' => '<p>Block content.</p>' ),
+);
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = '<!-- wp:paragraph -->MIXED';
+$sysmda_mixed = $sysmda_adapter_renderer->render( $sysmda_appended_classic_post );
+
+check( 'appended mixed: text siblings become their own paragraphs', true, false !== strpos( $sysmda_mixed, '<p>First value</p>' ) && false !== strpos( $sysmda_mixed, '<p>Second value</p>' ) );
+check( 'appended mixed: the block sibling still renders', true, false !== strpos( $sysmda_mixed, '<p>Block content.</p>' ) );
 
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] );
 
@@ -4795,6 +4830,53 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'e2e: embed caption follows the link as prose',
 		"<https://example.com/v/1>\n\nMy caption\n",
 		$sysmda_e2e( '<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://example.com/v/1</div><figcaption>My caption</figcaption></figure>' )
+	);
+
+	// ─── A text custom field stays text (0.47.1) ──────────────────────────
+	//
+	// Values used to be wrapped in a `<div>`, and the conversion library escapes
+	// a text node only when its parent is NOT a div — so a field containing
+	// Markdown punctuation was published with that punctuation live, and a
+	// reader saw `A *literal* marker` as one italic word. Caught on staging, and
+	// the same defect the ACF subtitle had one release earlier.
+	$sysmda_appended_e2e = static function ( $appended ) use ( $sysmda_adapter_renderer, $sysmda_appended_classic_post, $sysmda_conv ) {
+		$GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] = $appended;
+		$out = $sysmda_conv->convert( $sysmda_adapter_renderer->render( $sysmda_appended_classic_post ) );
+		unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_appended_html'] );
+		return $out;
+	};
+
+	check(
+		'appended text: Markdown punctuation is escaped',
+		"Classic body.\n\nA \\*literal\\* marker\n",
+		$sysmda_appended_e2e( MetaFields::emit( array( 'A *literal* marker' ) ) )
+	);
+	check(
+		'appended text: underscores and brackets too',
+		"Classic body.\n\nSnake\\_case and \\[brackets\\]\n",
+		$sysmda_appended_e2e( MetaFields::emit( array( 'Snake_case and [brackets]' ) ) )
+	);
+	// Two text values are two paragraphs, not one run-on line.
+	check(
+		'appended text: separate values stay separate',
+		"Classic body.\n\nFirst value\n\nSecond value\n",
+		$sysmda_appended_e2e( MetaFields::emit( array( 'First value', 'Second value' ) ) )
+	);
+	// A WYSIWYG value is markup and must not be re-wrapped or escaped away.
+	// Codex read the mixed case as an escaping regression on PR #108. It is not:
+	// escaping depends on the text node's parent not being a `div`, and at root
+	// level there is no div — with or without wpautop. Pinned so the claim is not
+	// re-derived from the code by the next reader.
+	check(
+		'appended mixed: text is still escaped beside a block sibling',
+		"Classic body.\n\nA \\*literal\\* marker\n\nBlock content.\n",
+		$sysmda_appended_e2e( "A *literal* marker\n\n<p>Block content.</p>" )
+	);
+
+	check(
+		'appended markup: a WYSIWYG value converts normally',
+		"Classic body.\n\nText with a [link](https://example.com/x).\n\n- One\n",
+		$sysmda_appended_e2e( MetaFields::emit( array( '<p>Text with a <a href="https://example.com/x">link</a>.</p><ul><li>One</li></ul>' ) ) )
 	);
 
 	// The point of naming empty anchors: the link arrives with a name instead of
