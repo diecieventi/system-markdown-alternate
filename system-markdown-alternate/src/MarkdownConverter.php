@@ -73,6 +73,44 @@ class MarkdownConverter {
 	}
 
 	/**
+	 * Turns a plain-text value into inline Markdown that renders as that exact
+	 * text.
+	 *
+	 * For values that are text and were never markup: an ACF text field, a label,
+	 * anything a caller is about to place inside Markdown delimiters of its own.
+	 * The invariant is that the value stays text — `A *literal* marker` must read
+	 * back the way it was typed, rather than having its asterisks parsed.
+	 *
+	 * The escaping rule is **the library's own**, reached by handing it the value
+	 * as a text node, and that is the point: the body of every document is
+	 * escaped by the same converter, so a second copy of the rule here would be
+	 * one more thing to keep in step with an upgrade. What is escaped therefore
+	 * matches the body exactly — `*`, `_`, `[`, `]`, `\` and a leading `#` — and
+	 * so does what is not: a backtick pair still forms a code span, and `&` and
+	 * `<` still come back as entities, in a subtitle for the same reason they do
+	 * in a paragraph.
+	 *
+	 * The emphasis (or any other) delimiter is deliberately left to the caller
+	 * rather than obtained by converting an `<em>`: the library's emphasis
+	 * converter tests its value with `! trim( $value )`, so a subtitle of exactly
+	 * `0` is falsy and comes back with the delimiters silently dropped.
+	 *
+	 * ENT_SUBSTITUTE is load-bearing, not decoration: htmlspecialchars() returns
+	 * an empty string for a value carrying an invalid UTF-8 byte, so without it a
+	 * subtitle would silently disappear over one bad character rather than losing
+	 * that character. Measured, not reasoned about.
+	 */
+	public function escape_inline( string $text ): string {
+		if ( '' === $text ) {
+			return '';
+		}
+
+		$escaped = htmlspecialchars( $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+
+		return trim( $this->convert( '<p>' . $escaped . '</p>' ) );
+	}
+
+	/**
 	 * Removes trailing whitespace and collapses multiple blank lines, leaving
 	 * fenced code blocks byte-for-byte alone.
 	 *
