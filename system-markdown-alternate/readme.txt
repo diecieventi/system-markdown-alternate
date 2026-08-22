@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.46.0
+Stable tag: 0.46.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -187,6 +187,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.46.1 =
+
+* Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of read. A subtitle of `A *literal* marker` was emitted raw between the emphasis delimiters, so the reader's own asterisks took part in the formatting and the single italic line came out as three runs of emphasis. Subtitle text is now escaped the same way the article body is, so it reads back exactly as typed.
+* Fixed: a link whose body is a non-breaking space (or another invisible character) is now named from its `aria-label` or `title` like any other link that renders nothing. Card and link-preview plugins fill an overlay link with `&nbsp;` rather than leaving it truly empty, and those links were still arriving as `[](url "Name")` — with the name in the tooltip and nothing tying it to the address.
+* Changed: the documentation site is now built on every pull request instead of only after merging, so a broken page cannot reach the published site.
+
 = 0.46.0 =
 
 * Added: Bricks pages now get a real `.md`. Rendered through Bricks' own API, never re-implemented; a post switched back to *Render with WordPress* is unaffected. Fixes the one defect the reconnaissance found: Bricks' own image lazy-loading is disabled for the render, so every Bricks image converts to a normal `![](url)` instead of a meaningless placeholder.
@@ -199,12 +205,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Fixed: the `[sysmda_md_actions]` dropdown opened off to the right of the button instead of below it. The menu was anchored to the small caret rather than to the split button as a whole, so it started halfway across the control and hung out over the text beside it. It now lines up with the button's own edge and drops straight below it. The fallbacks for a button close to the screen edge run only when they are actually needed: the menu switches to the opposite alignment, flips above the button when there is no room below, and where there is room on neither side it caps its height and scrolls instead of covering the button. Right-to-left sites mirror both alignments.
 * Changed: the menu is sized to its own content rather than to a fixed width, so a longer translated label is no longer squeezed into two lines, while a narrow screen still keeps the menu inside the viewport.
-
-= 0.45.0 =
-
-* Added: posts rendered by a page builder no longer expose a Markdown version. Bricks, Elementor, Beaver Builder, Oxygen and Breakdance keep their content outside the post content, so the `.md` was front matter and a bare heading; Divi and WPBakery fill the post content with their own layout shortcodes, so the `.md` was layout scaffolding converted as prose. Such a post now returns 404 and leaves `/llms.txt`, the discovery links, the shortcodes and the dynamic tag — an honest "there isn't one" rather than an empty or misleading document. The rule is decided **per post**, from the builder's own render mode: activating a builder does not affect the posts you did not build with it, a post switched back to the WordPress editor keeps its Markdown version even though the builder data is still stored, and nothing is read from the post content, so an article quoting `[et_pb_section]` in a code sample is not mistaken for a Divi page. New `sysmda_markdown_unsupported_builders` filter (Stable) serves them anyway if you prefer.
-* Added: the *Enabled content types* setting now shows what each type's published posts are actually built with — for example *12 Bricks, 3 Gutenberg* — with a warning naming any builder that costs the Markdown version. Advisory only: it never changes what is served.
-* Fixed: rebuilding `/llms.txt` primed the post meta cache only in enriched mode, so the new page-builder check cost one database query per candidate post on the basic path — up to 2500 per content type on a cold index. Both caches are now primed for the whole batch.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

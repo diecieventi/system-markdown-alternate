@@ -274,12 +274,20 @@ the name the markup carries sat in a separate paragraph, so nothing connected
 the name to the address.
 
 The rule is read off the anchor and nothing else, which fixes every plugin
-producing this shape and none of them specifically. Three limits are part of the
+producing this shape and none of them specifically. Its limits are part of the
 format:
+
+"Renders nothing" is about what a reader sees, not about whether the anchor
+holds characters: whitespace, a non-breaking space and the zero-width characters
+all count as empty, because a generator that needs a link to have a body reaches
+for one of those rather than leaving the element truly empty. A character that
+draws something — including an icon font's private-use glyph — is content, and
+the anchor is left alone.
 
 | Case | Emitted as |
 |---|---|
 | empty anchor with `aria-label` or `title` | a link named by that value |
+| anchor holding only invisible characters (`&nbsp;`, zero-width) | same as empty — named the same way (since `0.46.1`) |
 | empty anchor with **neither** | unchanged — `[](url)`, exactly as before |
 | anchor containing an image or any other element | unchanged; an image names the link through its `alt` |
 | empty anchor inside `<pre>` or `<code>` | unchanged; code is quoted, never rewritten |

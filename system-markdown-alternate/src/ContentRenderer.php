@@ -904,7 +904,14 @@ class ContentRenderer {
 	 */
 	private function name_empty_links( \DOMDocument $dom ): void {
 		$xpath = new \DOMXPath( $dom );
-		$nodes = $xpath->query( '//a[@href][not(*)][not(normalize-space())][not(ancestor::pre)][not(ancestor::code)]' );
+
+		// Leaf anchors outside code are selected here; whether one renders
+		// anything is decided in PHP. XPath 1.0's normalize-space() knows only
+		// XML whitespace, so an anchor holding `&nbsp;` — the placeholder a card
+		// generator reaches for when a link needs a body it does not have — was
+		// not selected at all, and came back out as the `[](url "Name")` this
+		// pass exists to prevent.
+		$nodes = $xpath->query( '//a[@href][not(*)][not(ancestor::pre)][not(ancestor::code)]' );
 
 		if ( ! $nodes instanceof \DOMNodeList ) {
 			return;
@@ -912,6 +919,10 @@ class ContentRenderer {
 
 		foreach ( iterator_to_array( $nodes ) as $link ) {
 			if ( ! $link instanceof \DOMElement ) {
+				continue;
+			}
+
+			if ( ! self::renders_nothing( $link->textContent ) ) {
 				continue;
 			}
 
@@ -943,6 +954,26 @@ class ContentRenderer {
 
 			$link->appendChild( $dom->createTextNode( $name ) );
 		}
+	}
+
+	/**
+	 * Whether a text value puts nothing on the page.
+	 *
+	 * Wider than trim(), and deliberately: what makes an anchor "empty" is that
+	 * a reader sees no link text, and the characters used to fill such an anchor
+	 * are the invisible ones — a non-breaking space above all, then the
+	 * zero-width family a templating layer leaves behind. Unicode separators are
+	 * matched as a class (\p{Z} covers U+00A0 and the typographic spaces); the
+	 * zero-width characters are listed one by one rather than swept up with
+	 * \p{C}, which would also claim private-use code points — an icon font's
+	 * glyph is invisible to this function but not to the reader.
+	 */
+	private static function renders_nothing( string $text ): bool {
+		$stripped = preg_replace( '~[\s\p{Z}\x{200B}\x{200C}\x{200D}\x{2060}\x{FEFF}]+~u', '', $text );
+
+		// A malformed sequence makes preg_replace() return null; the text is then
+		// not something this pass can reason about, so it is not claimed.
+		return is_string( $stripped ) && '' === $stripped;
 	}
 
 	/**

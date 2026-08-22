@@ -116,7 +116,12 @@ class AcfIntegration {
 		if ( '' !== $subtitle_key ) {
 			$subtitle = trim( wp_strip_all_tags( (string) get_field( $subtitle_key, $post->ID ) ) );
 			if ( '' !== $subtitle ) {
-				$parts[] = '*' . $subtitle . '*';
+				// A text field is text: emitted raw between the delimiters, a value
+				// containing Markdown punctuation was parsed instead of read, and
+				// `A *literal* marker` became `*A *literal* marker*` — the emphasis
+				// this line is supposed to be, split in three by the user's own
+				// asterisks. escape_inline() applies the same escaping the body gets.
+				$parts[] = '*' . $this->converter->escape_inline( $subtitle ) . '*';
 			}
 		}
 

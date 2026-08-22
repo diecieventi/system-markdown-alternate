@@ -55,6 +55,25 @@ but it is **not implementation-ready yet**. Two design gaps are blockers:
 P1 here means “must be resolved before page-builder implementation,” not a
 currently deployed production regression.
 
+### Status (added 2026-08-22)
+
+All five findings are closed.
+
+| ID | Closed by |
+|---|---|
+| PB-1 | `0.46.0` — Phase 0 established the render-mode decision per builder before the veto shipped (#102). |
+| PB-2 | `0.46.0` — `dependencies_fingerprint()` became an instance method folding in `builder_dependency_parts()`, and `description()` gained the `source_text()` tier (#103). |
+| R-1 | `0.46.1` — `MarkdownConverter::escape_inline()`, applied to the ACF subtitle. |
+| R-2 | `0.46.1` — the Astro build runs inside the required `PHP 7.4` check. |
+| R-3 | `0.46.1` — emptiness is decided in PHP, Unicode-aware, instead of by `normalize-space()`. |
+
+The recommendation for R-1 offered two routes; the second was taken, and the
+first was measured and rejected. Converting an escaped `<em>` loses the
+delimiters for a subtitle of exactly `0`, because the library's emphasis
+converter tests its value with `! trim( $value )`. The escaping is still the
+library's own — the value is handed to it as a text node — so the invariant the
+finding asked for holds without a second copy of the rule to keep in step.
+
 ### PB-1 — Phase 1 depends on the render-mode reconnaissance it says it can skip
 
 **Evidence**
