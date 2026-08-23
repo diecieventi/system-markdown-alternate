@@ -110,6 +110,9 @@ repository.
 
 - **2026-08-23 — System Markdown Alternate 0.47.1 (extra custom fields × the Bricks adapter) — targeted, not the full matrix**
 
+  Platform: `sma-bricks-instawp-co`, WordPress 7.1, PHP 8.4.7 (unchanged from
+  the `0.46.0` entry below — same site, in-place plugin upgrade only).
+
   Closes the one scenario the `0.47.0`/`0.47.1` release notes flagged as
   never exercised against a real builder: extra custom fields appended
   through a Bricks-mode post, where `render_appended()`'s builder seam (the
@@ -120,7 +123,9 @@ repository.
   `0.46.0` install was made first and removed after the run). The existing
   page-18 Bricks fixture (`_bricks_editor_mode = bricks`, the same tree used
   for the Phase 2 pass below, still carrying its `md-exclude` element) was
-  reused rather than rebuilt.
+  reused rather than rebuilt, including its standing `sysmda_supported_post_types`
+  option (`['page']`, set during that earlier pass and correctly left in place
+  — this run neither set nor removed it).
 
   | Check | Result |
   |---|---|
@@ -137,11 +142,16 @@ repository.
 
   `instawp_sma` was not re-checked in this run, so this does not supersede the
   `0.45.0` two-site entry below for anything outside this scenario. Cleanup:
-  the two panel options (`sysmda_markdown_supported_post_types`,
-  `sysmda_extra_meta_keys`) were not present before this run and were removed
+  `sysmda_extra_meta_keys` was not present before this run and was removed
   afterward with `delete_option()` rather than reset to empty; the test meta
-  keys and the rollback archive were removed as well. The plugin itself was
-  left at `0.47.1` — that upgrade is the intended outcome, not a leftover.
+  keys and the rollback archive were removed as well. (One unrelated,
+  harmless row — `sysmda_markdown_supported_post_types`, the *filter* name
+  rather than the option `AdminSettings` actually reads — was created and
+  deleted in the same run by a mistaken assumption that the site had no
+  enabled content type; it never affected anything, since nothing reads an
+  option under that name, and no trace of it remains. Caught by Codex on
+  PR #111.) The plugin itself was left at `0.47.1` — that upgrade is the
+  intended outcome, not a leftover.
 
 - **2026-08-21 — System Markdown Alternate 0.46.0 (Bricks adapter, Phase 2) — targeted, not the full matrix**
 
