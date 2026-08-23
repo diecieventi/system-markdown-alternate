@@ -2507,6 +2507,19 @@ as required for dependency review by WordPress.org Plugin Check.
   Actions tab with the tag; to chain the two, add a `RELEASE_TOKEN` secret (a
   PAT with `contents: write`), which `Publish release` already prefers when
   present. A Release published by hand from the Mac does trigger it directly.
+  **Of those two paths, the manual dispatch is the one in force**, and saying so
+  is the point of this sentence: without it a reader has to guess, and the guess
+  is wrong in a way that looks right (August 2026 — an agent read the mechanism
+  above, assumed a `RELEASE_TOKEN` had since been added, and reported a version
+  as not yet published when it had been). No `RELEASE_TOKEN` is configured, so
+  every release needs **two taps**: `Publish release`, then `Deploy to
+  WordPress.org` with the tag.
+  The run history confirms the mechanism rather than merely restating it, and it
+  splits on exactly the right date: the SVN deploy has been started by
+  `release: published` **8 times, all of them before 26 July 2026** — when
+  Releases were still published by hand — and **not once since**, which is the
+  day the `Publish release` workflow came into use. Every deploy from then on is
+  a `workflow_dispatch`.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
