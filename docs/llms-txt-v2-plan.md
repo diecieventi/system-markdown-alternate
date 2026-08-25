@@ -1,10 +1,13 @@
 # llms.txt v2 — review and update plan
 
-> Research/review only. Status: **not started, nothing changed.** Written
-> against `main @ 0.48.0`, 25 August 2026. This file is **not committed** —
-> it was created locally in response to a "check llms.txt v2 and tell me what
-> to update, don't build anything" request, and is left for the maintainer to
-> read, adjust and decide whether to commit/act on.
+> Research/review, recorded. Status: **committed, tracked in `AGENTS.md`
+> ("Open / to do") — implementation not started.** Written against
+> `main @ 0.48.0`, 25 August 2026, in response to a "check llms.txt v2 and
+> tell me what to update, don't build anything" request; this plan document
+> itself was committed and merged the same day (no plugin code touched). The
+> maintainer has not yet greenlit implementing `rel="describedby"` (§3) —
+> that decision is expected to be revisited within days rather than parked
+> indefinitely, per the `AGENTS.md` entry.
 
 ## 1. What actually changed in v2
 
@@ -66,7 +69,7 @@ Checked against the current code (`MarkdownController.php`,
 |---|---|---|
 | `rel="alternate" type="text/markdown"` (page → its `.md`) | Implemented twice: `print_alternate_link()` (HTML `<link>` in `wp_head`) and `send_alternate_link_header()` (HTTP `Link:` header, `template_redirect` last priority) — both gated on the same `is_negotiable_request()` predicate. | None. Already matches the spec's example verbatim in both HTML and header form. |
 | `rel="describedby"` (page → the `llms.txt` that describes it) | **Not implemented anywhere.** Neither `print_alternate_link()` nor `send_alternate_link_header()` emits it. | **Real gap** — see §3. |
-| `.md` URL pattern (append vs. replace extension) | WordPress permalinks are extensionless (`/my-post/`), so `MetadataBuilder::markdown_url()` always produces `/my-post.md` — the same string under either reading of the v2 rule. | None functionally; `docs/output-format.md` doesn't call out v2 compliance explicitly (minor doc note, not a behaviour change). |
+| `.md` URL pattern (append vs. replace extension) | WordPress permalinks are extensionless (`/my-post/`), so `MetadataBuilder::markdown_url()` always produces `/my-post.md` — the same string under either reading of the v2 rule. **Exception: Plain permalinks** (`?p=123`). There the `.md` suffix has nothing to attach to, so `markdown_url()` falls back to `?format=markdown` — a query-string representation, which is neither of v2's two URL shapes (`page.html.md` / `page.md`). This is not a v2 regression (v1's single pattern didn't cover a query-string form either), but the "None" verdict below only holds for pretty permalinks. | None for pretty permalinks; **undocumented edge case for Plain permalinks**, worth a short note in `docs/output-format.md` rather than a behaviour change — v2 has no query-string URL shape to conform to, so there is nothing to implement, only something to state explicitly. |
 | Path coverage / multiple `llms.txt` files per subtree | The plugin generates exactly one `/llms.txt` at the site root, covering the whole site. That is a valid, fully spec-compliant single-file case (a lone root file trivially "covers everything under its path"). | None. Multi-file coverage would only matter for a site wanting a *second*, section-scoped `llms.txt` — no such feature exists or has been requested; same shape as the already-declined homepage-index and multilingual-`llms.txt` items in "Open / to do" (real demand first). |
 | `llms_txt2ctx` / context-expansion tooling | Never implemented, never referenced. | None. |
 | `## Optional` semantics | `LlmsTxtController` emits `## Optional` for enriched-mode overflow, with a code comment calling it "an untranslated llms.txt specification keyword" (`LlmsTxtController.php` ~L17, ~L296, ~L443) — but the plugin was never doing any *mechanical* processing tied to that heading; it is already just a label the plugin puts overflow posts under. | **Cosmetic only.** Nothing to change in behaviour. The code comments describe the heading as carrying spec meaning it never actually acted on — worth a one-line correction so a future reader doesn't infer mechanics that neither v1 nor v2 required *this plugin* to implement. |
@@ -150,7 +153,9 @@ twice" durable decisions, this review does **not** reopen or suggest:
 ## 5. Open questions for the maintainer
 
 1. **Ship `rel="describedby"` at all?** It is the only functional gap found;
-   everything else is already compliant or genuinely out of scope. If yes:
+   everything else is already compliant or genuinely out of scope. Recorded
+   in `AGENTS.md` as a live candidate to revisit within days — not yet
+   greenlit to implement. If yes:
 2. **New filter, or fold into `sysmda_llms_txt_enabled`?** A dedicated
    `sysmda_markdown_llms_txt_link` filter (Stable) gives a site "advertise
    `/llms.txt` on-page but keep discovery off `.md` pages" independent
@@ -163,7 +168,9 @@ twice" durable decisions, this review does **not** reopen or suggest:
    yesterday do something different today" rule in `AGENTS.md` answers
    "yes" to — a new advertised header is observable behaviour). Candidate
    surfaces, following that same rule's checklist:
-   - `docs/output-format.md` — HTTP contract section (primary).
+   - `docs/output-format.md` — HTTP contract section (primary); also the
+     place to note the Plain-permalink query-string exception from §2 (not
+     dependent on `rel="describedby"` shipping — worth doing either way).
    - `documentation/src/content/docs/endpoints/the-llms-txt-index.md` —
      mention that pages now link to it via `rel="describedby"`.
    - `docs/filters.md` — the new filter's entry, if one is added.
@@ -192,8 +199,9 @@ review (same pattern as the other "reviewed, closed" entries in "To check
 next time") so this comparison is not redone from scratch next time v2 (or
 a v3) comes up.
 
-**Nothing in this plan has been implemented.** No files outside this one
-were touched, and this file itself is not committed.
+**Nothing in this plan has been implemented.** This document and the
+`AGENTS.md` pointer to it are committed; no plugin source file has been
+touched, and `rel="describedby"` itself has not been built.
 
 ## Sources
 
