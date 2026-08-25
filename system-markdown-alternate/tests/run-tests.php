@@ -2468,6 +2468,63 @@ check( 'hits totals: last 7 days', array( 'bot' => 11, 'human' => 22 ), HitCount
 check( 'hits totals: last 30 days', array( 'bot' => 1111, 'human' => 2222 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 30 ) );
 check( 'hits totals: zero-day window', array( 'bot' => 0, 'human' => 0 ), HitCounter::totals( $sysmda_hits, '2026-07-16', 0 ) );
 
+// named_bot: the curated list matches training crawlers and their user-initiated variants.
+check( 'hits named_bot: ClaudeBot', 'ClaudeBot', HitCounter::named_bot( 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)' ) );
+check( 'hits named_bot: Claude-User (user-initiated)', 'ClaudeBot', HitCounter::named_bot( 'Mozilla/5.0 (compatible; Claude-User/1.0; +https://www.anthropic.com/claude-user)' ) );
+check( 'hits named_bot: GPTBot', 'GPTBot', HitCounter::named_bot( 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; +https://openai.com/gptbot' ) );
+check( 'hits named_bot: ChatGPT-User (user-initiated)', 'GPTBot', HitCounter::named_bot( 'Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)' ) );
+check( 'hits named_bot: OAI-SearchBot', 'GPTBot', HitCounter::named_bot( 'Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)' ) );
+check( 'hits named_bot: PerplexityBot case-insensitive', 'PerplexityBot', HitCounter::named_bot( 'MOZILLA/5.0 (COMPATIBLE; PERPLEXITYBOT/1.0)' ) );
+check( 'hits named_bot: Perplexity-User (user-initiated)', 'PerplexityBot', HitCounter::named_bot( 'Mozilla/5.0 (compatible; Perplexity-User/1.0)' ) );
+check( 'hits named_bot: CCBot', 'CCBot', HitCounter::named_bot( 'CCBot/2.0 (+http://commoncrawl.org/faq/)' ) );
+
+// named_bot: classified as a bot by is_bot(), but not one of the curated names.
+check( 'hits named_bot: Googlebot is unnamed', null, HitCounter::named_bot( 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' ) );
+check( 'hits named_bot: curl is unnamed', null, HitCounter::named_bot( 'curl/8.5.0' ) );
+
+// named_bot: a real browser UA is never named (it is not even a bot).
+check( 'hits named_bot: Chrome is unnamed', null, HitCounter::named_bot( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' ) );
+
+// named_bot: empty/missing UA never names anything (is_bot() treats it as a bot, but an unnamed one).
+check( 'hits named_bot: null UA', null, HitCounter::named_bot( null ) );
+check( 'hits named_bot: empty UA', null, HitCounter::named_bot( '' ) );
+
+// named_totals: sums the 'named' sub-bucket across the window; a bucket
+// predating this breakdown (no 'named' key at all) contributes nothing rather
+// than erroring, and buckets outside the window (too old or in the future)
+// are excluded exactly like totals().
+$sysmda_hits = array(
+	'2026-07-16' => array(
+		'bot'   => 5,
+		'human' => 1,
+		'named' => array(
+			'ClaudeBot' => 2,
+			'GPTBot'    => 1,
+		),
+	),
+	'2026-07-10' => array( 'bot' => 4, 'human' => 0 ), // 6 days ago, pre-breakdown shape: no 'named' key.
+	'2026-06-17' => array(
+		'bot'   => 3,
+		'human' => 0,
+		'named' => array( 'ClaudeBot' => 3 ),
+	), // 29 days ago: inside "last 30", outside "last 7".
+	'2026-06-16' => array(
+		'bot'   => 9,
+		'human' => 0,
+		'named' => array( 'GPTBot' => 9 ),
+	), // 30 days ago: outside "last 30".
+	'2026-08-01' => array(
+		'bot'   => 2,
+		'human' => 0,
+		'named' => array( 'CCBot' => 2 ),
+	), // Future (clock skew): ignored.
+);
+check( 'hits named_totals: today only', array( 'ClaudeBot' => 2, 'GPTBot' => 1 ), HitCounter::named_totals( $sysmda_hits, '2026-07-16', 1 ) );
+check( 'hits named_totals: last 7 days (no-named-key bucket contributes nothing)', array( 'ClaudeBot' => 2, 'GPTBot' => 1 ), HitCounter::named_totals( $sysmda_hits, '2026-07-16', 7 ) );
+check( 'hits named_totals: last 30 days sums across buckets', array( 'ClaudeBot' => 5, 'GPTBot' => 1 ), HitCounter::named_totals( $sysmda_hits, '2026-07-16', 30 ) );
+check( 'hits named_totals: zero-day window', array(), HitCounter::named_totals( $sysmda_hits, '2026-07-16', 0 ) );
+check( 'hits named_totals: no data at all', array(), HitCounter::named_totals( array(), '2026-07-16', 30 ) );
+
 // ─── AdminSettings sanitizers ──────────────────────────────────────────────────
 
 $sysmda_admin = new AdminSettings(); // No boot(): sanitizers are pure, no hooks needed.
