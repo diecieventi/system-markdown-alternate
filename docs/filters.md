@@ -112,6 +112,7 @@ compatibility promise of any kind.
 | `sysmda_llms_txt_main_posts` | Advanced |
 | `sysmda_llms_txt_footer` | Advanced |
 | `sysmda_md_hits_bot_patterns` | Advanced |
+| `sysmda_md_hits_named_bot_patterns` | Advanced |
 | `sysmda_md_hits_retention_days` | Advanced |
 
 The Advanced ones are marked again where they are documented below. The three
@@ -619,15 +620,27 @@ them are Stable — they are panel settings.
 ```php
 apply_filters( 'sysmda_md_hits_bot_patterns', $patterns );
 apply_filters( 'sysmda_md_hits_retention_days', 90 );
+apply_filters( 'sysmda_md_hits_named_bot_patterns', $map );
 ```
-Both **[Advanced](#advanced)** — case-insensitive user-agent substrings
-classified as bot, and how many days of daily buckets are kept. They describe the
-counter's current storage and classification strategy, not a domain concept.
+All three **[Advanced](#advanced)** — case-insensitive user-agent substrings
+classified as bot, how many days of daily buckets are kept, and the map of
+canonical crawler name => substrings used to name a few known crawlers within
+the bot total. They describe the counter's current storage and classification
+strategy, not a domain concept.
 
-The counter stores **only** aggregate daily totals split bot/human. It never
-stores IP addresses, raw user-agent strings, timestamps finer than the day, or
-any per-visitor identifier: the user agent is read once to classify the request
-and immediately discarded.
+The counter stores **only** aggregate daily totals split bot/human, plus an
+optional per-day breakdown of that bot total by a short, curated list of known
+crawler names (`ClaudeBot`, `GPTBot`, `PerplexityBot`, `CCBot` by default,
+matched against their documented user-initiated variants too — `Claude-User`,
+`ChatGPT-User`, `OAI-SearchBot`, `Perplexity-User`). The breakdown is a
+refinement of the bot count, not a second classification: a request the site's
+own `sysmda_md_hits_bot_patterns` filter has decided is not a bot is never
+looked up in this map either. It never stores IP addresses, raw user-agent
+strings, timestamps finer than the day, or any per-visitor identifier: the user
+agent is read once to classify the request (and, for a named match, to pick a
+name from this fixed list) and immediately discarded — a site cannot use this
+filter to make the counter remember request-derived text, only to change which
+of a code-defined set of names it looks for.
 
 ## Default exclusions
 

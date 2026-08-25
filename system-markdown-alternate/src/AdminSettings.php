@@ -1564,6 +1564,54 @@ class AdminSettings {
 
 		echo '</tbody></table>';
 		echo '<p class="description">' . esc_html__( 'Days are counted in UTC.', 'system-markdown-alternate' ) . '</p>';
+
+		$this->render_md_hits_named_totals( $hits, $today );
+	}
+
+	/**
+	 * Read-only breakdown of the bot total by known crawler name, for the
+	 * same three windows as render_md_hits_totals().
+	 *
+	 * Shows only names with at least one hit in the last 30 days — a fixed
+	 * table of always-zero rows for crawlers a site never sees would be noise,
+	 * not signal. Named bots are a curated subset of the bot total (see
+	 * HitCounter::named_bot()): most bot traffic stays unnamed by design.
+	 *
+	 * @param array  $hits  Daily buckets, already fetched by the caller.
+	 * @param string $today Current UTC day ('YYYY-MM-DD').
+	 */
+	private function render_md_hits_named_totals( array $hits, string $today ): void {
+		$named_30 = array_filter(
+			HitCounter::named_totals( $hits, $today, 30 ),
+			static function ( $n ) {
+				return $n > 0;
+			}
+		);
+
+		if ( empty( $named_30 ) ) {
+			return;
+		}
+
+		arsort( $named_30 );
+
+		$named_1 = HitCounter::named_totals( $hits, $today, 1 );
+		$named_7 = HitCounter::named_totals( $hits, $today, 7 );
+
+		echo '<p class="description" style="margin-top:12px">' . esc_html__( 'Known crawlers seen among the bot hits above (a subset — most bot traffic has no dedicated row):', 'system-markdown-alternate' ) . '</p>';
+		echo '<table class="widefat striped" style="max-width:420px">';
+		echo '<thead><tr><th>' . esc_html__( 'Bot', 'system-markdown-alternate' ) . '</th><th>' . esc_html__( 'Today', 'system-markdown-alternate' ) . '</th><th>' . esc_html__( 'Last 7 days', 'system-markdown-alternate' ) . '</th><th>' . esc_html__( 'Last 30 days', 'system-markdown-alternate' ) . '</th></tr></thead><tbody>';
+
+		foreach ( array_keys( $named_30 ) as $name ) {
+			printf(
+				'<tr><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>',
+				esc_html( $name ),
+				isset( $named_1[ $name ] ) ? (int) $named_1[ $name ] : 0,
+				isset( $named_7[ $name ] ) ? (int) $named_7[ $name ] : 0,
+				(int) $named_30[ $name ]
+			);
+		}
+
+		echo '</tbody></table>';
 	}
 
 	/**

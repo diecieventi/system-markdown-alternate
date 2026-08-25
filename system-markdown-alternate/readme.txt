@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.47.1
+Stable tag: 0.48.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,7 +33,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
 * **Extra custom fields** (optional, empty by default): list the post meta keys whose values belong in the document and they are appended to the body. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta — so a page whose text comes partly from a template's fields is no longer published half missing. Nothing is detected automatically, and posts without the field keep their document and their cache validator untouched.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
-* **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
+* **Optional `.md` hit counter** (off by default): counts how many times the Markdown endpoint is served, split bot vs human, with a further breakdown naming a few known AI crawlers (ClaudeBot, GPTBot, PerplexityBot, CCBot) among the bot total. Privacy by design: only aggregate daily totals are stored — no IP addresses, no user-agent strings, no per-visitor data, no cookies, no external calls.
 * **Bricks pages get a real `.md`**: rendered through Bricks' own API (never re-implemented), with the same excluded-shortcode/excluded-class rules as everything else, plus a new "excluded builder elements" list for Bricks chrome (forms, nav menus, share bars, tables of contents, breadcrumbs). A post switched back to *Render with WordPress* is unaffected. Detection is per post, never per post type: a site that builds its pages with Bricks while its articles stay in the ordinary editor keeps every one of those articles.
 * **Other page builders are handled honestly**: a post rendered by Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance has no Markdown representation — its content is not in `post_content`, or is there as the builder's own layout shortcodes — so it returns 404 instead of an empty or misleading document, and it stays out of `/llms.txt`, the alternate links and the shortcodes.
 * **Admin panel** to choose which post types are exposed and to tune cache, exclusions and headers — no post type is exposed until you pick one. Each type shows what its published posts are actually built with (for example *12 Bricks, 3 Gutenberg*), so a page builder that costs you the Markdown version is visible before it surprises you.
@@ -188,6 +188,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.48.0 =
+
+* Added: a per-known-bot-name breakdown in the `.md` hit counter. Below the existing bot/human totals, a second table names any of a short curated list — ClaudeBot, GPTBot, PerplexityBot, CCBot, matched together with their user-initiated variants (Claude-User, ChatGPT-User, OAI-SearchBot, Perplexity-User) — with at least one hit in the last 30 days. Still aggregate-only and count-only: it names a few crawlers already counted inside the bot total, it does not add any new stored data. New filter `sysmda_md_hits_named_bot_patterns` (Advanced).
+
 = 0.47.1 =
 
 * Fixed: a text custom field containing Markdown punctuation was published with that punctuation active — a field reading `A *literal* marker` arrived with one word in italics instead of the asterisks the author typed. Underscores, brackets and backslashes were the same case. Each value was wrapped in a `<div>`, and that wrapper silently switched off the escaping every other piece of text in the document gets. Values are now separated by a blank line instead, which restores the escaping and keeps them apart; markup from a WYSIWYG field is unaffected and still converts as before.
@@ -200,12 +204,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Changed: a post that does **not** carry any of the configured keys keeps its document *and* its cache validator byte-identical, so configuring a field for a couple of landing pages does not make every article on the site revalidate.
 * Fixed: ACF field values added through `sysmda_acf_field_keys` never reached a Bricks page's Markdown. Such a page is rendered through Bricks' own API, which does not read the post content the values were appended to, so they were dropped silently — since 0.46.0. Both they and the new custom fields now go through a dedicated `sysmda_markdown_appended_html` filter (Advanced) that is honoured on every render path.
 * Fixed: the *Excluded builder elements* setting added in 0.46.0 was not removed on uninstall.
-
-= 0.46.1 =
-
-* Fixed: an ACF subtitle containing Markdown punctuation was parsed instead of read. A subtitle of `A *literal* marker` was emitted raw between the emphasis delimiters, so the reader's own asterisks took part in the formatting and the single italic line came out as three runs of emphasis. Subtitle text is now escaped the same way the article body is, so it reads back exactly as typed.
-* Fixed: a link whose body is a non-breaking space (or another invisible character) is now named from its `aria-label` or `title` like any other link that renders nothing. Card and link-preview plugins fill an overlay link with `&nbsp;` rather than leaving it truly empty, and those links were still arriving as `[](url "Name")` — with the name in the tooltip and nothing tying it to the address.
-* Changed: the documentation site is now built on every pull request instead of only after merging, so a broken page cannot reach the published site.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

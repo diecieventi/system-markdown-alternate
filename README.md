@@ -120,8 +120,9 @@ Two consequences worth knowing:
   invalidated on post edits, plugin updates and settings changes.
 - **LiteSpeed compatibility**: no-cache signals on the negotiated responses,
   plus opt-in `.htaccess` rules for servers that ignore `Vary: Accept`.
-- Optional **hit counter** (off by default): aggregate daily bot/human totals
-  only — no IPs, no user-agent strings, no cookies, no external calls.
+- Optional **hit counter** (off by default): aggregate daily bot/human totals,
+  with a further breakdown naming a few known AI crawlers among the bot
+  total — no IPs, no user-agent strings, no cookies, no external calls.
 
 ## Usage
 

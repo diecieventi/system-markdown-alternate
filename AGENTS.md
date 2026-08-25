@@ -499,13 +499,32 @@ The v1 scope is done and widely exceeded. Implemented:
   clients/CLIs, headless stacks, AI/LLM agents; filter
   `sysmda_md_hits_bot_patterns`). Stores ONLY aggregate daily buckets in
   option `sysmda_md_hits` (autoload off, UTC days, shape
-  `[ 'YYYY-MM-DD' => [ 'bot' => n, 'human' => n ] ]`), pruned beyond 90 days
-  (filter `sysmda_md_hits_retention_days`); the UA is read once to classify
-  and never stored (count-only durable decision). Read-only totals in the
-  panel (today / last 7 / last 30 days, bot vs human) with the page-cache
-  undercount caveat. The buckets option is excluded from the settings-save
-  cache-salt bump (it changes on every counted request and does not affect
-  the output). Both options removed on uninstall.
+  `[ 'YYYY-MM-DD' => [ 'bot' => n, 'human' => n, 'named' => [ name => n ] ] ]`),
+  pruned beyond 90 days (filter `sysmda_md_hits_retention_days`); the UA is
+  read once to classify and never stored (count-only durable decision).
+  **Per-known-bot-name breakdown** (`0.48.0`, `named_bot()`): a refinement of
+  the bot count, not a second classification — a request the site's own
+  `sysmda_md_hits_bot_patterns` filter has decided is not a bot is never
+  looked up here either. Named against a short, curated list of documented
+  identifiers (`ClaudeBot`, `GPTBot`, `PerplexityBot`, `CCBot`, matched
+  together with their user-initiated variants — `Claude-User`,
+  `ChatGPT-User`, `OAI-SearchBot`, `Perplexity-User`), filter
+  `sysmda_md_hits_named_bot_patterns` (canonical name => substrings).
+  Deliberately a fixed, code-defined name list rather than a bucket per
+  distinct UA ever seen: that alternative was considered and set aside (see
+  "Open / to do" below) because it turns the option into a store keyed on
+  request-derived text — a bigger step than this feature needs, and the one
+  the count-only decision exists to avoid taking casually. `named_totals()`
+  sums the same three windows as `totals()`; a bucket predating this
+  breakdown (no `named` key at all) contributes zero rather than erroring —
+  the shape is additive, no migration needed. Read-only totals in the panel
+  (today / last 7 / last 30 days, bot vs human) with the page-cache
+  undercount caveat, plus a second table naming any known crawler with at
+  least one hit in the last 30 days (empty names produce no row — a fixed
+  table of always-zero crawlers a site never sees would be noise). The
+  buckets option is excluded from the settings-save cache-salt bump (it
+  changes on every counted request and does not affect the output). Both
+  options removed on uninstall.
 - **Filter API surfaced in user-facing docs**: `readme.txt` FAQ entry with
   examples + "Extending via filters" section in `README.md`,
   all pointing to the full "Developer extension API" list in `docs/filters.md`
@@ -816,19 +835,23 @@ The v1 scope is done and widely exceeded. Implemented:
     shape "Server-side diagnostics" (below) already considered and
     declined, closing with "the only shipped request-side telemetry remains
     the count-only `.md` hit counter." Reopening either is not proposed.
-    What IS worth evaluating, because it stays inside both boundaries:
-    extending `HitCounter`'s daily buckets from the current bot/human split
-    to a **per-known-bot-name breakdown** (`ClaudeBot`/`GPTBot`/
-    `PerplexityBot`/… — the same detection list `is_bot()` already
-    classifies against, one level more specific), still aggregate-only,
-    still no IP or raw UA retained, same 90-day prune. This would also
-    sharpen exactly the signal the homepage-index postponement above is
-    explicitly waiting on ("re-evaluate only once the `.md` hit counter
-    provides real demand data") — which bot is asking matters for that
-    decision, not just how many. Not scoped further than this: whether the
-    panel shows a fixed bot list or only bots seen at least once, and how
-    far `sysmda_md_hits_bot_patterns` should reach into naming the buckets,
-    are both open.
+    What IS worth evaluating, because it stays inside both boundaries — a
+    per-known-bot-name breakdown of the bot total — **shipped in `0.48.0`**:
+    see `HitCounter::named_bot()`/`named_totals()` in "Current state". Real
+    demand, not a guess: raised again after a real production panel showed
+    13 uncounted bot hits in a single day with no way to say which crawlers
+    they were. The two questions this item left open were both resolved
+    during that work, deliberately on the simpler side of each: a **fixed,
+    curated name list** (`ClaudeBot`, `GPTBot`, `PerplexityBot`, `CCBot`),
+    not a bucket per distinct UA ever seen — the dynamic alternative would
+    key the option on request-derived text, which is a bigger step than a
+    small breakdown needs and the kind of scope creep the count-only decision
+    exists to head off; and the panel shows **only names seen at least once**
+    in the last 30 days, not a fixed table padded with always-zero rows for
+    crawlers a site never gets. `sysmda_md_hits_bot_patterns` itself is
+    untouched — naming is a new, separate filter
+    (`sysmda_md_hits_named_bot_patterns`), not a widened reach of the
+    existing bot/human one.
 - Once live on wordpress.org: translate the strings into Italian on
   translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
   gets built — no translation files live in this repo.
@@ -2216,7 +2239,7 @@ not exist as far as the public API is concerned.
   deprecation, changelog and docs. **Advanced** = anchored to a stage of the
   *current implementation* (where the pipeline cuts, how ACF is read, how the hit
   counter classifies, how `/llms.txt` is laid out) — supported and documented,
-  free to evolve pre-1.0. 24 Stable, 13 Advanced.
+  free to evolve pre-1.0. 24 Stable, 14 Advanced.
   The classification is deliberate on three points, all of which a naive reading
   gets backwards:
   - **The settings-transport hooks are Stable, and they are stable for free.**

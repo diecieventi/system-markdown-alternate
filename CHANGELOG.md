@@ -9,6 +9,21 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.48.0
+
+* Added: a per-known-bot-name breakdown in the `.md` hit counter. Below the
+  existing bot/human totals, a second table names any of a short curated list —
+  `ClaudeBot`, `GPTBot`, `PerplexityBot`, `CCBot`, matched together with their
+  user-initiated variants (`Claude-User`, `ChatGPT-User`, `OAI-SearchBot`,
+  `Perplexity-User`) — with at least one hit in the last 30 days. A crawler
+  never seen gets no row at all, rather than a permanent zero. Still
+  aggregate-only and count-only: it names a few crawlers already counted
+  inside the `bot` total, it does not add any new stored data, IP address,
+  raw user-agent string or per-visitor identifier. New filter
+  `sysmda_md_hits_named_bot_patterns` (Advanced), independent of the existing
+  `sysmda_md_hits_bot_patterns` — one decides bot vs human, the other only
+  names a match already counted as a bot.
+
 ## 0.47.1
 
 * Fixed: a text custom field containing Markdown punctuation was published with
