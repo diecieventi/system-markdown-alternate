@@ -915,7 +915,8 @@ The v1 scope is done and widely exceeded. Implemented:
   emit".
 - **llms.txt v2 discovery** (`docs/llms-txt-v2-plan.md`): reviewed against
   the spec Jeremy Howard/Answer.AI published 10 August 2026 — one gap
-  greenlit, not started, to revisit within days rather than parked
+  identified, not started, not yet greenlit to implement; the maintainer
+  is expected to revisit the decision within days rather than parking it
   indefinitely. The plugin's existing `rel="alternate" type="text/markdown"`
   discovery (`MarkdownController::print_alternate_link()` +
   `send_alternate_link_header()`) already matches the v2 example verbatim,
