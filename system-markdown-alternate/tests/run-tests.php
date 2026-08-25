@@ -2525,6 +2525,56 @@ check( 'hits named_totals: last 30 days sums across buckets', array( 'ClaudeBot'
 check( 'hits named_totals: zero-day window', array(), HitCounter::named_totals( $sysmda_hits, '2026-07-16', 0 ) );
 check( 'hits named_totals: no data at all', array(), HitCounter::named_totals( array(), '2026-07-16', 30 ) );
 
+// record(): end-to-end through the real get_option()/update_option() stubs,
+// not just the pure named_bot()/named_totals() helpers above — this is the
+// only place the new nested write (record() -> named_bot() -> the 'named'
+// sub-bucket) is actually exercised, per the AGENTS.md rule that a guard is
+// not done until it has been seen to fire. Caught by Codex on PR #112: the
+// pure-function tests alone never called record() at all.
+$sysmda_today = gmdate( 'Y-m-d' );
+
+$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ] = array();
+HitCounter::record( 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)' );
+check(
+	'hits record: a named bot increments bot AND the named sub-bucket',
+	array(
+		'bot'   => 1,
+		'human' => 0,
+		'named' => array( 'ClaudeBot' => 1 ),
+	),
+	$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ][ $sysmda_today ]
+);
+
+// The documented veto case: a site's own sysmda_md_hits_bot_patterns filter
+// decides a GPTBot-shaped UA is NOT a bot. named_bot() is never even asked,
+// so the human count moves and no 'named' key is created at all.
+$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ] = array();
+$GLOBALS['sysmda_test_filters']['sysmda_md_hits_bot_patterns'] = array(); // Nothing matches: any non-empty UA is human.
+HitCounter::record( 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)' );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_md_hits_bot_patterns'] );
+check(
+	'hits record: a bot-patterns override to human never reaches the named bucket',
+	array(
+		'bot'   => 0,
+		'human' => 1,
+	),
+	$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ][ $sysmda_today ]
+);
+
+// A generic, unnamed bot still increments 'bot' with no 'named' key at all.
+$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ] = array();
+HitCounter::record( 'curl/8.5.0' );
+check(
+	'hits record: an unnamed bot has no named key',
+	array(
+		'bot'   => 1,
+		'human' => 0,
+	),
+	$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ][ $sysmda_today ]
+);
+
+$GLOBALS['sysmda_test_options'][ HitCounter::OPTION ] = array();
+
 // ─── AdminSettings sanitizers ──────────────────────────────────────────────────
 
 $sysmda_admin = new AdminSettings(); // No boot(): sanitizers are pure, no hooks needed.
