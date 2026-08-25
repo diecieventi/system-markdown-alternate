@@ -913,6 +913,29 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
+- **llms.txt v2 discovery** (`docs/llms-txt-v2-plan.md`): reviewed against
+  the spec Jeremy Howard/Answer.AI published 10 August 2026 — one gap
+  greenlit, not started, to revisit within days rather than parked
+  indefinitely. The plugin's existing `rel="alternate" type="text/markdown"`
+  discovery (`MarkdownController::print_alternate_link()` +
+  `send_alternate_link_header()`) already matches the v2 example verbatim,
+  in both the HTML `<link>` and the HTTP `Link:` header. The one substantive
+  addition v2 makes is a second relation, `rel="describedby"`, pointing a
+  page at the `/llms.txt` that describes it — genuinely new, not something
+  either implementation already covered under a different name. The plan
+  proposes adding it alongside the existing alternate, gated on
+  `sysmda_llms_txt_enabled` plus the same `is_negotiable_request()`
+  predicate that already gates the alternate link, so the two never drift
+  out of step (the same "one predicate" discipline documented throughout
+  this file). Everything else in v2 — the `.md` URL pattern also allowing
+  extension-replacement (already produces the same result for WordPress's
+  extensionless permalinks), path-coverage semantics for multiple `llms.txt`
+  files per subtree (no demand, single root file is a valid case), dropped
+  `llms_txt2ctx` context-expansion tooling, and `## Optional` losing its
+  mechanical meaning (the plugin only ever used it as a label, never
+  processed it mechanically) — needs no plugin change. See the plan for the
+  full point-by-point comparison and the documentation surfaces a
+  `rel="describedby"` change would touch.
 ### To check next time (not urgent, parked here)
 
 - **Freeform content in a mixed post never gets `wpautop()` on the main render
