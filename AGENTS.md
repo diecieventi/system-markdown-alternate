@@ -2613,10 +2613,17 @@ resolved from. It enables `post` and `page` (the plugin ships inactive
 otherwise, see "Product decisions"), sets pretty permalinks and flushes
 rewrite rules (`.md` URLs are not reachable under WordPress's default plain
 permalinks — see "Plain permalinks" in "Current state" — and Playground boots
-with plain permalinks by default), and lands on `/hello-world.md`, the `.md`
-twin of the seed post every fresh install carries: the most direct
-demonstration of what the plugin does, rather than the wp-admin settings
-screen.
+with plain permalinks by default), and lands on `/`, the front page: the
+seed content every fresh install carries (the "Hello world!" post, the
+"Sample Page" page) is enough to exercise both enabled post types and
+`/llms.txt` end to end, and a real WordPress site a visitor can click around
+is a better first impression than a single raw `.md` response — the earlier
+draft of this blueprint landed straight on `/hello-world.md`, and got called
+out for exactly that: a `text/markdown` response is a download or a wall of
+plain text with zero context to a visitor who has not read this file, not a
+demo. `sysmda_llms_txt_enabled` is already on by default, but the option is
+set explicitly here too, so the blueprint keeps demonstrating `/llms.txt`
+even if that default ever changes.
 **Verified live before merging, not just schema-validated** (the "a guard is
 not done until it has been seen to fire" rule applies to a blueprint exactly
 as it does to code): validated against the published
@@ -2624,10 +2631,13 @@ as it does to code): validated against the published
 headlessly with `@wp-playground/cli`'s `server` command (the officially
 documented way to exercise a Blueprint outside a browser) pointed at this
 file. Confirmed live: the plugin installs and activates from the real
-wordpress.org listing, and `/hello-world.md` answers `200 text/markdown` with
-correct front matter — not a 404 or an inactive-plugin HTML page, which is
-what an unenabled post type or unflushed permalinks would have produced
-silently. **What this verification does NOT cover, and never can**: because
+wordpress.org listing, `/` renders the ordinary Twenty Twenty-Five front page
+with the seed post on it, and both `/hello-world.md` and `/sample-page.md`
+answer `200 text/markdown` with correct front matter — not a 404 or an
+inactive-plugin HTML page, which is what an unenabled post type or unflushed
+permalinks would have produced silently — and `/llms.txt` lists both under
+`## Posts` / `## Pages`. **What this verification does NOT cover, and never
+can**: because
 the resource is always the published stable release, running this same check
 again — say, right before shipping a future version — exercises whatever is
 *already on wordpress.org*, never the unreleased code in that PR or in a local
