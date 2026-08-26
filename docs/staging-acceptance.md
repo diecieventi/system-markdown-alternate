@@ -120,6 +120,39 @@ repository.
 
 ## Latest full pass
 
+- **2026-08-26 — System Markdown Alternate 0.49.0 (`rel="describedby"`) — targeted, not the full matrix**
+
+  Platforms: **both** staging sites, upgraded in place from `0.47.1` (neither
+  had received `0.48.0`) — `sma-bricks.instawp.co`, WordPress 7.1, PHP 8.4.7,
+  Bricks 2.3.11; and `sma.instawp.co`, WordPress 7.1, PHP 8.4.20,
+  GeneratePress. Run on the PR branch before merge, not on a release tag.
+
+  Only five non-`vendor/` files differ between `0.47.1` and `0.49.0`, and
+  `vendor/` was byte-identical on both sites (verified by comparing a SHA-256
+  of every installed file against the built package), so the update was applied
+  as those five files rather than a full package install: each was fetched by
+  the site itself from the branch at `a3d3582`, **verified against its expected
+  SHA-256 before anything was written**, and written only once all five had
+  verified — so a bad download could not leave a half-updated plugin. A
+  rollback archive of the prior install was taken outside the plugin directory
+  first and removed after the run on both sites; `opcache_reset()` was needed
+  for the new files to take effect.
+
+  | Check | Result |
+  |---|---|
+  | Both relations on a servable canonical post — `Link: rel="alternate"; type="text/markdown"` **and** `Link: <…/llms.txt>; rel="describedby"`, plus `<link rel="describedby">` in the head | passed on both |
+  | Pre-existing `Link` relations preserved (`api.w.org`, `shortlink`, the JSON alternate) | passed |
+  | `/llms.txt` toggled off → `describedby` gone, Markdown alternate still present | passed on both — the two are gated independently |
+  | **Unconfigured install: `/llms.txt` enabled but no content type selected → no `describedby` anywhere** | passed on both, and `/llms.txt` itself confirmed **404** in that state — this is the case a gate on the option alone would have advertised, and the reason the predicate is a conjunction |
+  | Absent from feed, embed, the `.md` response and negotiated Markdown | passed |
+  | No regression: `.md` `200`, `text/markdown; charset=utf-8`, `noindex, follow`, `public, max-age=0, must-revalidate`, weak `ETag`, `If-None-Match` → `304` | passed on both |
+  | Bricks page still renders real image `src` (no `data:image/svg+xml` placeholder) after the upgrade | passed |
+  | `/llms.txt` `200` and non-empty | passed on both |
+
+  Not covered here: a subdirectory install (neither staging is one), so the
+  `home_url()` path handling in the advertised target is still only argued from
+  the code and the pure suite.
+
 - **2026-08-23 — System Markdown Alternate 0.47.1 (extra custom fields × the Bricks adapter) — targeted, not the full matrix**
 
   Platform: `sma-bricks-instawp-co`, WordPress 7.1, PHP 8.4.7 (unchanged from
