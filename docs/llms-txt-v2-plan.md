@@ -1,19 +1,31 @@
 # llms.txt v2 — review and update plan
 
-> Research/review, recorded. Status: **committed, tracked in `AGENTS.md`
-> ("Open / to do") — implementation not started.** Written against
-> `main @ 0.48.0`, 25 August 2026, in response to a "check llms.txt v2 and
-> tell me what to update, don't build anything" request; this plan document
-> itself was committed and merged the same day (no plugin code touched). The
-> maintainer has not yet greenlit implementing `rel="describedby"` (§3) —
-> that decision is expected to be revisited within days rather than parked
-> indefinitely, per the `AGENTS.md` entry.
+> **STATUS: SHIPPED in `0.49.0`, 26 August 2026. This document is a closed
+> record.** Everything below §1 is the reasoning as it stood *before* the
+> change, kept for the argument rather than the status: §3–§6 were written
+> while the work was still a proposal and say so throughout ("not greenlit",
+> "nothing has been implemented", "what to do if"). **Read every such
+> statement as historical.** The live documentation of what the plugin
+> actually does is `docs/output-format.md` and the `rel="describedby"` entry
+> under "Current state" in `AGENTS.md`.
 >
-> **§7 (26 August 2026) adds the implementation plan** for §3, written after
-> reading the code rather than from the review's summary of it — which turned
-> up two divergences, one of them a trap (§7.1). Still no plugin source
-> touched, and still not greenlit: §7 is what to build *if* the answer to §5.1
-> is yes.
+> How it got here, in order: the review (§1–§6) was written against
+> `main @ 0.48.0` on 25 August 2026, in response to a "check llms.txt v2 and
+> tell me what to update, don't build anything" request, and was committed and
+> merged the same day with no plugin code touched. §7 was added on 26 August
+> as the implementation plan for §3, written by reading the code rather than
+> the review's summary of it — which turned up two divergences, one of them a
+> trap (§7.1). The build followed the same day.
+>
+> **What was decided.** §5.1 was answered yes and §7 was
+> built as written. §5.2 was answered "no new filter" (D2), and the follow-up
+> question it raised — a panel checkbox letting an admin assert that a *third
+> party* serves `/llms.txt` — was considered and **declined**: it converts a
+> self-verifying gate into a promise the plugin cannot check, which rots
+> silently the day the other plugin's setting changes, and reintroduces the
+> §7.1.2 defect by hand. The gate is this plugin's own `/llms.txt`, and nothing
+> else. This plan is now a closed record; the live documentation is
+> `docs/output-format.md` and the "Current state" entry in `AGENTS.md`.
 
 ## 1. What actually changed in v2
 
@@ -208,16 +220,21 @@ review (same pattern as the other "reviewed, closed" entries in "To check
 next time") so this comparison is not redone from scratch next time v2 (or
 a v3) comes up.
 
-**Nothing in this plan has been implemented.** This document and the
+~~**Nothing in this plan has been implemented.** This document and the
 `AGENTS.md` pointer to it are committed; no plugin source file has been
-touched, and `rel="describedby"` itself has not been built.
+touched, and `rel="describedby"` itself has not been built.~~
+*(Historical — true when §1–§6 were written. It shipped in `0.49.0`; see the
+status note at the top.)*
 
 ## 7. Implementation plan for `rel="describedby"`
 
+> **Built as written, in `0.49.0`.** The section is kept in its original
+> pre-implementation voice — "what to do", "before adding anything" — because
+> its value is the reasoning and the two traps in §7.1, not its status.
+
 Written 26 August 2026 against `main @ 0.48.0` (`10a8b46`), by reading
 `MarkdownController.php`, `LlmsTxtController.php` and `tests/run-tests.php`
-rather than the review's summary of them. Not greenlit, not built: this is
-what to do if §5.1 is answered yes.
+rather than the review's summary of them.
 
 ### 7.1 Two corrections to §3, found by reading the code
 

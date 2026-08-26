@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.48.0
+Stable tag: 0.49.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,7 +26,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **`.md` endpoint** for every supported, published, public post.
 * **Content negotiation**: the same Markdown is returned for `Accept: text/markdown` or `?format=markdown` requests. The `Accept` header is parsed with q-values, so a client that prefers HTML (higher q) still gets HTML.
 * **`Vary: Accept`** on negotiable URLs, so caches and CDNs that honour it keep the HTML and Markdown representations of the same address apart. Because some page caches key by URL only and ignore `Vary`, the negotiated Markdown (and `406`) responses are also sent non-cacheable, so safety never depends on `Vary` alone.
-* **Markdown discovery in HTML and HTTP**: supported canonical pages advertise the representation with both `<link rel="alternate" type="text/markdown">` in the document head and a typed `Link: rel="alternate"` response header. The HTTP form is also available to `HEAD` requests.
+* **Markdown discovery in HTML and HTTP**: supported canonical pages advertise the representation with both `<link rel="alternate" type="text/markdown">` in the document head and a typed `Link: rel="alternate"` response header. The HTTP form is also available to `HEAD` requests. When `/llms.txt` is enabled, the same pages also point at it with `rel="describedby"`, the relation added by version 2 of the llms.txt specification, so an agent can find the site's index from any article.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
 * **Clean conversion**: Gutenberg blocks are rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code blocks become fenced blocks, URLs are made absolute, and an embedded video, tweet or track leaves a link to what it embeds rather than an empty gap. Clickable link cards keep their name too: the invisible overlay link such cards are built from takes the name the markup declares, instead of arriving with no text at all.
 * **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
@@ -188,6 +188,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.49.0 =
+
+* Added: pages now point at the site's `/llms.txt` with the `rel="describedby"` link relation introduced by version 2 of the llms.txt specification, in both the HTML head and the HTTP `Link:` header — alongside the Markdown alternate they already advertised. An agent landing on any article can find the site's index without having to guess that `/llms.txt` exists. Emitted only where the Markdown alternate is already emitted and only while this plugin's own `/llms.txt` is enabled, so the link never points at an endpoint that is not being served; there is no new setting.
+
 = 0.48.0 =
 
 * Added: a per-known-bot-name breakdown in the `.md` hit counter. Below the existing bot/human totals, a second table names any of a short curated list — ClaudeBot, GPTBot, PerplexityBot, CCBot, matched together with their user-initiated variants (Claude-User, ChatGPT-User, OAI-SearchBot, Perplexity-User) — with at least one hit in the last 30 days. Still aggregate-only and count-only: it names a few crawlers already counted inside the bot total, it does not add any new stored data. New filter `sysmda_md_hits_named_bot_patterns` (Advanced).
@@ -196,14 +200,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Fixed: a text custom field containing Markdown punctuation was published with that punctuation active — a field reading `A *literal* marker` arrived with one word in italics instead of the asterisks the author typed. Underscores, brackets and backslashes were the same case. Each value was wrapped in a `<div>`, and that wrapper silently switched off the escaping every other piece of text in the document gets. Values are now separated by a blank line instead, which restores the escaping and keeps them apart; markup from a WYSIWYG field is unaffected and still converts as before.
 * Fixed: listing a custom field whose value contains Gutenberg block markup alongside plain-text fields ran those text fields together on one line. One block-valued field sent every sibling down the block path, where plain text is emitted without paragraphs.
-
-= 0.47.0 =
-
-* Added: **Extra custom fields** — a new setting listing the post meta keys whose values belong in the Markdown. Their content is appended to the end of the body, in the order listed. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta, so a page whose text comes partly from a template's fields is no longer published half missing. Empty by default and never detected automatically: a field starts appearing when you type its key into the box, and not before. Values that are not text — an image, a repeater, anything stored as an array — are skipped rather than guessed at.
-* Added: `sysmda_markdown_extra_meta_keys` (Stable) as the filter behind the new setting, so the list can be varied per post from code.
-* Changed: a post that does **not** carry any of the configured keys keeps its document *and* its cache validator byte-identical, so configuring a field for a couple of landing pages does not make every article on the site revalidate.
-* Fixed: ACF field values added through `sysmda_acf_field_keys` never reached a Bricks page's Markdown. Such a page is rendered through Bricks' own API, which does not read the post content the values were appended to, so they were dropped silently — since 0.46.0. Both they and the new custom fields now go through a dedicated `sysmda_markdown_appended_html` filter (Advanced) that is honoured on every render path.
-* Fixed: the *Excluded builder elements* setting added in 0.46.0 was not removed on uninstall.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

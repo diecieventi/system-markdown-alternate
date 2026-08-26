@@ -146,6 +146,45 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether this response should advertise the /llms.txt index (llms.txt v2
+	 * `rel="describedby"`).
+	 *
+	 * Both conditions are required, and the second is not decoration: the
+	 * endpoint has a gate after its own option — it stays silent while no
+	 * content type is enabled — and the two option defaults are on and empty
+	 * respectively, so "the option is on" alone would advertise a target that
+	 * 404s on an unconfigured install. is_negotiable_request() covers that
+	 * gate transitively, because it also returns false with no enabled type.
+	 *
+	 * Anything that later widens this beyond negotiable requests MUST re-add
+	 * the PostSupport::supported_post_types() check explicitly: the two are in
+	 * step by construction here and nothing enforces it.
+	 *
+	 * Deliberately re-checks is_negotiable_request() rather than trusting the
+	 * caller to have done it, so neither emitter can drift. Both run on HTML
+	 * responses only; the .md route has already exited.
+	 */
+	private function should_advertise_llms_txt(): bool {
+		if ( ! $this->is_negotiable_request() ) {
+			return false;
+		}
+
+		return '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
+	}
+
+	/**
+	 * The advertised /llms.txt URL, from one place so the HTML link and the
+	 * HTTP header cannot drift.
+	 *
+	 * home_url() and never a bare '/llms.txt': on a subdirectory install the
+	 * endpoint lives under the home path, which is what LlmsTxtController
+	 * itself matches on.
+	 */
+	private static function llms_txt_url(): string {
+		return home_url( '/llms.txt' );
+	}
+
+	/**
 	 * Hook: wp_head. Prints the alternate link only on supported public posts/CPTs.
 	 */
 	public function print_alternate_link(): void {
@@ -169,6 +208,16 @@ class MarkdownController {
 			'<link rel="alternate" type="text/markdown" href="%s" />' . "\n",
 			esc_url( MetadataBuilder::markdown_url( $post ) )
 		);
+
+		// llms.txt v2: point the page at the index that describes it. Gated
+		// independently of the alternate above — the two describe different
+		// resources and one being absent must never suppress the other.
+		if ( $this->should_advertise_llms_txt() ) {
+			printf(
+				'<link rel="describedby" href="%s" />' . "\n",
+				esc_url( self::llms_txt_url() )
+			);
+		}
 	}
 
 	/**
@@ -513,17 +562,34 @@ class MarkdownController {
 			return;
 		}
 
+		// One snapshot, and one block per relation. headers_sent() is the only
+		// condition that genuinely applies to both, so it is the only early
+		// return allowed to cover both: an empty or already-advertised
+		// alternate says nothing about /llms.txt, and a `return` here would
+		// silently drop the describedby field on exactly the sites where
+		// another plugin is emitting Link fields of its own.
+		$sent = headers_list();
+
 		$alternate = esc_url_raw( MetadataBuilder::markdown_url( $post ) );
 
-		if ( '' === $alternate || self::link_header_has_alternate( headers_list(), $alternate ) ) {
+		if ( '' !== $alternate && ! self::link_header_has_relation( $sent, $alternate, 'alternate' ) ) {
+			header( 'Link: <' . $alternate . '>; rel="alternate"; type="text/markdown"', false );
+		}
+
+		if ( ! $this->should_advertise_llms_txt() ) {
 			return;
 		}
 
-		header( 'Link: <' . $alternate . '>; rel="alternate"; type="text/markdown"', false );
+		$index = esc_url_raw( self::llms_txt_url() );
+
+		if ( '' !== $index && ! self::link_header_has_relation( $sent, $index, 'describedby' ) ) {
+			header( 'Link: <' . $index . '>; rel="describedby"', false );
+		}
 	}
 
 	/**
-	 * Whether an existing Link field already advertises this alternate target.
+	 * Whether an existing Link field already advertises this target under this
+	 * relation.
 	 *
 	 * A Link field may occur more than once or carry a comma-separated list. The
 	 * comma is not always a separator, though: it may occur inside the `<…>` URI
@@ -531,9 +597,15 @@ class MarkdownController {
 	 * and emit another field. Public only so the parsing can be tested under CLI,
 	 * where `headers_list()` is empty.
 	 *
+	 * The relation is part of the question, never assumed: the same target may
+	 * legitimately be advertised under a different relation, and matching on the
+	 * URI alone would let one relation's duplicate suppress another's emission.
+	 * `type` is deliberately not consulted — an untyped field advertising the
+	 * same target under the same relation is still a duplicate.
+	 *
 	 * @param string[] $sent Headers as returned by headers_list().
 	 */
-	public static function link_header_has_alternate( array $sent, string $target ): bool {
+	public static function link_header_has_relation( array $sent, string $target, string $relation ): bool {
 		foreach ( $sent as $header ) {
 			if ( 0 !== stripos( $header, 'link:' ) ) {
 				continue;
@@ -544,7 +616,7 @@ class MarkdownController {
 					continue;
 				}
 
-				if ( $target === $matches[1] && self::link_value_has_relation( $link, 'alternate' ) ) {
+				if ( $target === $matches[1] && self::link_value_has_relation( $link, $relation ) ) {
 					return true;
 				}
 			}

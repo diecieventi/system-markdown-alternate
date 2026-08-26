@@ -451,6 +451,30 @@ callbacks have had the opportunity to end the request. With plain permalinks
 the target is the same `?format=markdown` URL returned by
 `MetadataBuilder::markdown_url()`.
 
+The same responses additionally point at the site's `/llms.txt` index with the
+`describedby` relation of the llms.txt v2 specification, again in both forms:
+
+```http
+<link rel="describedby" href="https://example.com/llms.txt" />
+Link: <https://example.com/llms.txt>; rel="describedby"
+```
+
+No `type` parameter is carried on this relation. The target is always
+`home_url( '/llms.txt' )`, so a subdirectory install advertises the endpoint
+under its home path.
+
+The two relations are gated **independently and emitted independently**: the
+`describedby` field additionally requires this plugin's own `/llms.txt` to be
+enabled, and neither relation's duplicate check may suppress the other's
+emission. A page can therefore carry the alternate alone (`/llms.txt` off), or
+both, but the presence of one never implies the other.
+
+The `describedby` link is deliberately **not** emitted on the strength of an
+`/llms.txt` served by anything other than this plugin. Whether a third party
+serves that URL is not decidable locally — reading another plugin's internal
+options and loopback HTTP probes are both ruled out — and advertising an index
+that is not being served is worse than not advertising one.
+
 The remaining transport behaviour is documented in full in `AGENTS.md`; in
 brief, a successful Markdown response carries:
 
