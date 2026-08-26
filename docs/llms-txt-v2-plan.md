@@ -337,18 +337,44 @@ purely additive, no existing output changes shape. Minor per semver rule.
    emitting `<link rel="describedby" href="…" />`. No `type` attribute:
    `/llms.txt` is `text/plain` and the spec's example carries no type on
    this relation.
-4. `send_alternate_link_header()` (or its caller) — one additional
+4. `send_alternate_link_header()` — one additional
    `header( 'Link: <…>; rel="describedby"', false )`, guarded by (2) and by
    the duplicate check from 7.1.1 with `'describedby'` passed in. `false`
    appends, so the existing alternate field survives; repeated `Link:`
    fields are equivalent to one comma-joined field.
 5. `link_header_has_alternate()` — the `$relation` parameter from 7.1.1.
 
-Note that (3) and (4) are guarded by (2), which *contains*
-`is_negotiable_request()`. The `headers_sent()` and `esc_url_raw()`
-handling in `send_alternate_link_header()` already covers the new field if
-the emission is placed inside that method rather than beside it — prefer
-that, so there is one `headers_sent()` early return rather than two.
+**Restructure the method's early returns before adding anything to it — do
+not append to the existing flow.** As written, `send_alternate_link_header()`
+computes the alternate and then does:
+
+```php
+if ( '' === $alternate || self::link_header_has_alternate( headers_list(), $alternate ) ) {
+    return;
+}
+```
+
+That `return` leaves the **whole method**. A `describedby` emission placed
+after it would be skipped whenever another plugin has already advertised
+the same alternate target, or whenever `markdown_url()` comes back empty —
+neither of which has anything to do with `/llms.txt`. The result is
+precisely the defect §7.6 asserts against: one relation present, the other
+silently missing, on exactly the sites where a second plugin is in play.
+(Caught in review by Codex on PR #116; the first draft of this section
+recommended placing the emission inside the method to share the
+`headers_sent()` guard, which is what introduces the bug.)
+
+So: keep **one** `headers_sent()` guard at the top, then give each relation
+its own independent block — compute target, skip if empty, skip if already
+advertised for *that relation*, emit. Neither relation's duplicate check may
+govern the other's emission. The shared `headers_sent()` return is the only
+early return allowed to cover both, because it is the only condition that
+genuinely applies to both.
+
+This is the same failure mode the plan already records twice — a guard
+written for one thing quietly deciding another (7.1.2, and `AGENTS.md` on
+the HTML-link vs. header guards). Worth noticing that it reappeared here
+inside the fix for it.
 
 No changes to `LlmsTxtController.php`, `Plugin.php` (both hooks are already
 registered) or any option.
@@ -390,6 +416,7 @@ Per the per-PR rule, in the same PR. §5.3's list, with D2 resolved:
 | `docs/output-format.md`, HTTP contract (~L435-452) | The new `Link:` relation next to the existing example, plus the gating sentence. This is the primary contract change. |
 | `documentation/src/content/docs/endpoints/the-llms-txt-index.md` | Pages advertise the index via `rel="describedby"`. |
 | `AGENTS.md`, "Current state" | One line on the existing discovery bullet; move the v2 item out of "Open / to do" into a closed review. |
+| `docs/staging-acceptance.md` | The §7.6 cases added to the **acceptance matrix**, not only to `AGENTS.md`. §7.4 assigns hook ordering, the wire headers and the default-install 404 case to the staging run, so the matrix a release is actually executed from has to carry them — the existing pass table already has a `rel="alternate"` row (~L172) and this sits beside it. (Omitted from the first draft of this table while §7.4 was already assigning work to staging; caught in review by Codex on PR #116.) |
 | `docs/filters.md` | **No change** — D2 adds no filter. |
 | `readme.txt` / `README.md` | **No change** — a discovery refinement, not a listed feature. Same judgement as `0.41.0`. |
 | This plan | Status header → implemented, with the version. |
@@ -397,7 +424,12 @@ Per the per-PR rule, in the same PR. §5.3's list, with D2 resolved:
 ### 7.6 Acceptance
 
 Extends test #13 in `AGENTS.md` rather than adding a numbered case (§5.5),
-since it is the same `curl -sI` on the same URL:
+since it is the same `curl -sI` on the same URL — **and lands in
+`docs/staging-acceptance.md`'s matrix as well**, per §7.5. Both, not either:
+`AGENTS.md` states the case, the matrix is what a release is run from, and a
+case recorded only in the former is not a case anybody executes.
+
+The list below is the content of both entries:
 
 - Servable canonical post → **both** relations present, alternate and
   `describedby`, and any pre-existing `Link` relation preserved.
