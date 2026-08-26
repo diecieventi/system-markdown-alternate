@@ -9,6 +9,20 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.49.2
+
+* The Live Preview blueprint (`.wordpress-org/blueprints/blueprint.json`) now
+  lands on the site's front page (`/`) instead of `/hello-world.md`. Landing
+  directly on a `text/markdown` response gave a first-time visitor a download
+  or a wall of unstyled plain text with no context — not a demo. The seed
+  content every fresh WordPress install carries (the "Hello world!" post, the
+  "Sample Page" page) already exercises both enabled post types and
+  `/llms.txt`, and a real front page a visitor can click around makes a
+  better first impression. `sysmda_llms_txt_enabled` is now also set
+  explicitly in the blueprint (already on by default, but demonstrated
+  regardless of that default). Metadata and repository tooling only — no
+  plugin code, output or behaviour changes.
+
 ## 0.49.1
 
 * The plugin now ships a `.wordpress-org/blueprints/blueprint.json`, enabling
