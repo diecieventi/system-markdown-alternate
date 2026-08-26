@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.49.0
+Stable tag: 0.49.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -188,6 +188,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.49.1 =
+
+* The plugin now ships a `.wordpress-org/blueprints/blueprint.json`, which enables the **Live Preview** button on this listing page: visitors can try the plugin live, active, in WordPress Playground, with no install. Metadata and repository tooling only — no plugin code, output or behaviour changes.
+
 = 0.49.0 =
 
 * Added: pages now point at the site's `/llms.txt` with the `rel="describedby"` link relation introduced by version 2 of the llms.txt specification, in both the HTML head and the HTTP `Link:` header — alongside the Markdown alternate they already advertised. An agent landing on any article can find the site's index without having to guess that `/llms.txt` exists. Emitted only where the Markdown alternate is already emitted and only while this plugin's own `/llms.txt` is enabled, so the link never points at an endpoint that is not being served; there is no new setting.
@@ -195,11 +199,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.48.0 =
 
 * Added: a per-known-bot-name breakdown in the `.md` hit counter. Below the existing bot/human totals, a second table names any of a short curated list — ClaudeBot, GPTBot, PerplexityBot, CCBot, matched together with their user-initiated variants (Claude-User, ChatGPT-User, OAI-SearchBot, Perplexity-User) — with at least one hit in the last 30 days. Still aggregate-only and count-only: it names a few crawlers already counted inside the bot total, it does not add any new stored data. New filter `sysmda_md_hits_named_bot_patterns` (Advanced).
-
-= 0.47.1 =
-
-* Fixed: a text custom field containing Markdown punctuation was published with that punctuation active — a field reading `A *literal* marker` arrived with one word in italics instead of the asterisks the author typed. Underscores, brackets and backslashes were the same case. Each value was wrapped in a `<div>`, and that wrapper silently switched off the escaping every other piece of text in the document gets. Values are now separated by a blank line instead, which restores the escaping and keeps them apart; markup from a WYSIWYG field is unaffected and still converts as before.
-* Fixed: listing a custom field whose value contains Gutenberg block markup alongside plain-text fields ran those text fields together on one line. One block-valued field sent every sibling down the block path, where plain text is emitted without paragraphs.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
