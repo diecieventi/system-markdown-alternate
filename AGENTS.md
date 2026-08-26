@@ -2601,17 +2601,22 @@ a button that boots the plugin in WordPress Playground (a WASM WordPress in
 the visitor's browser — no install, no server). It needs no workflow of its
 own: `ASSETS_DIR: .wordpress-org` in `deploy-wordpress-org.yml` already copies
 the whole folder verbatim on every release, `blueprints/` included.
-The blueprint installs the plugin **from its own wordpress.org SVN trunk**
+The blueprint installs the plugin **from its current published stable release
+on wordpress.org**
 (`{ "resource": "wordpress.org/plugins", "slug": "system-markdown-alternate" }`)
 rather than bundling a zip — the standard self-reference shape, and the
-correct one here since the plugin is already live on wordpress.org — enables
-`post` and `page` (the plugin ships inactive otherwise, see "Product
-decisions"), sets pretty permalinks and flushes rewrite rules (`.md` URLs are
-not reachable under WordPress's default plain permalinks — see "Plain
-permalinks" in "Current state" — and Playground boots with plain permalinks by
-default), and lands on `/hello-world.md`, the `.md` twin of the seed post
-every fresh install carries: the most direct demonstration of what the plugin
-does, rather than the wp-admin settings screen.
+correct one here since the plugin is already live there. This is
+`downloads.wordpress.org`'s default package for the slug — the `Stable tag`
+build a visitor gets from the "Download" button — **not** SVN `trunk` and
+never this repository's working tree, whatever branch that resource is
+resolved from. It enables `post` and `page` (the plugin ships inactive
+otherwise, see "Product decisions"), sets pretty permalinks and flushes
+rewrite rules (`.md` URLs are not reachable under WordPress's default plain
+permalinks — see "Plain permalinks" in "Current state" — and Playground boots
+with plain permalinks by default), and lands on `/hello-world.md`, the `.md`
+twin of the seed post every fresh install carries: the most direct
+demonstration of what the plugin does, rather than the wp-admin settings
+screen.
 **Verified live before merging, not just schema-validated** (the "a guard is
 not done until it has been seen to fire" rule applies to a blueprint exactly
 as it does to code): validated against the published
@@ -2619,10 +2624,17 @@ as it does to code): validated against the published
 headlessly with `@wp-playground/cli`'s `server` command (the officially
 documented way to exercise a Blueprint outside a browser) pointed at this
 file. Confirmed live: the plugin installs and activates from the real
-wordpress.org SVN trunk, and `/hello-world.md` answers `200 text/markdown`
-with correct front matter — not a 404 or an inactive-plugin HTML page, which
-is what an unenabled post type or unflushed permalinks would have produced
-silently.
+wordpress.org listing, and `/hello-world.md` answers `200 text/markdown` with
+correct front matter — not a 404 or an inactive-plugin HTML page, which is
+what an unenabled post type or unflushed permalinks would have produced
+silently. **What this verification does NOT cover, and never can**: because
+the resource is always the published stable release, running this same check
+again — say, right before shipping a future version — exercises whatever is
+*already on wordpress.org*, never the unreleased code in that PR or in a local
+working tree. It is a guard on the blueprint's own mechanics (does the JSON
+still install and activate the plugin, do the permalink/post-type steps still
+work), not on unreleased plugin behaviour; do not cite a rerun of it as
+evidence a pending code change works.
 **One step stays manual and outside CI, and cannot be otherwise**: wordpress.org
 only shows the Preview button once the plugin's own **Advanced** page (on
 wordpress.org, under the maintainer's account) has "Toggle Live Preview" set
