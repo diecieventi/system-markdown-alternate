@@ -8,6 +8,12 @@
 > maintainer has not yet greenlit implementing `rel="describedby"` (§3) —
 > that decision is expected to be revisited within days rather than parked
 > indefinitely, per the `AGENTS.md` entry.
+>
+> **§7 (26 August 2026) adds the implementation plan** for §3, written after
+> reading the code rather than from the review's summary of it — which turned
+> up two divergences, one of them a trap (§7.1). Still no plugin source
+> touched, and still not greenlit: §7 is what to build *if* the answer to §5.1
+> is yes.
 
 ## 1. What actually changed in v2
 
@@ -96,7 +102,7 @@ site for you lives at `/llms.txt`" — which is exactly what `/llms.txt`
 is *for* (`LlmsTxtController`), and currently undiscoverable except by an
 agent already knowing to probe `/llms.txt` by convention.
 
-**Gating, proposed:**
+**Gating, proposed:** *(amended — the first bullet is incomplete, see §7.1.2)*
 - Only when `/llms.txt` is enabled (`get_option( 'sysmda_llms_txt_enabled', '1' )`
   — same option `LlmsTxtController::maybe_render()` already checks).
 - Reuse the exact same `is_negotiable_request()` guard the alternate link
@@ -122,7 +128,9 @@ agent already knowing to probe `/llms.txt` by convention.
   duplicate check — the existing helper is written narrowly for
   `rel="alternate"` + `type="text/markdown"`, so it would need a small
   generalisation (matching on `rel` and target URL, not on `type`) rather
-  than a second copy of the parsing logic. Two header lines
+  than a second copy of the parsing logic. *(Amended: the helper already
+  matches on `rel` and target and never on `type` — see §7.1.1. The
+  generalisation is one parameter, not a rewrite.)* Two header lines
   (`header( '…', false )` twice) is fine — WordPress and browsers both
   treat repeated `Link:` fields the same as one comma-joined field.
 - New filter: something like `sysmda_markdown_llms_txt_link` (or reuse
@@ -203,6 +211,244 @@ a v3) comes up.
 **Nothing in this plan has been implemented.** This document and the
 `AGENTS.md` pointer to it are committed; no plugin source file has been
 touched, and `rel="describedby"` itself has not been built.
+
+## 7. Implementation plan for `rel="describedby"`
+
+Written 26 August 2026 against `main @ 0.48.0` (`10a8b46`), by reading
+`MarkdownController.php`, `LlmsTxtController.php` and `tests/run-tests.php`
+rather than the review's summary of them. Not greenlit, not built: this is
+what to do if §5.1 is answered yes.
+
+### 7.1 Two corrections to §3, found by reading the code
+
+**7.1.1 — The duplicate-detection helper is already relation-generic, and
+never looked at `type`.** §3 estimates a "small generalisation (matching on
+`rel` and target URL, not on `type`)". That work is already done:
+`link_header_has_alternate()` matches the target URI and then delegates to
+`link_value_has_relation( $link, 'alternate' )`, a helper that **already
+takes the relation as a parameter**, and the `type` parameter is never
+consulted anywhere in the path. The suite proves the second half rather than
+leaving it to inspection — `Link alternate: an untyped alternate still
+deduplicates` asserts that `rel=alternate` with no `type` is detected.
+
+So the change is: add a `string $relation = 'alternate'` parameter to
+`link_header_has_alternate()` and forward it. The default keeps every
+existing call site and all twelve existing assertions valid. Do **not**
+rewrite `split_link_header_value()` or the `rel` parser: they are already
+correct for both relations, and they carry the comma-inside-a-URI and
+comma-inside-a-quoted-parameter cases the tests pin down.
+
+A rename is worth considering in the same edit (`link_header_has_relation()`),
+since the name would no longer describe what it does. It is `public static`
+only so it can be tested under CLI, and it is not part of the documented
+filter or output contract, so renaming costs nothing beyond the call sites
+and the test labels.
+
+**7.1.2 — "The option is on" does NOT mean `/llms.txt` resolves, and this is
+the one trap in the change.** §3's gating list names a single condition:
+`sysmda_llms_txt_enabled`. But `maybe_render_llms_txt()` has a **second**
+gate after it — `empty( PostSupport::supported_post_types() )` returns
+without serving, implementing the durable decision "`/llms.txt` stays silent
+until a content type is enabled". A `describedby` link gated on the option
+alone would therefore advertise a target that **404s** on a fresh install:
+the option defaults to `'1'`, and the supported-types option defaults to
+empty, so the broken state is the *default* state, not an edge case.
+
+The invariant to hold is: **never advertise a `describedby` target that
+would not be served.** Reusing `is_negotiable_request()` satisfies it
+transitively — that predicate already returns `false` when
+`supported_post_types()` is empty — which turns §3's "reuse the same guard"
+from a stylistic preference into a correctness requirement.
+
+Record it as such in the code, because the two conditions are only in step
+by construction and nothing enforces it: this is exactly the shape
+`AGENTS.md` already warns about for the HTML-link vs. header guards ("two
+guards written to mirror each other did not"). Anyone later broadening
+`describedby` beyond negotiable requests — which is the natural thing to
+want, see D1 — **must re-add the `supported_post_types()` check explicitly**
+at that moment.
+
+### 7.2 Design decisions to settle before writing code
+
+**D1 — Which predicate gates it? → `is_negotiable_request()`, unchanged.**
+
+The honest tension, stated so it is not rediscovered as a bug: `describedby`
+describes *the site's index*, not this URL's Markdown twin, so the spec's
+intent is broader than "pages that have a `.md`". Reusing the predicate
+means a page vetoed by the page-builder rule, a non-enabled post type, an
+`aside`-format post or a password-protected post advertises no `describedby`
+even though `/llms.txt` exists and describes the site.
+
+Take the narrow reading anyway, for two reasons that outrank the spec's
+breadth here: it is the only gating that satisfies 7.1.2 without a second
+copy of the `/llms.txt`-servability rule, and it keeps the plugin's own
+discipline — the plugin speaks on pages where it already speaks. A static
+front page of an enabled type still gets the link (`is_singular( 'page' )`
+is true there), which is the single highest-value placement for an agent
+landing on the site root, so the narrow reading is not as narrow as it
+sounds in practice.
+
+Broadening it later is additive and needs no deprecation. Broadening it
+*carelessly* reintroduces the 404. Write that down next to the guard.
+
+**D2 — New filter, or `sysmda_llms_txt_enabled` alone? → No new filter.**
+
+§5.2 leaves this open. `AGENTS.md` answers it: "Do not add a filter merely
+because something *could* be configurable", and "prefer few high-level
+extension points". The independent control a `sysmda_markdown_llms_txt_link`
+filter would buy — advertise `/llms.txt` from pages while still serving it,
+or the reverse — has no stated demand behind it, and the split it models
+(serve vs. advertise) is a distinction no user has asked for.
+
+Adding a filter later is backward-compatible; removing one is not. Ship
+without it and let demand justify it, which is the same order of operations
+the homepage `.md`, the multilingual index and the exclusion scanner are all
+waiting on. This also keeps §5.3's `docs/filters.md` surface untouched.
+
+**D3 — Does the `.md` response advertise it too? → No, explicitly.**
+
+Considered and declined, recorded so it is not re-litigated. The `.md`
+response's header set is a documented contract (`docs/output-format.md`),
+currently `Content-Type`, `X-Robots-Tag`, `Link: rel="canonical"`,
+`Vary`, `ETag`/`Last-Modified`. Adding a relation there is a separate
+decision about a separate contract, with its own conditional-request and
+`304` implications (a `304` carries no body but does carry headers), and
+v2 frames `describedby` as a property of the *page*, whose `.md` is already
+reachable from that page's own alternate. Out of scope for this change.
+
+**D4 — Version bump → `0.49.0`.** New observable HTTP and HTML behaviour,
+purely additive, no existing output changes shape. Minor per semver rule.
+
+### 7.3 The change, file by file
+
+`MarkdownController.php`:
+
+1. **A single source for the target URL.** Add one private helper returning
+   `home_url( '/llms.txt' )` — never a hardcoded `/llms.txt`, which breaks
+   on a subdirectory install, and which `maybe_render_llms_txt()` itself
+   avoids by computing the home path. Both emitters call it, so the HTML
+   `<link>` and the `Link:` header cannot drift.
+2. **A single predicate for "should this response advertise the index?"**
+   Add one private method combining `is_negotiable_request()` with the
+   `sysmda_llms_txt_enabled` option check, carrying the 7.1.2 note in its
+   docblock. Both emitters call it. One predicate, two emitters — the same
+   shape as the alternate link, and for the same reason.
+3. `print_alternate_link()` — one additional `printf()` guarded by (2),
+   emitting `<link rel="describedby" href="…" />`. No `type` attribute:
+   `/llms.txt` is `text/plain` and the spec's example carries no type on
+   this relation.
+4. `send_alternate_link_header()` — one additional
+   `header( 'Link: <…>; rel="describedby"', false )`, guarded by (2) and by
+   the duplicate check from 7.1.1 with `'describedby'` passed in. `false`
+   appends, so the existing alternate field survives; repeated `Link:`
+   fields are equivalent to one comma-joined field.
+5. `link_header_has_alternate()` — the `$relation` parameter from 7.1.1.
+
+**Restructure the method's early returns before adding anything to it — do
+not append to the existing flow.** As written, `send_alternate_link_header()`
+computes the alternate and then does:
+
+```php
+if ( '' === $alternate || self::link_header_has_alternate( headers_list(), $alternate ) ) {
+    return;
+}
+```
+
+That `return` leaves the **whole method**. A `describedby` emission placed
+after it would be skipped whenever another plugin has already advertised
+the same alternate target, or whenever `markdown_url()` comes back empty —
+neither of which has anything to do with `/llms.txt`. The result is
+precisely the defect §7.6 asserts against: one relation present, the other
+silently missing, on exactly the sites where a second plugin is in play.
+(Caught in review by Codex on PR #116; the first draft of this section
+recommended placing the emission inside the method to share the
+`headers_sent()` guard, which is what introduces the bug.)
+
+So: keep **one** `headers_sent()` guard at the top, then give each relation
+its own independent block — compute target, skip if empty, skip if already
+advertised for *that relation*, emit. Neither relation's duplicate check may
+govern the other's emission. The shared `headers_sent()` return is the only
+early return allowed to cover both, because it is the only condition that
+genuinely applies to both.
+
+This is the same failure mode the plan already records twice — a guard
+written for one thing quietly deciding another (7.1.2, and `AGENTS.md` on
+the HTML-link vs. header guards). Worth noticing that it reappeared here
+inside the fix for it.
+
+No changes to `LlmsTxtController.php`, `Plugin.php` (both hooks are already
+registered) or any option.
+
+### 7.4 Tests
+
+Pure suite (`tests/run-tests.php`), which is where the mechanical part
+belongs:
+
+- The twelve existing `link_header_has_alternate` assertions must pass
+  **unchanged** — that is what proves the default parameter is
+  backward-compatible.
+- The same matrix again for `describedby`: not-yet-sent, wrong field name,
+  wrong relation, different target, token list (`rel="describedby next"`),
+  case-insensitivity, repeated and comma-joined fields.
+- **The cross-relation cases are the ones with new information in them**,
+  because they are the only ones the existing matrix cannot already tell you
+  about: an alternate field for target X must **not** satisfy a
+  `describedby` query for target X, and vice versa. Same URL, different
+  relation — the exact confusion a shared helper invites.
+
+Per `AGENTS.md`'s "a guard is not done until it has been seen to fire": the
+new duplicate check is a guard whose silence is its expected output, so
+construct the case where another plugin has already emitted
+`Link: <…/llms.txt>; rel="describedby"`, watch a second field get emitted
+without the check, then add it. Do not ship it having only reasoned about
+it.
+
+What the pure suite **cannot** cover, and what therefore belongs in the
+staging run: hook ordering, the 404-on-default-install case from 7.1.2, and
+whether the field survives to the wire.
+
+### 7.5 Documentation surfaces
+
+Per the per-PR rule, in the same PR. §5.3's list, with D2 resolved:
+
+| Surface | Change |
+|---|---|
+| `docs/output-format.md`, HTTP contract (~L435-452) | The new `Link:` relation next to the existing example, plus the gating sentence. This is the primary contract change. |
+| `documentation/src/content/docs/endpoints/the-llms-txt-index.md` | Pages advertise the index via `rel="describedby"`. |
+| `AGENTS.md`, "Current state" | One line on the existing discovery bullet; move the v2 item out of "Open / to do" into a closed review. |
+| `docs/staging-acceptance.md` | The §7.6 cases added to the **acceptance matrix**, not only to `AGENTS.md`. §7.4 assigns hook ordering, the wire headers and the default-install 404 case to the staging run, so the matrix a release is actually executed from has to carry them — the existing pass table already has a `rel="alternate"` row (~L172) and this sits beside it. (Omitted from the first draft of this table while §7.4 was already assigning work to staging; caught in review by Codex on PR #116.) |
+| `docs/filters.md` | **No change** — D2 adds no filter. |
+| `readme.txt` / `README.md` | **No change** — a discovery refinement, not a listed feature. Same judgement as `0.41.0`. |
+| This plan | Status header → implemented, with the version. |
+
+### 7.6 Acceptance
+
+Extends test #13 in `AGENTS.md` rather than adding a numbered case (§5.5),
+since it is the same `curl -sI` on the same URL — **and lands in
+`docs/staging-acceptance.md`'s matrix as well**, per §7.5. Both, not either:
+`AGENTS.md` states the case, the matrix is what a release is run from, and a
+case recorded only in the former is not a case anybody executes.
+
+The list below is the content of both entries:
+
+- Servable canonical post → **both** relations present, alternate and
+  `describedby`, and any pre-existing `Link` relation preserved.
+- `describedby` absent from: the `.md` response, negotiated Markdown, `406`,
+  feed, embed, trackback, paged comments, `<!--nextpage-->` sub-pages — i.e.
+  wherever the alternate is already absent.
+- **`/llms.txt` toggled off → the link disappears, the alternate stays.**
+  The two are independently gated and nothing else asserts that.
+- **The 7.1.2 case, on a fresh install: `/llms.txt` enabled but no content
+  type selected → no `describedby` anywhere.** This is the default state of
+  an unconfigured plugin and the one that would ship a link to a 404. It is
+  the single most important fixture in the set; run it first.
+- `home_url()` correctness: on the subdirectory staging, the advertised
+  target is `/subdir/llms.txt` and it resolves.
+
+### 7.7 Out of scope
+
+Unchanged from §4, plus D3 (`describedby` on the `.md` response) and D2
+(the suppression filter). None of the four other v2 changes require code.
 
 ## Sources
 
