@@ -12,6 +12,11 @@ https://example.com/my-post.md    → Markdown (front matter + content)
 It is not a generic SEO plugin: it is a technical feature designed to make
 content consumable by tools that prefer Markdown over rendered HTML.
 
+**[Try it live](https://wordpress.org/plugins/system-markdown-alternate/)** —
+the wordpress.org listing's Preview button boots the plugin, active, in
+WordPress Playground (a full WordPress running in your browser via WASM): no
+install, nothing to set up.
+
 ## How it works
 
 The Markdown is built from the post content itself, through a pipeline the
@@ -207,7 +212,7 @@ crawlers that cannot pin a version, the hooks by code that can.
 ├── documentation/                ← user documentation site (Astro Starlight, not shipped)
 ├── LICENSE                       ← GPL-2.0
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4
-├── .wordpress-org/               ← wordpress.org listing assets (icon, banners)
+├── .wordpress-org/               ← wordpress.org listing assets (icon, banners, Playground preview blueprint)
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── DIST/                         ← build output of bin/build.sh (not versioned)
 └── system-markdown-alternate/    ← the plugin

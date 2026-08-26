@@ -1,0 +1,34 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "System Markdown Alternate",
+		"description": "Every published post gets a clean Markdown twin at its permalink plus .md — open one live.",
+		"author": "diecieventi",
+		"categories": [ "content" ]
+	},
+	"landingPage": "/hello-world.md",
+	"preferredVersions": {
+		"php": "8.2",
+		"wp": "latest"
+	},
+	"steps": [
+		{
+			"step": "login",
+			"username": "admin"
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "system-markdown-alternate"
+			},
+			"options": {
+				"activate": true
+			}
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php require_once '/wordpress/wp-load.php'; global $wp_rewrite; $wp_rewrite->set_permalink_structure( '/%postname%/' ); $wp_rewrite->flush_rules(); update_option( 'sysmda_supported_post_types', array( 'post', 'page' ) );"
+		}
+	]
+}
