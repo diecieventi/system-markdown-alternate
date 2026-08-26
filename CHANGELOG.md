@@ -9,6 +9,11 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.49.0
+
+* Added: pages now point at the site's `/llms.txt` with the `rel="describedby"` link relation introduced by version 2 of the llms.txt specification, in both the HTML head and the HTTP `Link:` header — alongside the Markdown alternate they already advertised. An agent landing on any article can find the site's index without having to guess that `/llms.txt` exists. Emitted only where the Markdown alternate is already emitted and only while this plugin's own `/llms.txt` is enabled, so the link never points at an endpoint that is not being served; there is no new setting.
+* Changed: `MarkdownController::link_header_has_alternate()` is now `link_header_has_relation()` and takes the relation to look for. It is an internal helper, public only so its parsing can be exercised from the test suite; no documented filter or output contract refers to it.
+
 ## 0.48.0
 
 * Added: a per-known-bot-name breakdown in the `.md` hit counter. Below the

@@ -99,6 +99,31 @@ The v1 scope is done and widely exceeded. Implemented:
   rel="alternate"; type="text/markdown"` in the HTML response headers. The
   latter also works for `HEAD`, appends rather than replacing other Link fields
   and suppresses an exact relation/target duplicate.
+- **`/llms.txt` discovery** (`0.49.0`, llms.txt v2's `rel="describedby"`): the
+  same responses also point at `home_url( '/llms.txt' )` — `<link
+  rel="describedby">` in the head, `Link: <…>; rel="describedby"` in the
+  headers, no `type` parameter — gated on `is_negotiable_request()` **plus**
+  `sysmda_llms_txt_enabled`. That conjunction is a correctness requirement, not
+  a style choice: `maybe_render_llms_txt()` has a *second* gate after its own
+  option (it stays silent with no enabled content type), and since that option
+  defaults on while the type selection defaults empty, gating on the option
+  alone would advertise a 404 on every unconfigured install.
+  `is_negotiable_request()` covers it transitively — so anything that widens
+  this beyond negotiable requests must re-add the `supported_post_types()`
+  check explicitly. **The two relations are emitted independently**: one
+  shared `headers_sent()` guard, then a block each, because an empty or
+  already-advertised alternate says nothing about `/llms.txt` and an early
+  return there silently dropped the second field (caught in review before it
+  shipped). `link_header_has_alternate()` became
+  `link_header_has_relation( $sent, $target, $relation )` for the same reason —
+  one relation's duplicate must never satisfy the other's check.
+  Deliberately **not** emitted for an `/llms.txt` served by anything else: a
+  third party's is undecidable locally (reading their options and loopback
+  probes are both already rejected), and a checkbox asserting it was
+  considered and declined — it converts a self-verifying gate into an
+  unverifiable promise that rots silently when the other plugin's setting
+  changes. If demand ever appears, a filter is the cheap answer, not a panel
+  field.
 - **HTTP headers**: Markdown responses carry `Content-Type: text/markdown;
   charset=utf-8`, `X-Robots-Tag: noindex, follow` and `Link: <permalink>;
   rel="canonical"`; negotiable canonical HTML responses carry the alternate
@@ -913,31 +938,26 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
-- **llms.txt v2 discovery** (`docs/llms-txt-v2-plan.md`): reviewed against
-  the spec Jeremy Howard/Answer.AI published 10 August 2026 — one gap
-  identified, not started, not yet greenlit to implement; the maintainer
-  is expected to revisit the decision within days rather than parking it
-  indefinitely. The plugin's existing `rel="alternate" type="text/markdown"`
-  discovery (`MarkdownController::print_alternate_link()` +
-  `send_alternate_link_header()`) already matches the v2 example verbatim,
-  in both the HTML `<link>` and the HTTP `Link:` header. The one substantive
-  addition v2 makes is a second relation, `rel="describedby"`, pointing a
-  page at the `/llms.txt` that describes it — genuinely new, not something
-  either implementation already covered under a different name. The plan
-  proposes adding it alongside the existing alternate, gated on
-  `sysmda_llms_txt_enabled` plus the same `is_negotiable_request()`
-  predicate that already gates the alternate link, so the two never drift
-  out of step (the same "one predicate" discipline documented throughout
-  this file). Everything else in v2 — the `.md` URL pattern also allowing
-  extension-replacement (already produces the same result for WordPress's
-  extensionless permalinks), path-coverage semantics for multiple `llms.txt`
-  files per subtree (no demand, single root file is a valid case), dropped
-  `llms_txt2ctx` context-expansion tooling, and `## Optional` losing its
-  mechanical meaning (the plugin only ever used it as a label, never
-  processed it mechanically) — needs no plugin change. See the plan for the
-  full point-by-point comparison and the documentation surfaces a
-  `rel="describedby"` change would touch.
 ### To check next time (not urgent, parked here)
+
+- **llms.txt v2: reviewed, implemented, closed** (`docs/llms-txt-v2-plan.md`).
+  Reviewed against the spec Jeremy Howard/Answer.AI published 10 August 2026;
+  the one gap it found shipped in `0.49.0` (see `rel="describedby"` in "Current
+  state"). Recorded so the comparison is not redone from scratch next time v2 —
+  or a v3 — comes up. **Four of the five v2 changes needed no code at all**, and
+  each for its own reason worth keeping: the `.md` URL pattern now allows
+  extension-replacement as well as appending, which produces the identical
+  string for WordPress's extensionless permalinks; path-coverage semantics for
+  multiple `llms.txt` files per subtree have no demand and a single root file is
+  already a valid case; `llms_txt2ctx` context-expansion tooling was dropped
+  from the spec and was never implemented here; and `## Optional` lost its
+  mechanical meaning, which changes nothing because this plugin only ever used
+  it as a label. The plugin's `rel="alternate" type="text/markdown"` discovery
+  already matched the v2 example verbatim in both forms before any of this.
+  The plan's §7 also records two things the review got wrong by reading its own
+  summary of the code rather than the code, both worth remembering as a class:
+  a helper described as needing generalisation already had it, and a gate
+  described as sufficient would have advertised a 404 on every default install.
 
 - **Freeform content in a mixed post never gets `wpautop()` on the main render
   path either** (noticed August 2026 while fixing the appended path in `0.47.1`;

@@ -34,6 +34,24 @@ Turn it off if another plugin on your site already generates the file. The panel
 
 The notice is informational. The plugin never disables itself on the strength of a guess about another plugin's configuration; which handler wins is your call.
 
+## How agents find the index
+
+While `/llms.txt` is enabled, every page that already advertises its Markdown version also points at the index, in the document head and in the response headers:
+
+```html
+<link rel="describedby" href="https://example.com/llms.txt" />
+```
+
+```http
+Link: <https://example.com/llms.txt>; rel="describedby"
+```
+
+`describedby` is the relation added by version 2 of the llms.txt specification. Without it an agent has to already know to try `/llms.txt`; with it, landing on any article is enough to find the index.
+
+There is nothing to configure. The link follows the `/llms.txt` setting: turn the endpoint off and the link goes with it, while the Markdown alternate is unaffected. It appears only where the Markdown alternate already appears, so feeds, embeds and content with no Markdown version never carry it.
+
+One case it deliberately does **not** cover: if you turned `/llms.txt` off because another plugin generates it, pages will not advertise that file. Whether a third party actually serves the URL is not something the plugin can check — it would have to read another plugin's internal settings or fetch the URL over the network, neither of which is reliable — and pointing every page at an index that may not exist is worse than pointing at none.
+
 ## Enriched output
 
 **Off by default.** Switching it on adds, in order:

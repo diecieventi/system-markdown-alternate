@@ -1874,18 +1874,37 @@ check( 'vary: other headers are ignored', false, MarkdownController::vary_covers
 // permits commas inside a URI or quoted parameter, so a plain explode(',') is
 // not sufficient for the duplicate check.
 $sysmda_alternate = 'https://example.com/article.md';
-check( 'Link alternate: nothing sent yet', false, MarkdownController::link_header_has_alternate( array(), $sysmda_alternate ) );
-check( 'Link alternate: X-Link is not a Link field', false, MarkdownController::link_header_has_alternate( array( 'X-Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
-check( 'Link alternate: canonical is not alternate', false, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="canonical"' ), $sysmda_alternate ) );
-check( 'Link alternate: a different target is not a duplicate', false, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/other.md>; rel="alternate"' ), $sysmda_alternate ) );
-check( 'Link alternate: typed alternate is detected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="alternate"; type="text/markdown"' ), $sysmda_alternate ) );
-check( 'Link alternate: field and relation matching is case-insensitive', true, MarkdownController::link_header_has_alternate( array( 'lInK: <https://example.com/article.md>; ReL="AlTeRnAtE"' ), $sysmda_alternate ) );
-check( 'Link alternate: relation token list is detected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel="next alternate"' ), $sysmda_alternate ) );
-check( 'Link alternate: an untyped alternate still deduplicates', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; rel=alternate' ), $sysmda_alternate ) );
-check( 'Link alternate: repeated Link fields are inspected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/>; rel="canonical"', 'Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
-check( 'Link alternate: comma-separated link-values are inspected', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/>; rel="canonical", <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate ) );
-check( 'Link alternate: comma inside the URI is not a separator', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md?parts=one,two>; rel="alternate"' ), 'https://example.com/article.md?parts=one,two' ) );
-check( 'Link alternate: comma inside a quoted parameter is not a separator', true, MarkdownController::link_header_has_alternate( array( 'Link: <https://example.com/article.md>; title="One, two"; rel="alternate"' ), $sysmda_alternate ) );
+check( 'Link alternate: nothing sent yet', false, MarkdownController::link_header_has_relation( array(), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: X-Link is not a Link field', false, MarkdownController::link_header_has_relation( array( 'X-Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: canonical is not alternate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="canonical"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: a different target is not a duplicate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/other.md>; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: typed alternate is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="alternate"; type="text/markdown"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: field and relation matching is case-insensitive', true, MarkdownController::link_header_has_relation( array( 'lInK: <https://example.com/article.md>; ReL="AlTeRnAtE"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: relation token list is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="next alternate"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: an untyped alternate still deduplicates', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel=alternate' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: repeated Link fields are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/>; rel="canonical"', 'Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: comma-separated link-values are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/>; rel="canonical", <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
+check( 'Link alternate: comma inside the URI is not a separator', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md?parts=one,two>; rel="alternate"' ), 'https://example.com/article.md?parts=one,two', 'alternate' ) );
+check( 'Link alternate: comma inside a quoted parameter is not a separator', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; title="One, two"; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
+
+// ─── Link describedby: the llms.txt v2 index relation ────────────────
+//
+// Same parsing, a second relation. The cross-relation pair at the end is the
+// part carrying information the matrix above cannot give: one relation's
+// duplicate must never satisfy the other's check, or a site where another
+// plugin advertises the same URL under a different relation loses a field it
+// should have emitted.
+$sysmda_index = 'https://example.com/llms.txt';
+check( 'Link describedby: nothing sent yet', false, MarkdownController::link_header_has_relation( array(), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: X-Link is not a Link field', false, MarkdownController::link_header_has_relation( array( 'X-Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: a different target is not a duplicate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/other/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: an existing describedby is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: relation matching is case-insensitive', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; ReL="DescribedBy"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: relation token list is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby help"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: repeated Link fields are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/>; rel="canonical"', 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
+check( 'Link describedby: comma-separated link-values are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="alternate", <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
+check( 'Link cross-relation: an alternate does not satisfy describedby', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="alternate"' ), $sysmda_index, 'describedby' ) );
+check( 'Link cross-relation: a describedby does not satisfy alternate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'alternate' ) );
 
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //

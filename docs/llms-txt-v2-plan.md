@@ -11,9 +11,17 @@
 >
 > **§7 (26 August 2026) adds the implementation plan** for §3, written after
 > reading the code rather than from the review's summary of it — which turned
-> up two divergences, one of them a trap (§7.1). Still no plugin source
-> touched, and still not greenlit: §7 is what to build *if* the answer to §5.1
-> is yes.
+> up two divergences, one of them a trap (§7.1).
+>
+> **SHIPPED in `0.49.0`** (26 August 2026). §5.1 was answered yes and §7 was
+> built as written. §5.2 was answered "no new filter" (D2), and the follow-up
+> question it raised — a panel checkbox letting an admin assert that a *third
+> party* serves `/llms.txt` — was considered and **declined**: it converts a
+> self-verifying gate into a promise the plugin cannot check, which rots
+> silently the day the other plugin's setting changes, and reintroduces the
+> §7.1.2 defect by hand. The gate is this plugin's own `/llms.txt`, and nothing
+> else. This plan is now a closed record; the live documentation is
+> `docs/output-format.md` and the "Current state" entry in `AGENTS.md`.
 
 ## 1. What actually changed in v2
 
