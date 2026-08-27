@@ -10,6 +10,72 @@
 > than inherited. Whatever it decides for `/llms.txt` should be checked against
 > what the panel already does.
 
+> **Note added August 2026, from reading a comparable plugin's code, NOT from
+> our own staging.** `octoplug-geo-suite` (wordpress.org) ships the same idea
+> this plan describes — one file, translations resolved per post — and its
+> `includes/wpml.php` documents five real bugs it hit building exactly this,
+> each with a dated fix. None of these are verified against *our* staging yet;
+> record them here so the reconnaissance below knows what to specifically test
+> for, rather than discovering the same five the hard way. Do not treat any of
+> them as confirmed for this plugin until the reconnaissance step below does.
+>
+> 1. **`switch_to_locale()` fails silently** when the target language pack is
+>    not installed on the server — it returns `false` and leaves the current
+>    locale untouched, but nothing forces the caller to check that. Their bug:
+>    a 5-language site with only `it_IT` installed kept outputting Italian
+>    strings inside the English/German/French/Spanish files, with no error
+>    anywhere. **Only matters here if this plan ever localizes a string**
+>    (post-type group labels, say) — the current design deliberately does
+>    **not** localize `## Translations` or the `###` language headings (native
+>    names come straight from Polylang/WPML's own APIs), so this plan may be
+>    naturally immune. Confirm that stays true before adding any localized
+>    string to the output.
+> 2. **A locale-switch stack must be closed with `restore_current_locale()`,
+>    not a manually paired `switch_to_locale()`/`restore_previous_locale()`.**
+>    Their fallback logic tried the real language, and on failure switched to
+>    `en_US` as a second attempt — two switches, and calling
+>    `restore_previous_locale()` once left the locale stack one level deep
+>    for the rest of the request. Measured effect: the admin panel started
+>    responding in the wrong language after a `/llms.txt` rebuild. Relevant
+>    only if this plan's implementation ever calls `switch_to_locale()` at
+>    all (see point 1) — if it does, use `restore_current_locale()`
+>    unconditionally, which empties the whole stack regardless of how many
+>    levels deep it went.
+> 3. **Polylang FREE lets translated posts share the same slug**
+>    (`/geo/what-is-geo/` in Italian, `/en/geo/what-is-geo/` in English — same
+>    trailing slug, different language). Slug/path-based resolution
+>    (`url_to_postid()`, `get_page_by_path()`) is **language-blind**: for a
+>    shared slug it can return the wrong language's post. Their fix was to
+>    re-map the resolved ID through `pll_get_post( $id, $lang )` once the
+>    intended language is known. **This is the sharpest one for us**, and it
+>    is not confined to this plan: `MarkdownController`'s `.md`-suffix
+>    resolution (`AGENTS.md`, Technical notes §1) also goes through
+>    `url_to_postid()`, so the same failure mode may already exist on the
+>    `.md` route today, independent of whether this plan ever ships. Worth a
+>    dedicated staging check of its own, not only inside step 3 of the
+>    reconnaissance below.
+> 4. **A built-in post type's plural label is frozen at registration time**,
+>    in whatever locale was active when WordPress registered it — rereading
+>    `$post_type_object->labels->name` after `switch_to_locale()` returns the
+>    *original* locale's string, not the new one. Their fix reads
+>    `WP_Post_Type::get_default_labels()` (public, `@since` 6.0.0) instead,
+>    which the core itself resets on `change_locale`; a naive
+>    `_x( 'Posts', …, 'default' )` call was flagged by wordpress.org review
+>    for borrowing core's own text domain. Only matters if this plan ever
+>    needs a post-type label in a non-default-site locale — today's design
+>    does not (see point 1) — but it is the mechanism to reach for if a
+>    future revision adds one.
+> 5. **The site's own default-language locale is not always `get_locale()`
+>    of the admin session**, and is not always installed either. Their code
+>    resolves the *declared* default language's own locale explicitly rather
+>    than assuming the current request's locale is it, and falls back to
+>    `en_US` — deliberately, as "a predictable language for a technical file"
+>    — when neither the real locale nor the fallback language pack is
+>    installed. Relevant to `default_language_query_args()`/
+>    `default_language()` in the Components section below: do not assume the
+>    default language's locale is whatever `get_locale()` returns at request
+>    time.
+
 > English-only (repo convention). Independent of everything else. **Do not code
 > before the staging
 > reconnaissance below** — the current plan's central query assumption is not
@@ -190,6 +256,13 @@ stack has neither), ≥2 languages, browser User-Agent (a WAF may block curl):
    front matter all come from the **same** translation.
 5. Save a translation, change its language relationship, rename a language →
    verify cache-invalidation behavior.
+6. **On the Polylang site specifically**: find (or create) two translations of
+   the same content that share a URL slug, and fetch the `.md` **suffix** URL
+   (not the negotiated permalink) for each language's version. If
+   `url_to_postid()` returns the wrong language's post for one of them, that
+   is a pre-existing defect in `MarkdownController`'s `.md`-suffix resolution
+   — independent of this plan and worth its own fix — not something this
+   plan's translations section can work around. See the note above (point 3).
 
 Only then finalize the adapter API and tests.
 
