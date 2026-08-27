@@ -78,6 +78,7 @@ compatibility promise of any kind.
 | `sysmda_markdown_excluded_post_formats` | Stable |
 | `sysmda_post_is_servable` | Stable |
 | `sysmda_markdown_unsupported_builders` | Stable |
+| `sysmda_markdown_excluded_woocommerce_pages` | Stable |
 | `sysmda_markdown_robots_header` | Stable |
 | `sysmda_markdown_strict_406` | Stable |
 | `sysmda_markdown_canonical_url` | Stable |
@@ -173,6 +174,28 @@ rendered without a post, so it cannot evaluate this filter.
 // Serve Bricks pages anyway, empty body and all.
 add_filter( 'sysmda_markdown_unsupported_builders', function ( array $builders ) {
     return array_diff( $builders, array( 'bricks' ) );
+} );
+```
+
+```php
+apply_filters( 'sysmda_markdown_excluded_woocommerce_pages', array( 'cart', 'checkout', 'myaccount' ) );
+```
+WooCommerce page keys kept out of the Markdown: cart, checkout and my-account
+by default. These are ordinary published `page` posts, so nothing else denies
+them, but their body is WooCommerce's own runtime chrome ("Your cart is
+currently empty!"), not editorial content. Return an empty array to serve
+them again, or a shorter list to exclude only some. The shop page is
+deliberately never in this list — that one is real content.
+
+Reads `wc_get_page_id()` when WooCommerce is active (so any WooCommerce-side
+filtering of these IDs is respected) and falls back to WooCommerce's own
+`woocommerce_{key}_page_id` options directly when it is inactive, because
+deactivating WooCommerce does not un-publish the pages it created.
+
+```php
+// Serve the checkout page too — a site that documents its own checkout flow.
+add_filter( 'sysmda_markdown_excluded_woocommerce_pages', function ( array $keys ) {
+    return array_diff( $keys, array( 'checkout' ) );
 } );
 ```
 
@@ -441,6 +464,7 @@ body at all. The filters they read are reached with them:
 |--------|-----------------|
 | `sysmda_markdown_supported_post_types` | route eligibility, on every candidate request |
 | `sysmda_markdown_excluded_post_formats` | `PostSupport::is_servable()`, same |
+| `sysmda_markdown_excluded_woocommerce_pages` | same, via `WooCommerceCompat::is_utility_page()` |
 | `sysmda_post_is_servable` | same, once the built-in rules have said yes |
 | `sysmda_front_matter_taxonomy_slugs` | `cache_version()` → `taxonomies_fingerprint()` |
 | `sysmda_front_matter_taxonomies` | same |

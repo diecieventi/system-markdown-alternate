@@ -97,6 +97,18 @@ class AdminSettings {
 		add_action( 'update_option_timezone_string', array( $this, 'bump_cache_salt' ) );
 		add_action( 'update_option_gmt_offset', array( $this, 'bump_cache_salt' ) );
 
+		// WooCommerce's cart/checkout/my-account pages are excluded by ID
+		// (WooCommerceCompat), and reassigning one to a different page is set
+		// from WooCommerce's own settings screen, never from a post editor
+		// save — so, like the three options above, nothing else here moves the
+		// validator. Rare enough that a site-wide bump is the cheap trade; the
+		// same reasoning that keeps a post's *format* out of this list does not
+		// apply, because a format change is saved from the post editor, which
+		// already clears the cache through save_post.
+		add_action( 'update_option_woocommerce_cart_page_id', array( $this, 'bump_cache_salt' ) );
+		add_action( 'update_option_woocommerce_checkout_page_id', array( $this, 'bump_cache_salt' ) );
+		add_action( 'update_option_woocommerce_myaccount_page_id', array( $this, 'bump_cache_salt' ) );
+
 		// `categories:` and `tags:` are ALWAYS emitted, and unlike the optional
 		// custom taxonomies they are excluded from taxonomies_fingerprint() —
 		// they have their own front-matter keys. Renaming or deleting a term

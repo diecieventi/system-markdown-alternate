@@ -99,6 +99,22 @@ the server.
   before the keys were configured and that `If-Modified-Since` still answers
   `304`; edit a configured value on a post that has it and confirm its `ETag`
   moves; delete that value entirely and confirm the `ETag` moves again.
+- **WooCommerce utility pages** (`WooCommerceCompat`). **Neither connected
+  staging site has WooCommerce installed** (checked August 2026), so this was
+  verified on `instawp_sma` with a simulated fixture rather than a real
+  WooCommerce install: three ordinary pages created, WooCommerce's own
+  `woocommerce_{cart,checkout,myaccount}_page_id` options pointed at them by
+  hand, `PostSupport::is_servable()` and a real `/llms.txt` HTTP round-trip
+  both confirmed all three excluded and an unrelated page unaffected, the
+  filter both re-included and narrowed the exclusion, and the
+  `wc_get_page_id()`-active branch (WooCommerce genuinely installed) was
+  checked in-process with a request-scoped shim, since the function cannot
+  otherwise exist without the plugin. Fixtures and options were removed and
+  the patched files reverted afterward. **What this does NOT cover**: a real
+  WooCommerce install's own page-creation flow, and whatever WooCommerce
+  itself does to `wc_get_page_id()`'s filter beyond the raw option — install
+  WooCommerce for real on a future pass to close that gap, the same way the
+  ACF fixture above is still owed a real field group.
 - `/llms.txt` is healthy and excludes ineligible content.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).

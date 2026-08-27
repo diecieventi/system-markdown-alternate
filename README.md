@@ -119,6 +119,10 @@ Two consequences worth knowing:
   `[et_pb_section]` is not a Divi page. Escape hatch:
   `sysmda_markdown_unsupported_builders`. The settings panel shows, per content
   type, what its published posts are actually built with.
+- **WooCommerce's cart, checkout and my-account pages have no Markdown
+  representation**: they are ordinary published pages, but their body is
+  WooCommerce's own runtime placeholder text, not editorial content. The shop
+  page is unaffected. Escape hatch: `sysmda_markdown_excluded_woocommerce_pages`.
 - Logged-in requests are rebuilt in the visitor's own context: they never touch
   the shared cache and are never answered `304`.
 - Object cache when a persistent one is available (transients otherwise),

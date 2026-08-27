@@ -340,6 +340,15 @@ The v1 scope is done and widely exceeded. Implemented:
   shows the per-type breakdown (`BuilderCensus`, admin-only, transient-cached).
   Full rationale and the three rules easy to get backwards: the durable
   decision in "Product decisions".
+- **WooCommerce utility-page exclusion** (`WooCommerceCompat`): cart, checkout
+  and my-account are ordinary published pages but never editorial content, so
+  `is_servable()` denies them the same way it denies an excluded post format —
+  `.md` 404s, `/llms.txt` leaves them out, the alternate link and both
+  shortcodes render nothing. Reads `wc_get_page_id()` when WooCommerce is
+  active, its own options otherwise (survives deactivation). The shop page is
+  unaffected. Escape hatch: `sysmda_markdown_excluded_woocommerce_pages`.
+  Rationale, live verification and the cache-salt hooks: the durable decision
+  in "Product decisions".
 - **Bricks adapter** (`BricksAdapter`, `0.46.0`, Phase 2 of
   `docs/page-builders-plan.md`): a Bricks-mode post (`_bricks_editor_mode ===
   'bricks'`) produces a real `.md`, rendered through Bricks' own
@@ -1161,6 +1170,41 @@ The v1 scope is done and widely exceeded. Implemented:
   `is_servable()` (with `update_post_term_cache => true` so the formats are primed
   in one query, not one per post) — the index must never advertise a `.md` URL
   that 404s.
+- **WooCommerce's own infrastructure pages (cart, checkout, my account) are
+  never served** (decided August 2026, `WooCommerceCompat`): they are ordinary
+  published `page` posts, so nothing else in `is_servable()` catches them, but
+  without a visitor session their body is WooCommerce's runtime chrome ("Your
+  cart is currently empty!"), not anything an editor wrote — the same defect
+  class the page-builder veto exists to prevent one level up. **Found by
+  reading a comparable plugin, not guessed**: `octoplug-geo-suite`
+  (wordpress.org, reviewed August 2026) calls this "the worst defect found in
+  the whole battery" — on any WooCommerce site with `page` enabled, `/cart/`,
+  `/checkout/` and `/my-account/` were being listed in its `llms.txt` with
+  cart-empty boilerplate as the description. Checked against this plugin's own
+  `PostSupport`/`LlmsTxtController`: the same gap existed here, unguarded.
+  `WooCommerceCompat::is_utility_page()` reads `wc_get_page_id()` when
+  WooCommerce is active (so any WooCommerce-side filtering of these IDs is
+  respected) and falls back to WooCommerce's own `woocommerce_{key}_page_id`
+  options directly when it is inactive — deactivating WooCommerce does not
+  un-publish the pages it created. The shop page is deliberately **not** in
+  the list: that one is real content. Escape hatch:
+  `sysmda_markdown_excluded_woocommerce_pages` (empty array = serve them all
+  again). Reassigning one of the three pages from WooCommerce's own settings
+  screen never touches `post_modified_gmt` or fires `save_post`, so — same
+  shape as the permalink-structure/timezone salt-bump hooks in `AdminSettings`
+  — `update_option_woocommerce_{cart,checkout,myaccount}_page_id` bump the
+  global cache salt directly. **Verified live** on `instawp_sma` (which has no
+  WooCommerce installed, like both connected staging sites): three ordinary
+  pages were created, WooCommerce's own options pointed at them, and
+  `PostSupport::is_servable()` correctly excluded all three while an unrelated
+  page stayed servable; the filter both re-included and narrowed the
+  exclusion correctly; a real `/llms.txt` HTTP round-trip (cache cleared
+  first) confirmed the three titles absent and the control page present. The
+  `wc_get_page_id()`-active branch was verified in-process (a request-scoped
+  shim function, since WooCommerce itself is not installed on either staging
+  site) and takes priority over a stale option, as documented. Test fixtures
+  and options were removed and the patched files reverted from backup
+  afterward — nothing about this was left on staging.
 - **A post rendered by an unsupported page builder has NO Markdown
   representation** (decided August 2026, Phase 1 of `docs/page-builders-plan.md`):
   `BuilderDetector::is_unsupported()` is the last built-in rule in
@@ -2083,7 +2127,8 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)
         ├── BuilderAdapter.php      ← interface: a page builder that can render its own content
         ├── BricksAdapter.php       ← BuilderAdapter for Bricks (render_data(), lazy-load fix, fingerprint, source_text)
-        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, sanitize_types: attachment always stripped)
+        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, WooCommerce utility pages, sanitize_types: attachment always stripped)
+        ├── WooCommerceCompat.php   ← keeps WooCommerce's own cart/checkout/my-account pages out of the Markdown surface (wc_get_page_id() when active, its options otherwise)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static); dependencies_fingerprint() is an instance method (needs ContentRenderer's builder adapter list); collect_meta_dependencies() gates on metadata_exists()
         ├── MarkdownConverter.php   ← HTML → Markdown (league/html-to-markdown + code/paragraph safety overrides)
@@ -2764,6 +2809,20 @@ Test posts:
     a presence-based check fails — unaffected by this release's adapter, since
     `handles()` still keys on the render mode. A Gutenberg post on the same
     Bricks-themed site is completely unaffected either way.
+21. **WooCommerce utility pages.** On a site with WooCommerce active and
+    `page` enabled, its Cart, Checkout and My account pages → `.md` **404**,
+    absent from `/llms.txt`, no `alternate` link, both shortcodes and the
+    dynamic tag render nothing — while the Shop page and every ordinary page
+    are unaffected. Reassigning one of the three pages to a different page
+    from WooCommerce's own settings screen moves the exclusion immediately
+    (the salt-bump hooks in `AdminSettings`), with no post save involved.
+    Deactivating WooCommerce afterward must not un-exclude the old pages: the
+    options survive and `WooCommerceCompat` falls back to reading them
+    directly. Neither connected staging site has WooCommerce installed
+    (verified August 2026); the fixture instead needs a fresh install with the
+    default pages it creates on activation, or `wc_get_page_id()`/the three
+    `woocommerce_*_page_id` options reproduced by hand as the live
+    verification here did.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

@@ -693,6 +693,7 @@ require __DIR__ . '/../src/BuilderCensus.php';
 require __DIR__ . '/../src/BuilderAdapter.php';
 require __DIR__ . '/../src/BricksAdapter.php';
 require __DIR__ . '/../src/PostSupport.php';
+require __DIR__ . '/../src/WooCommerceCompat.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
 require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
@@ -727,6 +728,7 @@ use Diecieventi\SystemMarkdownAlternate\MetaFields;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
+use Diecieventi\SystemMarkdownAlternate\WooCommerceCompat;
 use League\HTMLToMarkdown\Converter\ConverterInterface;
 use League\HTMLToMarkdown\ElementInterface;
 use League\HTMLToMarkdown\HtmlConverter;
@@ -3323,6 +3325,74 @@ check( 'servable: the veto filter cannot publish an excluded format', false, Pos
 check( 'servable: an allowed post is unaffected', true, PostSupport::is_servable( $sysmda_mk_post() ) );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] );
 
+// ─── PostSupport::is_servable (WooCommerce utility pages) ─────────────────────
+
+/*
+ * WooCommerce is not installed in this harness, so wc_get_page_id() does not
+ * exist yet: WooCommerceCompat falls back to reading the "woocommerce_*_page_id"
+ * options directly. That is also the path that matters most in practice —
+ * deactivating WooCommerce leaves those options, and the pages they point to,
+ * exactly as they were.
+ */
+check( 'servable: unaffected with no WooCommerce options set', true, PostSupport::is_servable( $sysmda_mk_post( array() ) ) );
+
+$GLOBALS['sysmda_test_options']['woocommerce_cart_page_id']      = 950;
+$GLOBALS['sysmda_test_options']['woocommerce_checkout_page_id']  = 951;
+$GLOBALS['sysmda_test_options']['woocommerce_myaccount_page_id'] = 952;
+
+check( 'servable: WooCommerce cart page excluded', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 950 ) ) ) );
+check( 'servable: WooCommerce checkout page excluded', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 951 ) ) ) );
+check( 'servable: WooCommerce my-account page excluded', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 952 ) ) ) );
+
+// The shop page is deliberately NOT in the default list: it is real content,
+// not infrastructure, so a post with a different ID is unaffected.
+check( 'servable: a post with a different ID is unaffected', true, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 953 ) ) ) );
+
+// The exclusion list is filterable: an empty list serves every WooCommerce
+// page again, same shape as sysmda_markdown_excluded_post_formats.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_woocommerce_pages'] = array();
+check( 'servable: filter can opt WooCommerce pages back in', true, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 950 ) ) ) );
+
+// …and can narrow which keys are excluded.
+$GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_woocommerce_pages'] = array( 'cart' );
+check( 'servable: filter can shorten the list (cart still excluded)', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 950 ) ) ) );
+check( 'servable: filter can shorten the list (checkout served again)', true, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 951 ) ) ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_woocommerce_pages'] );
+
+// Veto only, same as every other built-in rule: the general per-post filter
+// cannot publish what WooCommerceCompat has already denied.
+$GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] = true;
+check( 'servable: the veto filter cannot publish a WooCommerce utility page', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 950 ) ) ) );
+unset( $GLOBALS['sysmda_test_filters']['sysmda_post_is_servable'] );
+
+unset(
+	$GLOBALS['sysmda_test_options']['woocommerce_cart_page_id'],
+	$GLOBALS['sysmda_test_options']['woocommerce_checkout_page_id'],
+	$GLOBALS['sysmda_test_options']['woocommerce_myaccount_page_id']
+);
+
+/*
+ * When WooCommerce IS active, wc_get_page_id() is consulted instead of the
+ * raw options — and its own filtering is respected, not bypassed. Declared
+ * here, guarded, rather than earlier: PHP hoists an unconditional top-level
+ * function declaration to compile time, which would have made it exist for
+ * every test above and defeated the whole point of testing the fallback
+ * against a site that genuinely has no WooCommerce installed.
+ */
+if ( ! function_exists( 'wc_get_page_id' ) ) {
+	function wc_get_page_id( $page ) {
+		return isset( $GLOBALS['sysmda_test_wc_pages'][ $page ] ) ? $GLOBALS['sysmda_test_wc_pages'][ $page ] : -1;
+	}
+}
+$GLOBALS['sysmda_test_wc_pages'] = array( 'cart' => 960 );
+check( 'servable: wc_get_page_id() is consulted when WooCommerce is active', false, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 960 ) ) ) );
+
+// A stale option is ignored once wc_get_page_id() answers: WooCommerce itself
+// is the source of truth while it is active, options fallback or not.
+$GLOBALS['sysmda_test_options']['woocommerce_cart_page_id'] = 961;
+check( 'servable: a stale option is ignored once wc_get_page_id() exists', true, PostSupport::is_servable( $sysmda_mk_post( array( 'ID' => 961 ) ) ) );
+unset( $GLOBALS['sysmda_test_options']['woocommerce_cart_page_id'], $GLOBALS['sysmda_test_wc_pages'] );
+
 // ─── BuilderDetector: the page-builder veto ───────────────────────────────────
 
 /*
@@ -5734,6 +5804,7 @@ $sysmda_stable_hooks = array(
 	'sysmda_markdown_excluded_post_formats' => 2,
 	'sysmda_post_is_servable'               => 2,
 	'sysmda_markdown_unsupported_builders'  => 2,
+	'sysmda_markdown_excluded_woocommerce_pages' => 1,
 	'sysmda_markdown_robots_header'         => 2,
 	'sysmda_markdown_strict_406'            => 1,
 	'sysmda_markdown_canonical_url'         => 2,
