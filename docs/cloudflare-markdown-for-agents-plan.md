@@ -20,8 +20,8 @@ WordPress plugin and not something this repository ships or depends on — it
 is a CDN feature a *site owner* can flip on for their whole zone, independent
 of what runs at the origin. It matters here for two reasons: (a) some of its
 design choices are worth comparing against this plugin's, and (b) a site
-running both Cloudflare and this plugin now has two things trying to do the
-same job on the same URL — see §6.
+running both Cloudflare and this plugin can end up with Cloudflare's generic
+converter answering for pages this plugin deliberately does not — see §6.
 
 ## 2. What it actually does
 
@@ -91,15 +91,33 @@ cleaned blocks (`render_block()`) or `post_content`, precisely to avoid
 pulling in theme chrome and injected related/CTA content (`AGENTS.md`,
 "Technical notes" §4). Structured data emitted by Rank Math or a similar
 plugin lives in `wp_head`/`wp_footer` output, generated from post *meta*
-(title, schema type, breadcrumbs), not from `post_content` — it is not
-present anywhere in the DOM this plugin already parses. So "preserve
-JSON-LD" cannot be done by simply not stripping `<script>` from the existing
-pass (`MarkdownConverter`'s `remove_nodes` config already excludes `script`
-for a reason unrelated to this — it would still find nothing, because the
-post body never contained the schema markup to begin with).
+(title, schema type, breadcrumbs), not from `post_content` — that specific,
+common case (an SEO plugin's own generated schema) is not present anywhere in
+the DOM this plugin already parses.
 
-Two structurally different ways to get there, both unbuilt and both needing
-real reconnaissance before either is chosen:
+**Correction: the DOM is not *always* empty of it, though** (caught in
+review by Codex on PR #123 — the first draft of this section overstated the
+claim). A literal `<script type="application/ld+json">` can reach
+`ContentRenderer`'s input the same way any other markup does: pasted into a
+Custom HTML block, emitted by a dynamic block's own `render_callback`, or
+appended through `sysmda_markdown_appended_html` (`MetaFields`, ACF, or a
+site's own callback). `MarkdownConverter`'s `remove_nodes` config (`script
+style iframe`) strips all three unconditionally today, schema or not. So
+there is a genuinely cheap **option 0**, structurally different from options
+1–2 below: stop removing `<script type="application/ld+json">` specifically
+(narrowing `remove_nodes` or adding a pre-pass that lifts matching scripts
+out before conversion, then re-emits them as a trailing fenced block, same
+placement as Cloudflare's). This needs **no** `wp_head` buffering, no
+per-plugin integration, and no reconnaissance beyond confirming the DOM
+pass sees the script node before `remove_nodes` discards it. Its ceiling is
+correspondingly narrow, though: it only ever catches schema an author (or a
+block/filter) put directly into the content this plugin already parses — the
+far more common case, an SEO plugin's own `wp_head`-generated schema, still
+needs one of the two heavier approaches below. Worth doing on its own, small
+merits, independent of whether either of the other two is ever picked up.
+
+Two structurally different (and larger) ways to reach the `wp_head` case,
+both unbuilt and both needing real reconnaissance before either is chosen:
 
 1. **Generic: buffer `wp_head()`/`wp_footer()` output during the `.md`
    render, parse it, and keep only `<script type="application/ld+json">`
@@ -139,10 +157,12 @@ real reconnaissance before either is chosen:
    been seen to fire" discipline applies just as much to a claim about a
    third-party plugin's filter surface).
 
-Neither is close to buildable today. This is the same shape as the parked
-`docs/llms-txt-multilingual-plan.md` — a real idea gated on staging
-reconnaissance that has not happened. **Recommendation: park, do not build.**
-If it is ever picked up, resolve the generic-vs-narrow question with a real
+Neither option 1 nor option 2 is close to buildable today. This is the same
+shape as the parked `docs/llms-txt-multilingual-plan.md` — a real idea gated
+on staging reconnaissance that has not happened. **Recommendation: park
+options 1 and 2; option 0 is small enough to stand on its own if anyone
+wants the narrower win without the reconnaissance.** If the `wp_head` case
+is ever picked up, resolve the generic-vs-narrow question with a real
 `wp_head` capture experiment on `instawp_sma` (which already carries Rank
 Math) before writing any integration code, and decide there whether the
 side-effect risk in option 1 is real or theoretical on that stack.
@@ -231,12 +251,12 @@ looks, and should not be sized like the two candidates above:
 surfaces (e.g. from the `.md` hit counter ever showing programmatic JSON
 requests, which it currently has no way to distinguish — another reason not
 to build this speculatively). If it is ever picked up, §5.1 below is the
-cheap first step that gets most of the *validation* benefit without any of
-this cost.
+much smaller first step that gets most of the *validation* benefit without
+any of this cost.
 
 ## 5. The validation question
 
-### 5.1 What Cloudflare has, what this plugin already has, and the one cheap addition
+### 5.1 What Cloudflare has, what this plugin already has, and the one candidate worth costing out
 
 The reviewed page documents **no validation mechanism** for its own output —
 no schema, no conformance test, no versioned contract a consumer could check
@@ -247,8 +267,10 @@ pins it with golden conformance fixtures that fail CI on a silent reorder or
 drop. That is real validation — of the plugin's own output, in CI, on every
 PR — and Cloudflare's page gives no comparable claim to catch up to.
 
-The one thing worth adding, cheaply, without touching the wire format or
-building §4.3: **a JSON Schema for the front matter**, published as
+The one thing worth adding, without touching the wire format or building
+§4.3: **a JSON Schema for the front matter, with an enforced drift check**
+(see the correction below — publishing the schema alone is not this
+candidate), published as
 `docs/output-format.schema.json`, describing exactly the key table already
 in `docs/output-format.md` (types, which keys are conditional, the
 `taxonomies:` nested shape). YAML front matter parses to the same data model
@@ -266,18 +288,53 @@ cost — it is a documentation artifact, not a runtime feature:
   "reasoned about it" from "watched it fail" (`AGENTS.md`, "A guard is not
   done until it has been seen to fire").
 - It costs nothing at request time: no negotiation change, no header, no new
-  filter — a JSON file next to `output-format.md`, generated once and kept
-  in sync by hand the same way the Markdown table already is (both describe
-  the same `MetadataBuilder::build_front_matter()` output, so they can only
-  drift by the same kind of oversight `bin/docs-audit.php` already exists to
-  catch for other surfaces).
+  filter — a JSON file next to `output-format.md`.
 
-**This is the smallest, most on-brand answer to "the JSON and validation
-question" in the whole review** — it needs no new negotiable representation,
-no new endpoint, and no new response header; it only publishes, in a
-machine-readable form, a contract the plugin already enforces on itself.
-Sized right for a small PR if the maintainer wants to take one thing from
-this review.
+**Correction: "kept in sync by hand" is not a validation story, it is the
+exact failure mode validation exists to prevent** (caught in review by
+Codex on PR #123 — the first draft of this section treated a hand-maintained
+file as sufficient because it costs nothing to *publish*, without asking
+what keeps it *honest*). `bin/docs-audit.php` does not cover this: it only
+inventories filter/panel-field/shortcode names against what documents them,
+never front-matter shape against a schema, and the golden fixtures in
+`tests/run-tests.php` assert exact strings — neither reads the proposed
+file at all. Without something that fails CI on drift, a later appended key
+or changed type (the `taxonomies:` block is exactly this shape) could leave
+`docs/output-format.schema.json` stale while every existing check stays
+green — an external consumer would then reject genuinely valid output
+against a schema this plugin itself no longer honors, which is a worse
+outcome than not publishing a schema at all. This is the same "a guard that
+never fires produces no symptom" shape `AGENTS.md` already names for
+`bin/docs-audit.php` itself.
+
+So the candidate is not "publish a JSON Schema"; it is **"publish a JSON
+Schema and add an automated fixture-vs-schema check that fails CI on
+drift"** — parse each golden fixture's front matter as YAML (already exactly
+what a human reader does today) and validate the result against the
+published schema, as a new assertion block in `tests/run-tests.php` sitting
+next to the existing golden-string assertions. That has a real cost this
+review's first draft skipped: the plugin currently ships **no YAML parser
+and no JSON Schema validator** — "no runtime dependencies beyond
+`league/html-to-markdown`" (`AGENTS.md`, "Code conventions") is a runtime
+constraint and would not be violated by a **dev-only** Composer dependency
+(the tests already run outside the shipped package, same footing as the
+PHPCS/WPCS tooling `composer install --no-dev` already excludes from the
+build), but that dependency has to be named and accepted deliberately, not
+assumed free. Two shapes to weigh, not resolved here: a small dev-only
+library (a YAML parser plus a JSON Schema validator) pulled in for tests
+only, or a hand-rolled structural check narrow enough for this specific,
+small, mostly-flat schema (types and required/conditional keys, no need for
+a general-purpose validator's full feature set). Either is a real,
+estimable cost — smaller than §4.1's reconnaissance, but no longer "costs
+nothing."
+
+**Revised verdict: still the smallest, most on-brand candidate in this
+review for "the JSON and validation question"** — it needs no new
+negotiable representation, no new endpoint, and no new response header — but
+it is no longer a documentation-only afternoon task. Sized right for a small
+PR only once the drift-check mechanism (and its dependency, if any) is
+chosen; publishing the schema file *without* the check is explicitly **not**
+the recommendation.
 
 ### 5.2 Content-Signal header — track, do not implement yet
 
@@ -295,46 +352,58 @@ day it does. **No new work — this section exists so the Cloudflare header is
 recorded as "the same open item, not a new one" rather than rediscovered as
 new.**
 
-## 6. A compatibility risk worth documenting, found during this review
+## 6. A compatibility finding worth documenting, found during this review
 
-Not in the original request, but surfaced by reading how the feature works:
-Markdown for Agents operates at Cloudflare's edge, in front of the origin,
-and is triggered by the same `Accept: text/markdown` header this plugin
-negotiates on at `template_redirect`. A site that has **both** Cloudflare's
-zone-level feature turned on **and** this plugin active has two independent
-converters keyed off the same signal, on the same canonical HTML URL, with
-no defined precedence between them documented on either side:
+Not in the original request, but surfaced by reading how the feature works,
+and **corrected** from this document's first draft (caught in review by
+Codex on PR #123): the first version of this section described "two
+independent converters ... with no defined precedence between them" as if
+they raced on the same URL. They don't, and the eligibility rule stated
+earlier in this same document (§2) already says why — worth restating here
+because it is easy to lose sight of while reasoning about the interaction:
+Cloudflare's page is explicit that it "only convert[s] from HTML"
+(Limitations). On a route this plugin already negotiates — a supported,
+eligible, negotiable post, with `Accept: text/markdown` — the **origin
+itself** answers with `Content-Type: text/markdown` directly, not HTML.
+There is nothing for Cloudflare's converter to convert there: its own stated
+precondition (an HTML origin response) is never met on this plugin's
+supported paths, so the two do not compete and there is no precedence
+question to resolve on those routes.
 
-- If Cloudflare intercepts before the request reaches the origin (typical
-  for an edge feature triggered purely by the request's own headers), the
-  origin never sees the negotiation at all, and the visitor gets
-  Cloudflare's generic conversion — page chrome/meta-tag front matter, no
-  taxonomy/ACF/builder-adapter awareness, no `304` support — instead of this
-  plugin's. That silently defeats most of what this plugin exists to do,
-  with no error and no obvious symptom (the same "a guard that never fires
-  produces no symptom" shape `AGENTS.md` warns about, one layer up the
-  stack).
-- If Cloudflare instead only converts the *cached/stored* HTML response
-  (fetching from origin as if Accept were plain HTML, converting after the
-  fact), the two could disagree in a more confusing way: `curl -H
-  "Accept: text/markdown"` would get one plugin's opinion of the page and a
-  browser's DevTools "copy as curl" a different one, depending on cache
-  state — genuinely hard to debug without knowing both mechanisms exist.
+**The real interaction runs the other way.** Cloudflare's feature is a
+*generic* edge capability with no notion of this plugin's eligibility rules
+at all: post-format exclusions, the page-builder veto, WooCommerce utility
+pages (`WooCommerceCompat`, merged just before this review in PR #122,
+unreleased at review time), password protection, draft/private status,
+custom-type selection. Every one of those is this plugin's
+considered answer to "should an agent get a document representation of
+*this* URL" (`AGENTS.md`, "Product decisions"). None of it is visible to
+Cloudflare. So on any HTML page this plugin does **not** serve Markdown for
+— an Elementor-built page still `AWAITING_ADAPTER`, an `aside`-format post,
+a page-builder-vetoed post, an archive, a search results page, a 404 — a
+Cloudflare zone with Markdown for Agents turned on would still hand back a
+generic Markdown conversion of whatever HTML the origin returns, built from
+page chrome and `<meta>` tags rather than this plugin's curation. That is a
+**widening of the Markdown-servable surface** beyond what this plugin's
+eligibility rules intend, not a conflict over which converter wins on a
+shared route.
 
-This was not verified live (no Cloudflare zone with both configured was
-available in this review), so the exact precedence is not established here —
-only the risk. **Recommendation, if this is ever picked up**: a short
-`readme.txt` FAQ / `documentation/` note along the lines of the existing
-LiteSpeed and WAF compatibility notes ("Compatibility with known plugins"),
-telling a site owner running both to disable Cloudflare's Markdown for
-Agents for this plugin's supported paths (or disable it site-wide and rely
-on this plugin, which already does per-post eligibility, page-builder
-detection, taxonomies, ACF and caching that Cloudflare's generic converter
-cannot know about) rather than running both unknowingly. This is a
-**documentation-only** fix (per the "would a user who read the documentation
-yesterday do something different today" rule) — it requires no code change,
-only requires the precedence to actually be verified live first, which this
-review did not do.
+This reading was not verified live either (no Cloudflare zone with the
+feature enabled was available in this review) — it follows from Cloudflare's
+own documented precondition ("HTML origin response") rather than from an
+observed request, so treat it as the more likely mechanics, not a confirmed
+one. **Recommendation, if this is ever picked up**: a short `readme.txt`
+FAQ / `documentation/` note along the lines of the existing LiteSpeed and
+WAF compatibility notes ("Compatibility with known plugins"), telling a site
+owner running both that Cloudflare's feature can still produce a generic
+Markdown document for pages this plugin deliberately excludes, and that
+scoping Cloudflare's feature away from this plugin's supported paths (or
+trusting this plugin's own curation and leaving Cloudflare's feature off)
+avoids an agent ever seeing two different, disagreeing "official" Markdown
+answers for the same site. This is a **documentation-only** fix (per the
+"would a user who read the documentation yesterday do something different
+today" rule) — it requires no code change, only requires this section's
+mechanics to be verified live first, which this review did not do.
 
 ## 7. Explicitly not recommended
 
@@ -343,8 +412,8 @@ spirit as the plugin's other closed decisions:
 
 - **Do not build a full JSON representation (§4.3) speculatively.** No
   demand; would be at least as large a feature as anything currently parked
-  in "Open / to do", and duplicates most of its value with the much
-  cheaper §5.1.
+  in "Open / to do", and duplicates most of its value with the much smaller
+  §5.1.
 - **Do not build generic `wp_head` buffering for JSON-LD (§4.1, option 1)**
   without first running the same kind of live reconnaissance the Bricks
   adapter and the multilingual `llms.txt` plan both required before code was
@@ -365,23 +434,34 @@ spirit as the plugin's other closed decisions:
 Two independently reviewed questions, two different-sized answers:
 
 - **"Anything to take on JSON?"** — Mostly no, at the size the request
-  implied. JSON-LD passthrough (§4.1) needs reconnaissance this review
+  implied. A small, cheap slice of JSON-LD passthrough is available today
+  (§4.1 option 0, content-embedded `ld+json` only); the general case (an SEO
+  plugin's `wp_head`-generated schema) needs reconnaissance this review
   didn't do; a full JSON representation (§4.3) is a bigger feature than a
-  passing comparison justifies. The one thing actually worth doing is small
-  and not really about content negotiation at all: publish a **JSON Schema
-  for the existing front matter** (§5.1) — cheap, additive, strengthens the
-  plugin's own conformance testing, and ships no new runtime behavior.
+  passing comparison justifies. The one thing actually worth doing is not
+  really about content negotiation at all: publish a **JSON Schema for the
+  existing front matter, with an automated fixture-vs-schema drift check**
+  (§5.1) — additive, strengthens the plugin's own conformance testing, ships
+  no new runtime behavior, but is a real (if still small) piece of work once
+  the drift check and its tooling are accounted for, not a free publish.
 - **"Anything to take on validation?"** — Cloudflare's page documents none;
   this plugin's `docs/output-format.md` + golden tests already exceed it. §5.1
   is the only concrete gap worth closing, and it closes a documentation gap,
-  not a functional one.
-- **One unplanned finding** (§6): a documentation-only compatibility note
-  about running Cloudflare's Markdown for Agents and this plugin on the same
-  zone is worth adding once the precedence question is verified live — this
-  review could not verify it.
+  not a functional one — provided the drift check ships with the schema,
+  not after it.
+- **One unplanned finding** (§6): Cloudflare's converter only ever acts on an
+  HTML origin response, so it does not compete with this plugin's own
+  negotiated `text/markdown` answer on the routes this plugin already
+  serves. The real interaction is the other direction — Cloudflare would
+  keep producing a generic Markdown conversion for HTML pages this plugin
+  deliberately excludes (page-builder-vetoed posts, non-standard formats,
+  ineligible types, archives/search/404s) — worth a documentation note once
+  that reading is verified live, which this review did not do.
 
 Nothing here is greenlit. If the maintainer wants to take one item from this
-review, §5.1 is the smallest, safest, most on-brand starting point.
+review, §5.1 (schema **plus** its drift check) is the smallest, most
+on-brand starting point — no longer the free afternoon task the first draft
+of this document made it sound like, but still the smallest of the three.
 
 ## Sources
 
