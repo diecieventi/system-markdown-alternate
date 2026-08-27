@@ -986,7 +986,7 @@ The v1 scope is done and widely exceeded. Implemented:
   emit".
 ### To check next time (not urgent, parked here)
 
-- **llms.txt v2: reviewed, implemented, closed** (`docs/llms-txt-v2-plan.md`).
+- **llms.txt v2: reviewed, implemented, closed.**
   Reviewed against the spec Jeremy Howard/Answer.AI published 10 August 2026;
   the one gap it found shipped in `0.49.0` (see `rel="describedby"` in "Current
   state"). Recorded so the comparison is not redone from scratch next time v2 —
@@ -1000,10 +1000,11 @@ The v1 scope is done and widely exceeded. Implemented:
   mechanical meaning, which changes nothing because this plugin only ever used
   it as a label. The plugin's `rel="alternate" type="text/markdown"` discovery
   already matched the v2 example verbatim in both forms before any of this.
-  The plan's §7 also records two things the review got wrong by reading its own
-  summary of the code rather than the code, both worth remembering as a class:
-  a helper described as needing generalisation already had it, and a gate
-  described as sufficient would have advertised a 404 on every default install.
+  The implementation work also caught two things the initial review got wrong
+  by reading its own summary of the code rather than the code, both worth
+  remembering as a class: a helper described as needing generalisation
+  already had it, and a gate described as sufficient would have advertised a
+  404 on every default install.
 
 - **Freeform content in a mixed post never gets `wpautop()` on the main render
   path either** (noticed August 2026 while fixing the appended path in `0.47.1`;
