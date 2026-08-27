@@ -14,6 +14,21 @@ changelog.
 > comments and workflow messages. The plugin itself is English-only too (see the
 > i18n note in "Technical notes": translations come from translate.wordpress.org).
 
+## This repository is public
+
+Everything here — the plugin, `docs/` in full, `documentation/`, this guide — is
+public and stays that way. Do not move a file out of this repository on your own
+initiative; where material lives is the maintainer's decision, not an agent's.
+
+Credentials, tokens and keys belong in no repository at all.
+
+### Before writing a report or a plan, ask where it goes
+
+Reports and development plans are written **on the maintainer's request**, so the
+maintainer decides where each one lands. When about to create such a document,
+ask first — one line, before writing it, not after — and suggest `docs/` as the
+default. Write one copy, in one place; never mirror a document across locations.
+
 ## What it is
 
 A custom WordPress plugin that exposes a **clean Markdown version** of the
