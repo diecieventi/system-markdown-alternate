@@ -22,12 +22,26 @@ initiative; where material lives is the maintainer's decision, not an agent's.
 
 Credentials, tokens and keys belong in no repository at all.
 
+**A private companion repository exists**:
+[`diecieventi/system-markdown-alternate-dev`](https://github.com/diecieventi/system-markdown-alternate-dev)
+(private, its own README states the full rule). It holds only what must not be
+public: in-depth comparisons with competing plugins, analysis of proprietary or
+third-party plugins, unfixed/undisclosed vulnerabilities, anything identifying
+real people or real customer sites, and commercial/monetization strategy.
+Everything else — architecture notes, plans, measurement records, this guide —
+belongs here, in the public repository, because it helps people understand the
+plugin. If access to that repository is not available in the current session,
+say so rather than guessing at its content or defaulting a private-shaped
+document into `docs/`.
+
 ### Before writing a report or a plan, ask where it goes
 
 Reports and development plans are written **on the maintainer's request**, so the
 maintainer decides where each one lands. When about to create such a document,
-ask first — one line, before writing it, not after — and suggest `docs/` as the
-default. Write one copy, in one place; never mirror a document across locations.
+ask first — one line, before writing it, not after — and suggest `docs/`
+(this repository) as the default, or the private companion repository above
+when the content matches its rule. Write one copy, in one place; never mirror a
+document across locations or between the two repositories.
 
 ## What it is
 
