@@ -24,15 +24,18 @@ Credentials, tokens and keys belong in no repository at all.
 
 **A private companion repository exists**:
 [`diecieventi/system-markdown-alternate-dev`](https://github.com/diecieventi/system-markdown-alternate-dev)
-(private, its own README states the full rule). It holds only what must not be
+(private, its own README states the full rule). It holds what must not be
 public: in-depth comparisons with competing plugins, analysis of proprietary or
 third-party plugins, unfixed/undisclosed vulnerabilities, anything identifying
-real people or real customer sites, and commercial/monetization strategy.
-Everything else — architecture notes, plans, measurement records, this guide —
-belongs here, in the public repository, because it helps people understand the
-plugin. If access to that repository is not available in the current session,
-say so rather than guessing at its content or defaulting a private-shaped
-document into `docs/`.
+real people or real customer sites, commercial/monetization strategy, and —
+unlike every category above, which is private on its *content* — an unreleased
+feature or technical plan the maintainer is not ready to have discoverable
+here yet, in `private-plans/`, regardless of whether anything in it is
+otherwise private-shaped. Everything else — architecture notes, plans already
+greenlit or shipped, measurement records, this guide — belongs here, in the
+public repository, because it helps people understand the plugin. If access to
+that repository is not available in the current session, say so rather than
+guessing at its content or defaulting a private-shaped document into `docs/`.
 
 **A "what's outstanding" review has to check both repositories, not just this
 one's `docs/` and "Open / to do".** Some roadmap items — a plan the maintainer
