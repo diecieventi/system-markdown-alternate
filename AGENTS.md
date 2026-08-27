@@ -34,6 +34,16 @@ plugin. If access to that repository is not available in the current session,
 say so rather than guessing at its content or defaulting a private-shaped
 document into `docs/`.
 
+**A "what's outstanding" review has to check both repositories, not just this
+one's `docs/` and "Open / to do".** Some roadmap items — a plan the maintainer
+is not ready to have discoverable by browsing this repository, independent of
+whether the content itself is competitor-shaped — live only in the private
+companion repository's `private-plans/` and nowhere in this file. This file
+does not enumerate them, on purpose: a pointer that named them would defeat
+the point of keeping them out of here. So when asked to look across the
+project and report what's left to do, open the private companion repository
+too, rather than treating this file's "Open / to do" as the complete backlog.
+
 ### Before writing a report or a plan, ask where it goes
 
 Reports and development plans are written **on the maintainer's request**, so the
@@ -941,11 +951,6 @@ The v1 scope is done and widely exceeded. Implemented:
   - New toggle in `docs/filters.md` + docs + translations;
     tests for the `/.md` → front-page resolution and both `show_on_front`
     branches.
-- **Translations in `/llms.txt`** (`docs/llms-txt-multilingual-plan.md`):
-  greenlit, **not started**, and gated on the WPML/Polylang staging
-  reconnaissance described inside — the current plan's central query assumption
-  is not reliable and must be verified against real plugin behaviour before any
-  code is written.
 - **Page builders** (`docs/page-builders-plan.md`): **Phases 1, 1b, 0 and 2 are
   all shipped** (`0.46.0`) — the veto, the panel breakdown, the Bricks
   reconnaissance and the Bricks adapter itself; see "Current state" for what
@@ -2126,7 +2131,6 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   ├── llms-txt-multilingual-plan.md
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article

@@ -211,7 +211,6 @@ crawlers that cannot pin a version, the hooks by code that can.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   ├── llms-txt-multilingual-plan.md
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site (Astro Starlight, not shipped)
 ├── LICENSE                       ← GPL-2.0
