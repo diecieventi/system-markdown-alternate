@@ -296,13 +296,3 @@ Two further properties, both measured rather than assumed:
   *Pages — 1 Bricks, 4 Gutenberg*: right on both halves at once.
 - **Writing the census does not move the cache salt.** Asserted live, not only
   in the suite.
-
-### Note for the multilingual work
-
-Not a defect, but it belongs in `docs/llms-txt-multilingual-plan.md` before any
-code is written there. `BuilderCensus` counts with raw SQL, so on the Polylang
-site it reports the **whole corpus**; a `get_posts()`-based count returns only
-the current language's slice (31 published against 20, measured). For an
-advisory breakdown describing what a content type is built with, the corpus is
-arguably the right answer — but the two numbers differ, and whichever the
-multilingual work picks should be a decision rather than an accident.
