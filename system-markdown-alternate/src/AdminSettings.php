@@ -97,6 +97,31 @@ class AdminSettings {
 		add_action( 'update_option_timezone_string', array( $this, 'bump_cache_salt' ) );
 		add_action( 'update_option_gmt_offset', array( $this, 'bump_cache_salt' ) );
 
+		// WooCommerce's cart/checkout/my-account pages are excluded by ID
+		// (WooCommerceCompat), and assigning one is set from WooCommerce's own
+		// settings screen, never from a post editor save — so, like the three
+		// options above, nothing else here moves the validator. Rare enough
+		// that a site-wide bump is the cheap trade; the same reasoning that
+		// keeps a post's *format* out of this list does not apply, because a
+		// format change is saved from the post editor, which already clears
+		// the cache through save_post.
+		//
+		// All three write hooks per key, not just update_option_*: WordPress's
+		// update_option() delegates to add_option() when the row does not yet
+		// exist — which is exactly the FIRST time WooCommerce assigns one of
+		// these pages — and fires add_option_{$option} instead, which
+		// update_option_{$option} never sees. The generic added_option handler
+		// above does not help either: it only bumps for sysmda_* options.
+		// delete_option_{$option} closes the same gap on the removal side.
+		// Caught by Codex on PR #122, before it shipped.
+		foreach ( WooCommerceCompat::DEFAULT_PAGES as $sysmda_wc_page_key ) {
+			$sysmda_wc_option = 'woocommerce_' . $sysmda_wc_page_key . '_page_id';
+			add_action( "add_option_{$sysmda_wc_option}", array( $this, 'bump_cache_salt' ) );
+			add_action( "update_option_{$sysmda_wc_option}", array( $this, 'bump_cache_salt' ) );
+			add_action( "delete_option_{$sysmda_wc_option}", array( $this, 'bump_cache_salt' ) );
+		}
+		unset( $sysmda_wc_page_key, $sysmda_wc_option );
+
 		// `categories:` and `tags:` are ALWAYS emitted, and unlike the optional
 		// custom taxonomies they are excluded from taxonomies_fingerprint() —
 		// they have their own front-matter keys. Renaming or deleting a term
