@@ -9,6 +9,17 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.49.3
+
+* Updated the wordpress.org listing screenshots (`.wordpress-org/screenshot-1.png`
+  through `-5.png`) to the current settings panel — the previous set was several
+  versions out of date (v0.35.2) and missing panel sections shipped since
+  (Extra custom fields, Excluded builder elements, the hit counter's named-bot
+  breakdown). Added a sixth screenshot showing the `[sysmda_md_actions]`
+  front-end split button (copy/view/download), with a matching caption in
+  `readme.txt`. Metadata and repository tooling only — no plugin code, output
+  or behaviour changes.
+
 ## 0.49.2
 
 * The Live Preview blueprint (`.wordpress-org/blueprints/blueprint.json`) now
