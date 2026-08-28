@@ -100,6 +100,12 @@ bash bin/build.sh
 # push to main that changes the version. Run it locally only to catch up offline;
 # --dry-run previews. (Agents cannot push tags: the web proxy rejects them.)
 bash bin/release-tag.sh
+
+# Regenerate the wordpress.org icon/banner PNGs (+ icon.svg) from the SVG
+# sources in bin/wordpress-org-assets/. Dev-machine tool: needs Node.js + the
+# playwright package with its Chromium browser installed, not part of the
+# plugin's PHP build. Edit the SVGs, not the PNGs, then re-run this.
+node bin/wordpress-org-assets/render.js
 ```
 
 ## Current state
@@ -2128,6 +2134,8 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 ├── bin/build.sh                  ← builds DIST/system-markdown-alternate.zip
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
 ├── bin/docs-audit.php            ← on-demand report of where the documentation lags the plugin
+├── bin/wordpress-org-assets/     ← SVG sources (icon.svg, banner.svg) + render.js: regenerates
+│                                     .wordpress-org/'s icon/banner PNGs (+ its shipped icon.svg copy)
 ├── DIST/                         ← build output of bin/build.sh (NOT versioned)
 ├── docs/                         ← public contracts, active plans and operational notes
 │   ├── filters.md                ← developer extension API (public contract)
