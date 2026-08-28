@@ -186,6 +186,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 3. Settings — llms.txt: enable the endpoint, the enriched output and the last modified date on each entry, then add the site summary and the curated key content.
 4. Settings — Integrations: the `[sysmda_md_url]`, `[sysmda_md_download]` and `[sysmda_md_actions]` shortcodes, with the GenerateBlocks and ACF detection status.
 5. Settings — Advanced: the `X-Robots-Tag` header, the opt-in LiteSpeed cache bypass rules and the `.md` hit counter, split bot vs human.
+6. The `[sysmda_md_actions]` split button on the front end: copy the Markdown, view it in a new tab, or download it — no theme styling required.
 
 == Changelog ==
 
