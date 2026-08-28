@@ -8,18 +8,20 @@ plugin: they live in the `/assets` folder of the WP.org SVN, separate from
 |------|-----|
 | `icon-128x128.png` / `icon-256x256.png` | Icon (plugin grid, search results) |
 | `banner-772x250.png` / `banner-1544x500.png` | Banner at the top of the listing (1x / retina) |
-| `screenshot-1.png` … `screenshot-5.png` | Screenshots, one per settings tab; numbering matches the `== Screenshots ==` captions in `readme.txt` |
+| `screenshot-1.png` … `screenshot-6.png` | Screenshots; numbering matches the `== Screenshots ==` captions in `readme.txt` |
 
-The five screenshots are one per tab of the settings page, in panel order:
-General, Markdown output, `/llms.txt`, Integrations, Advanced. WP.org matches
+Screenshots 1–5 are one per tab of the settings page, in panel order: General,
+Markdown output, `/llms.txt`, Integrations, Advanced. Screenshot 6 is the
+`[sysmda_md_actions]` split button on the front end (copy/view/download), not
+a settings tab — added because a shot of the actual reader-facing output sells
+the plugin better than the settings panel alone. WP.org matches
 `screenshot-N.{png,jpg}` to caption N in `readme.txt`, so keep the numbering in
 sync if you add or reorder them. Heights may differ (each shot is as tall as its
-tab); only the numbering and the caption order matter.
+subject); only the numbering and the caption order matter.
 
-> Optional improvement: a shot of the actual output (a page served as `.md`,
-> and/or the `/llms.txt` response) tends to sell the plugin better than the
-> settings alone — add them as `screenshot-6`/`-7` with matching captions when
-> convenient.
+> Optional improvement: a shot of the actual `.md` output (a page served as
+> `.md`, and/or the `/llms.txt` response) would round this out further — add
+> it as `screenshot-7` with a matching caption when convenient.
 
 ## How they reach wordpress.org
 
