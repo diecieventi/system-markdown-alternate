@@ -984,6 +984,25 @@ The v1 scope is done and widely exceeded. Implemented:
   buckets, or every scan invalidates the whole cache. It informs and never
   applies on its own — the same line as "never auto-detect which taxonomies to
   emit".
+- **noindex-aware `/llms.txt` + a `## Sitemaps` section**
+  (`docs/llms-txt-noindex-plan.md`): **designed, not started** — scope fixed with
+  the maintainer in August 2026. The `.md` endpoint does **not** change and
+  `is_servable()` is not touched: every served `.md` already carries
+  `X-Robots-Tag: noindex, follow` from one place, so a noindex article's Markdown
+  twin cannot re-enter a search index and withdrawing it would only remove a
+  representation from the audience this plugin exists for. What changes is the
+  index: `/llms.txt` stops *listing* noindex content (per post, per post-type
+  default, and site-wide via `blog_public`), which is the first divergence in
+  this plugin between **servable** and **listed** — hence the new rule sits
+  beside `is_servable()`, never inside it. Under a site-wide noindex the endpoint
+  still answers **200** with the site identity and the new Sitemaps section
+  rather than `404`, because `should_advertise_llms_txt()` would otherwise go on
+  advertising a dead URL from every page — a `404` costs a second gate to keep in
+  step forever, and the plan records that as the reason. The curated **Key
+  content** list is deliberately exempt (a hand-typed entry outranks a site-wide
+  preference), on by default with a filter to switch it off, Rank Math and Yoast
+  only for now. Seven storage-shape measurements are listed as blocking and none
+  has been taken yet.
 ### To check next time (not urgent, parked here)
 
 - **llms.txt v2: reviewed, implemented, closed.**
@@ -2135,6 +2154,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
+│   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section (designed, not started)
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
