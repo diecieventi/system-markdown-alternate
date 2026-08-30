@@ -170,19 +170,31 @@ SEO plugin's per-post robots meta lives. The priming is asserted in the suite
 rather than assumed, because it was silently `false` on the basic path once
 before and the regression had no symptom (Codex, PR #97).
 
-**4.2 The curated list** — `key_content_items()` (`:518`) is **unchanged**, per
-§3.2. It needs a comment saying so, and why.
+**4.2 The curated list** — `key_content_items()` (`:518`) does **not** apply the
+per-post or per-type noindex rule, per §3.2. It needs a comment saying so, and
+why, because two guards written to mirror each other and then not mirroring each
+other is a defect this codebase has shipped before.
 
 **4.3 The site-wide short-circuit** — read `blog_public` once, before any query,
-and skip `servable_posts()` entirely for every type.
+and skip **both** producers of `.md` links: the whole `servable_posts()` loop
+**and** the `key_content_items()` call.
 
-This is not just tidiness. `servable_posts()` pages up to `MAX_QUERY_PAGES` (5)
-times per content type, asking for `$limit` rows each — so on a site that is
-about to print no entries at all, one option read saves up to 2500 rows fetched
-per content type. The existing `if ( empty( $posts ) ) { continue; }` in `build()`
-(`:277`) already suppresses the `##` heading, and `key_content_items()`'s own
-emptiness check already suppresses that section, so nothing prints an orphan
-heading.
+**Both, not just the listing.** `build()` calls `key_content_items()` at `:249`,
+inside the `$enriched` branch and *before* the per-type loop at `:262`, so a
+short-circuit that only skipped `servable_posts()` would still print every
+curated `.md` link on a site-wide-noindexed site — contradicting §3.1, §3.2's own
+closing note and acceptance fixture 4. The Key content exemption is for the
+**per-post and per-type** levels only; the site-wide level admits no exceptions,
+because there "nothing is promoted" is the whole statement. Caught by Codex on
+PR #132, in this document, before any code existed.
+
+The short-circuit is not just correctness, it is also the cheapest path.
+`servable_posts()` pages up to `MAX_QUERY_PAGES` (5) times per content type,
+asking for `$limit` rows each — so on a site about to print no entries at all,
+one option read saves up to 2500 rows fetched per content type. The existing
+`if ( empty( $posts ) ) { continue; }` in `build()` (`:277`) already suppresses
+the `##` heading, and `key_content_items()`'s own emptiness check already
+suppresses that section, so nothing prints an orphan heading.
 
 ## 5. Detecting noindex
 
@@ -313,6 +325,7 @@ already deletes both the per-post entry and the index entry.
 | noindex set on a post from the editor | **Yes, free.** The SEO plugins store it as post meta saved with the post, so `save_post` fires and `invalidate_cache()` already clears the index entry |
 | `blog_public` toggled in Settings → Reading | **No.** No hook exists (zero occurrences of `blog_public` in the repository today) and no post row is touched |
 | Post-type default changed in the SEO plugin's settings | **No.** It lives in that plugin's own options; no post is touched, nothing invalidates |
+| A known SEO plugin activated or deactivated | **No** — and this one is introduced by §6. See §7.1 |
 
 The two uncovered rows take the same shape as the three `woocommerce_*_page_id`
 hooks in `AdminSettings::boot()` (`:117-123`), **including the lesson recorded
@@ -321,6 +334,35 @@ there**: register `add_option_*` **and** `update_option_*` **and**
 row does not yet exist — which is precisely the first time a setting is saved —
 and fires `add_option_{$option}` instead, which `update_option_{$option}` never
 sees. Caught by Codex on PR #122 before it shipped.
+
+### 7.1 The sitemap URL is a new cached input, and it needs its own answer
+
+§6.1 makes the emitted sitemap URL depend on **which plugin is active**, not on
+any option this plugin owns. Deactivate Rank Math and the correct answer flips
+from `/sitemap.xml` to core's `/wp-sitemap.xml` — while `render()` goes on
+serving the cached body for up to a full TTL, advertising a URL that is now a
+plain `404`. Nothing in `cache_version()` covers it, and the repository has no
+plugin-activation invalidation hook at all. Raised by Codex on PR #132.
+
+**Fold the resolved sitemap URL into `cache_version()`**, rather than hooking
+activation. That is not a coin flip between two remedies: it is the shape the
+method's own docblock already argues for. `cache_version()` covers
+`get_bloginfo('name')` and `get_bloginfo('description')` precisely because they
+are **printed in the file itself** and are edited somewhere that never fires
+`save_post`. The sitemap URL is now a third string with exactly that property,
+so it belongs in the same hash for the same reason.
+
+It is also cheap enough to sit on the every-request path, including `304`s, which
+is the standing constraint on anything entering a validator: resolving the
+provider is the constant/class checks `ConflictDetector` already performs, plus
+`home_url()`. No I/O, nothing new read from the database.
+
+Hooking `activated_plugin`/`deactivated_plugin` instead was considered and is
+worse on two counts: it would have to be registered outside the admin-only
+`AdminSettings` to catch a WP-CLI or programmatic activation, and it still leaves
+the URL wrong for any site whose provider changed before the hook existed. A
+validator input is self-correcting; a hook only catches the transitions it is
+present for.
 
 ## 8. Measurements not yet taken — blocking
 
@@ -392,5 +434,20 @@ For `docs/staging-acceptance.md`, on a site with an SEO plugin active:
 7. `## Sitemaps` present with the SEO plugin active and pointing at a URL that
    resolves; with every SEO plugin deactivated it points at core's sitemap, or
    the section is absent when core is not serving one.
-8. With the filter switched off, `/llms.txt` is **byte-identical** to the current
-   release for the same content.
+8. **What each switch actually restores** — stated per feature, because this plan
+   ships three changes and no single filter undoes all of them. The blanket
+   "off means byte-identical output" claim that an earlier draft carried here was
+   false, and was raised by Codex on PR #132: it was imported from the optional
+   *additions* (taxonomies, `lastmod`, enriched mode), where one toggle governs
+   one self-contained block of output. That does not hold here.
+   - noindex filter off → **the set of listed posts is identical to the current
+     release**. This is the claim worth testing, and the only one the noindex
+     filter is responsible for.
+   - Sitemap override filter returning `''` → **no `## Sitemaps` section**, so the
+     file is byte-identical to the current release apart from the listing.
+   - Both off together → byte-identical, **except** on an install with no content
+     type enabled, where the endpoint now answers `200` instead of `404`
+     (§9.1). That change is deliberate and has no off switch of its own; the
+     existing `sysmda_llms_txt_enabled` checkbox is the way to silence the
+     endpoint entirely. It is also unobservable on any configured site, since it
+     only concerns installs where the rest of the plugin is inactive.
