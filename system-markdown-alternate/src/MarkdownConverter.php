@@ -68,6 +68,8 @@ class MarkdownConverter {
 		$environment->addConverter( new TableConverter() );
 		$environment->addConverter( new CodeElementConverter() );
 		$environment->addConverter( new SafeParagraphConverter() );
+		$environment->addConverter( new SafeImageConverter( $this ) );
+		$environment->addConverter( new SafeLinkConverter() );
 
 		return $converter;
 	}
@@ -108,6 +110,60 @@ class MarkdownConverter {
 		$escaped = htmlspecialchars( $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
 
 		return trim( $this->convert( '<p>' . $escaped . '</p>' ) );
+	}
+
+	/**
+	 * Escapes `\` and `"` inside a Markdown link title.
+	 *
+	 * A link title is a quoted string embedded directly in the destination
+	 * parenthesis (`[text](url "title")`), not inline document text, so this is
+	 * deliberately NOT escape_inline(): a title never needs protecting from `*`,
+	 * `_`, `[` or `]`, which render literally inside a quoted string.
+	 *
+	 * Order matters: backslashes are escaped first, so the backslash this method
+	 * itself adds in front of a quote is never re-escaped by the second pass.
+	 * (`str_replace()` with parallel arrays applies each pair in order, feeding
+	 * the previous pair's result into the next.)
+	 */
+	public static function escape_link_title( string $title ): string {
+		return str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $title );
+	}
+
+	/**
+	 * Wraps a destination in `<…>` when it carries whitespace or a parenthesis,
+	 * either of which would otherwise close Markdown's `(…)` destination syntax
+	 * early. A literal `<`, `>` or line ending inside is percent-encoded first,
+	 * so the wrapper itself cannot be closed from within.
+	 *
+	 * The line-ending case is not optional (caught by Codex on PR #133, before
+	 * it shipped): CommonMark's *bracketed* destination form forbids line
+	 * endings just as strictly as it forbids an unescaped `<`/`>` — "a
+	 * sequence of zero or more characters … that contains no line endings or
+	 * unescaped `<` or `>` characters" — so a CR/LF is exactly the same class
+	 * of character the wrapper already had to defend against, not a separate
+	 * concern. `\s` (the trigger this method already tests) matches a CR/LF
+	 * too, so detection was already correct; only the encoding step was
+	 * missing this case. `ContentRenderer::absolutize()` trims the ENDS of a
+	 * URL, never an internal line break, so a value pasted with one (a
+	 * multiline quoted attribute in raw or Custom HTML content) reaches this
+	 * method unchanged.
+	 *
+	 * An ordinary WordPress-sanitized internal URL never contains any of these
+	 * characters, so this leaves the overwhelming majority of destinations
+	 * byte-identical to the library's own (unescaped) behaviour.
+	 */
+	public static function wrap_destination( string $url ): string {
+		if ( 1 !== preg_match( '/[\s()]/', $url ) ) {
+			return $url;
+		}
+
+		$encoded = str_replace(
+			array( "\r\n", "\r", "\n", '<', '>' ),
+			array( '%0D%0A', '%0D', '%0A', '%3C', '%3E' ),
+			$url
+		);
+
+		return '<' . $encoded . '>';
 	}
 
 	/**
