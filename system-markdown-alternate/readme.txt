@@ -2,9 +2,9 @@
 Contributors: system4pc
 Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.49.3
+Stable tag: 0.49.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,11 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.49.4 =
+
+* Fixed image `alt`/`title` and link `title`/destination interpolation in the Markdown body, which was previously placed into the output with no escaping at all — a value containing `]`, `"` or a backslash could corrupt the surrounding Markdown syntax, and a destination containing a space or a parenthesis was never wrapped in angle brackets.
+* `Tested up to: 7.1`.
+
 = 0.49.3 =
 
 * Updated the wordpress.org listing screenshots to the current settings panel (previously several versions out of date) and added a sixth screenshot showing the `[sysmda_md_actions]` front-end split button. Metadata and repository tooling only — no plugin code, output or behaviour changes.
@@ -197,10 +202,6 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 = 0.49.2 =
 
 * The Live Preview blueprint now lands on the site's front page instead of a raw `.md` response, so a first-time visitor sees an ordinary WordPress site to click around rather than a downloaded file with no context. Metadata and repository tooling only — no plugin code, output or behaviour changes.
-
-= 0.49.1 =
-
-* The plugin now ships a `.wordpress-org/blueprints/blueprint.json`, which enables the **Live Preview** button on this listing page: visitors can try the plugin live, active, in WordPress Playground, with no install. Metadata and repository tooling only — no plugin code, output or behaviour changes.
 
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 

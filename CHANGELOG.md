@@ -9,6 +9,34 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.49.4
+
+* Fixed image `alt`/`title` and link `title`/destination interpolation in the
+  Markdown body: `league/html-to-markdown` places these values into
+  `![alt](src "title")` / `[text](href "title")` with no escaping at all, so
+  `alt="Note] end"` closed the image label early, `title='He said "hi"'`
+  broke the quoted title out of its own delimiters, and a destination
+  containing a space or a parenthesis was never wrapped in `<…>`. Third
+  occurrence of the defect family `0.46.1`/`0.47.1` each closed once already
+  for a hand-placed value (an ACF subtitle, a custom-field value) — *a value
+  placed into the document is text, and text is escaped by the same
+  converter the body uses*. Two new converters, `SafeImageConverter` and
+  `SafeLinkConverter`, registered the same way `CodeElementConverter`/
+  `SafeParagraphConverter` already are; `alt` goes through the existing
+  `MarkdownConverter::escape_inline()`, and `title`/destinations through two
+  new static helpers, `escape_link_title()` and `wrap_destination()`. Phase 1
+  of a larger fidelity review (table grid/header defects are Phase 2,
+  deferred separately). No documentation surface changes: broken output
+  becomes correct output, and nothing a user does or configures changes.
+* `Tested up to: 7.1` (WordPress "Mary Lou", 19 August 2026). No plugin code
+  needed to change for this: both connected staging environments were
+  already run against real WordPress 7.1 for the `0.45.0`/`0.48.0`
+  acceptance passes (`docs/staging-acceptance.md`), and nothing in the 7.1
+  Field Guide touches an API this plugin uses (`template_redirect`,
+  `url_to_postid()`, `parse_blocks()`/`render_block()`, the Settings API,
+  post meta, WP-Cron, `wp_get_attachment_image_attributes`). The `readme.txt`
+  header was simply never bumped past the prior release's `7.0`.
+
 ## 0.49.3
 
 * Updated the wordpress.org listing screenshots (`.wordpress-org/screenshot-1.png`
