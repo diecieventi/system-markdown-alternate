@@ -68,6 +68,8 @@ class MarkdownConverter {
 		$environment->addConverter( new TableConverter() );
 		$environment->addConverter( new CodeElementConverter() );
 		$environment->addConverter( new SafeParagraphConverter() );
+		$environment->addConverter( new SafeImageConverter( $this ) );
+		$environment->addConverter( new SafeLinkConverter() );
 
 		return $converter;
 	}
@@ -108,6 +110,41 @@ class MarkdownConverter {
 		$escaped = htmlspecialchars( $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
 
 		return trim( $this->convert( '<p>' . $escaped . '</p>' ) );
+	}
+
+	/**
+	 * Escapes `\` and `"` inside a Markdown link title.
+	 *
+	 * A link title is a quoted string embedded directly in the destination
+	 * parenthesis (`[text](url "title")`), not inline document text, so this is
+	 * deliberately NOT escape_inline(): a title never needs protecting from `*`,
+	 * `_`, `[` or `]`, which render literally inside a quoted string.
+	 *
+	 * Order matters: backslashes are escaped first, so the backslash this method
+	 * itself adds in front of a quote is never re-escaped by the second pass.
+	 * (`str_replace()` with parallel arrays applies each pair in order, feeding
+	 * the previous pair's result into the next.)
+	 */
+	public static function escape_link_title( string $title ): string {
+		return str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $title );
+	}
+
+	/**
+	 * Wraps a destination in `<…>` when it carries whitespace or a parenthesis,
+	 * either of which would otherwise close Markdown's `(…)` destination syntax
+	 * early. A literal `<` or `>` inside is percent-encoded first, so the
+	 * wrapper itself cannot be closed from within.
+	 *
+	 * An ordinary WordPress-sanitized internal URL never contains any of these
+	 * characters, so this leaves the overwhelming majority of destinations
+	 * byte-identical to the library's own (unescaped) behaviour.
+	 */
+	public static function wrap_destination( string $url ): string {
+		if ( 1 !== preg_match( '/[\s()]/', $url ) ) {
+			return $url;
+		}
+
+		return '<' . str_replace( array( '<', '>' ), array( '%3C', '%3E' ), $url ) . '>';
 	}
 
 	/**

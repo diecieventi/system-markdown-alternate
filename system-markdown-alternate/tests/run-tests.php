@@ -687,6 +687,8 @@ require __DIR__ . '/../src/MarkdownConverter.php';
 if ( $GLOBALS['sysmda_has_vendor'] ) {
 	require __DIR__ . '/../src/CodeElementConverter.php';
 	require __DIR__ . '/../src/SafeParagraphConverter.php';
+	require __DIR__ . '/../src/SafeImageConverter.php';
+	require __DIR__ . '/../src/SafeLinkConverter.php';
 }
 require __DIR__ . '/../src/BuilderDetector.php';
 require __DIR__ . '/../src/BuilderCensus.php';
@@ -726,6 +728,8 @@ use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
 use Diecieventi\SystemMarkdownAlternate\MetaFields;
 use Diecieventi\SystemMarkdownAlternate\MetadataBuilder;
+use Diecieventi\SystemMarkdownAlternate\SafeImageConverter;
+use Diecieventi\SystemMarkdownAlternate\SafeLinkConverter;
 use Diecieventi\SystemMarkdownAlternate\ShortcodeCleaner;
 use Diecieventi\SystemMarkdownAlternate\Shortcodes;
 use Diecieventi\SystemMarkdownAlternate\WooCommerceCompat;
@@ -5272,6 +5276,127 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 			);
 		}
 	}
+
+	// ─── SafeImageConverter / SafeLinkConverter (markdown-fidelity-plan.md,
+	// Phase 1 -- private companion repository) ─────────────────────────────
+	//
+	// The library interpolates `alt`, `src`, `title` and `href` into Markdown
+	// syntax with no escaping at all, so a value carrying the delimiter it
+	// sits inside corrupted the rest of the document -- the same defect
+	// family 0.46.1 and 0.47.1 each fixed once already for a hand-placed
+	// value (an ACF subtitle, a custom-field value).
+	//
+	// $sysmda_bs is one literal backslash, used below to build every escaped
+	// expectation by concatenation rather than by hand-counting backslashes
+	// inside a string literal -- the classic place to get a test itself wrong.
+
+	check( 'convert API: image converter owns img', array( 'img' ), ( new SafeImageConverter( $sysmda_conv ) )->getSupportedTags() );
+	check( 'convert API: link converter owns a', array( 'a' ), ( new SafeLinkConverter() )->getSupportedTags() );
+
+	$sysmda_bs = '\\';
+
+	// escape_link_title(): a quoted Markdown link title is not inline document
+	// text -- only `\` and `"` are escaped, and `\` first, so the backslash
+	// this method itself adds in front of a quote is never re-escaped by the
+	// second pass.
+	$sysmda_title_escaped = 'He said ' . $sysmda_bs . '"hi' . $sysmda_bs . '"';
+	check( 'escape_link_title: quote and backslash escaped', $sysmda_title_escaped, MarkdownConverter::escape_link_title( 'He said "hi"' ) );
+	check( 'escape_link_title: a lone backslash is doubled', $sysmda_bs . $sysmda_bs . 'slash', MarkdownConverter::escape_link_title( $sysmda_bs . 'slash' ) );
+	check(
+		'escape_link_title: order matters -- a backslash immediately before a quote is not re-escaped',
+		$sysmda_bs . $sysmda_bs . $sysmda_bs . '"',
+		MarkdownConverter::escape_link_title( $sysmda_bs . '"' )
+	);
+	check( 'escape_link_title: an empty title stays empty', '', MarkdownConverter::escape_link_title( '' ) );
+
+	// wrap_destination(): whitespace or a parenthesis triggers the <...>
+	// wrapper; a lone angle bracket does not (CommonMark's unbracketed
+	// destination form already allows one), but is percent-encoded once a
+	// wrapper is needed anyway, so it cannot close the wrapper from within.
+	check( 'wrap_destination: an ordinary destination is unchanged', 'https://example.com/my-post/', MarkdownConverter::wrap_destination( 'https://example.com/my-post/' ) );
+	check( 'wrap_destination: whitespace triggers the wrapper', '<https://example.com/my file.png>', MarkdownConverter::wrap_destination( 'https://example.com/my file.png' ) );
+	check( 'wrap_destination: a parenthesis triggers the wrapper', '<https://example.com/a)b>', MarkdownConverter::wrap_destination( 'https://example.com/a)b' ) );
+	check( 'wrap_destination: a lone angle bracket does not trigger wrapping', 'https://example.com/<a>', MarkdownConverter::wrap_destination( 'https://example.com/<a>' ) );
+	check(
+		'wrap_destination: angle brackets are percent-encoded once a wrapper is needed',
+		'<https://example.com/%3Ca%3E b>',
+		MarkdownConverter::wrap_destination( 'https://example.com/<a> b' )
+	);
+
+	// End to end, through the real HtmlConverter: the same fixes, exercised
+	// via convert() rather than the static helpers directly.
+	check(
+		'convert: image alt is escaped like any other text node',
+		'![Note' . $sysmda_bs . '] end](https://example.com/a.png)' . "\n",
+		$sysmda_conv->convert( '<img src="https://example.com/a.png" alt="Note] end">' )
+	);
+	check(
+		'convert: an alt of exactly "0" is not falsy and survives',
+		"![0](https://example.com/a.png)\n",
+		$sysmda_conv->convert( '<img src="https://example.com/a.png" alt="0">' )
+	);
+	check(
+		'convert: an image title is escaped instead of interpolated raw',
+		'![x](https://example.com/a.png "' . $sysmda_title_escaped . '")' . "\n",
+		$sysmda_conv->convert( '<img src="https://example.com/a.png" alt="x" title="He said &quot;hi&quot;">' )
+	);
+	check(
+		'convert: a link title is escaped instead of interpolated raw',
+		'[text](https://example.com/x "' . $sysmda_title_escaped . '")' . "\n",
+		$sysmda_conv->convert( '<a href="https://example.com/x" title="He said &quot;hi&quot;">text</a>' )
+	);
+	check(
+		'convert: image destination with a space is wrapped',
+		"![x](<https://example.com/my file.png>)\n",
+		$sysmda_conv->convert( '<img src="https://example.com/my file.png" alt="x">' )
+	);
+	check(
+		'convert: link destination with a space is wrapped',
+		"[text](<https://example.com/my file.png>)\n",
+		$sysmda_conv->convert( '<a href="https://example.com/my file.png">text</a>' )
+	);
+	check(
+		'convert: link destination with a parenthesis is wrapped',
+		"[text](<https://example.com/a)b>)\n",
+		$sysmda_conv->convert( '<a href="https://example.com/a)b">text</a>' )
+	);
+	check(
+		'convert: ordinary destinations stay byte-identical to the library\'s own output',
+		"![x](https://example.com/a.png)\n",
+		$sysmda_conv->convert( '<img src="https://example.com/a.png" alt="x">' )
+	);
+
+	// The autolink and mailto-autolink branches never reach the destination
+	// wrapper or the title escaper -- checked here as a regression, not
+	// because either fix was expected to touch them.
+	check(
+		'convert: an autolink is unaffected',
+		"<https://example.com/x>\n",
+		$sysmda_conv->convert( '<a href="https://example.com/x">https://example.com/x</a>' )
+	);
+	check(
+		'convert: a mailto autolink is unaffected',
+		"<a@example.com>\n",
+		$sysmda_conv->convert( '<a href="mailto:a@example.com">a@example.com</a>' )
+	);
+
+	// Composition with the table pipe escaping: the alt's "]" is escaped
+	// first (SafeImageConverter, bottom-up), the cell's "|" is escaped second
+	// (TableConverter, over the whole already-converted cell value).
+	check(
+		'convert: escaped image alt composes with the table\'s pipe escaping',
+		'| ![A ' . $sysmda_bs . '| B' . $sysmda_bs . ']]' . "(https://example.com/a.png) |\n|---|\n",
+		$sysmda_conv->convert( '<table><tr><td><img src="https://example.com/a.png" alt="A | B]"></td></tr></table>' )
+	);
+
+	// name_empty_links() consumes the title as TEXT and removes the attribute
+	// before this converter ever sees it, so the quote never reaches the raw
+	// title-interpolation path the fix above exists for.
+	check(
+		'e2e: an empty anchor named from a quoted title is not corrupted',
+		'[Say "hi"](https://example.com/x)' . "\n",
+		$sysmda_e2e( '<a href="https://example.com/x" title="Say &quot;hi&quot;"></a>' )
+	);
 }
 
 // ─── LiteSpeedCompat::update (read-modify-write on a real file) ──────────────
