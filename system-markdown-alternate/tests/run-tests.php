@@ -5397,6 +5397,50 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		'[Say "hi"](https://example.com/x)' . "\n",
 		$sysmda_e2e( '<a href="https://example.com/x" title="Say &quot;hi&quot;"></a>' )
 	);
+
+	// ─── Two findings from Codex's review of PR #133, both fixed before merge ──
+
+	// wrap_destination(): CommonMark's bracketed destination form forbids a
+	// line ending just as strictly as an unescaped `<`/`>` -- the `\s` trigger
+	// this method already tests matches a CR/LF too, but the encoding step
+	// used to leave one sitting literally inside the wrapper.
+	check(
+		'wrap_destination: an internal LF is percent-encoded, not left literal',
+		'<https://example.com/a%0Ab>',
+		MarkdownConverter::wrap_destination( "https://example.com/a\nb" )
+	);
+	check(
+		'wrap_destination: an internal CRLF is percent-encoded as one unit',
+		'<https://example.com/a%0D%0Ab>',
+		MarkdownConverter::wrap_destination( "https://example.com/a\r\nb" )
+	);
+	check(
+		'wrap_destination: a line ending composes with angle-bracket encoding',
+		'<https://example.com/%3Ca%3E%0Ab>',
+		MarkdownConverter::wrap_destination( "https://example.com/<a>\nb" )
+	);
+
+	// is_valid_autolink() (SafeLinkConverter, private): the library's own
+	// isValidAutolink() regex has no end anchor, so an href/text pair equal
+	// to "https://example.com/my file" was reported valid on the strength of
+	// its "https://example.com/my" prefix alone, and emitted as a bare
+	// `<https://example.com/my file>` autolink -- a construct CommonMark
+	// forbids from containing whitespace at all, unlike the bracketed
+	// destination form wrap_destination() produces. Fixed by requiring the
+	// match to consume the whole string; the pair now takes the wrapped-
+	// destination branch instead, which is what this fixture proves.
+	check(
+		'convert: an href/text pair with a space is wrapped, not emitted as a broken autolink',
+		'[https://example.com/my file](<https://example.com/my file>)' . "\n",
+		$sysmda_conv->convert( '<a href="https://example.com/my file">https://example.com/my file</a>' )
+	);
+	// A genuine autolink candidate (no space, no disallowed character) is
+	// completely unaffected by the stricter gate.
+	check(
+		'convert: a genuine autolink is unaffected by the stricter gate',
+		"<https://example.com/x>\n",
+		$sysmda_conv->convert( '<a href="https://example.com/x">https://example.com/x</a>' )
+	);
 }
 
 // ─── LiteSpeedCompat::update (read-modify-write on a real file) ──────────────

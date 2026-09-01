@@ -132,8 +132,21 @@ class MarkdownConverter {
 	/**
 	 * Wraps a destination in `<…>` when it carries whitespace or a parenthesis,
 	 * either of which would otherwise close Markdown's `(…)` destination syntax
-	 * early. A literal `<` or `>` inside is percent-encoded first, so the
-	 * wrapper itself cannot be closed from within.
+	 * early. A literal `<`, `>` or line ending inside is percent-encoded first,
+	 * so the wrapper itself cannot be closed from within.
+	 *
+	 * The line-ending case is not optional (caught by Codex on PR #133, before
+	 * it shipped): CommonMark's *bracketed* destination form forbids line
+	 * endings just as strictly as it forbids an unescaped `<`/`>` — "a
+	 * sequence of zero or more characters … that contains no line endings or
+	 * unescaped `<` or `>` characters" — so a CR/LF is exactly the same class
+	 * of character the wrapper already had to defend against, not a separate
+	 * concern. `\s` (the trigger this method already tests) matches a CR/LF
+	 * too, so detection was already correct; only the encoding step was
+	 * missing this case. `ContentRenderer::absolutize()` trims the ENDS of a
+	 * URL, never an internal line break, so a value pasted with one (a
+	 * multiline quoted attribute in raw or Custom HTML content) reaches this
+	 * method unchanged.
 	 *
 	 * An ordinary WordPress-sanitized internal URL never contains any of these
 	 * characters, so this leaves the overwhelming majority of destinations
@@ -144,7 +157,13 @@ class MarkdownConverter {
 			return $url;
 		}
 
-		return '<' . str_replace( array( '<', '>' ), array( '%3C', '%3E' ), $url ) . '>';
+		$encoded = str_replace(
+			array( "\r\n", "\r", "\n", '<', '>' ),
+			array( '%0D%0A', '%0D', '%0A', '%3C', '%3E' ),
+			$url
+		);
+
+		return '<' . $encoded . '>';
 	}
 
 	/**
