@@ -43,11 +43,12 @@ If a firewall or CDN sits in front of the site, some block command-line user age
 
 ## What you get automatically
 
-With that one setting saved, three things are already in place:
+With that one setting saved, two things are already in place:
 
 - **Discovery.** Each HTML page now advertises its Markdown twin, both in the document head and as an HTTP `Link` header, so a client can find it without guessing the URL.
 - **Content negotiation.** A client that explicitly asks for `text/markdown` on the normal permalink gets Markdown, without needing the `.md` suffix at all.
-- **An index.** `/llms.txt` lists the content you just enabled, so an agent can discover the whole site from one file. See [The /llms.txt index](/endpoints/the-llms-txt-index/).
+
+And one more is a tick away: **an index.** `/llms.txt` can list the content you just enabled, so an agent discovers the whole site from one file. It is off by default, because serving that URL takes it over from anything else that might answer it — see [The /llms.txt index](/endpoints/the-llms-txt-index/).
 
 ## A note on permalinks
 

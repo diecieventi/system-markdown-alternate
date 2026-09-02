@@ -28,11 +28,13 @@ Entries point at the `.md` URLs, not the HTML pages, so a client that follows on
 
 ## Enable /llms.txt
 
-**On by default.** It stays silent until you enable at least one content type, though: with nothing to index there is nothing to say, and answering with a bare site name would take the URL over from anything else that might serve it.
+**Off by default.** You turn it on under **Settings → Markdown Alternate → llms.txt**. Enabling it takes `/llms.txt` over on your site straight away — the plugin answers that URL before anything else gets the chance — so it is never something an installation starts doing on its own.
 
-Turn it off if another plugin on your site already generates the file. The panel detects the likely candidates and tells you — including the case that beats every plugin: a physical `llms.txt` file in the site root, which the web server delivers before WordPress ever runs.
+Before ticking it, check the status panel for another plugin that already generates the file. It detects the likely candidates and tells you — including the case that beats every plugin: a physical `llms.txt` file in the site root, which the web server delivers before WordPress ever runs.
 
-The notice is informational. The plugin never disables itself on the strength of a guess about another plugin's configuration; which handler wins is your call.
+The notice is informational, and it is the reason the endpoint ships off rather than on: the plugin cannot tell whether another handler is really serving the URL, so it never claims it on your behalf. Which handler wins is your call, made by turning this on yourself.
+
+Once enabled, it still stays silent until you enable at least one content type: with nothing to index there is nothing to say, and answering with a bare site name would take the URL over from anything else that might serve it.
 
 ## How agents find the index
 

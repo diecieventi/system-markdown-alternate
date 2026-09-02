@@ -56,15 +56,21 @@ class LlmsTxtController {
 			return;
 		}
 
-		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '1' ) ) {
-			return; // Disabled in the admin panel.
+		// Off by default: this method intercepts /llms.txt at the earliest
+		// template_redirect priority and exits the moment it renders, which is
+		// a hard takeover of the URL. Serving the file is therefore always the
+		// site owner's explicit choice from the panel, never something an
+		// install starts doing on its own. See the durable decision in
+		// AGENTS.md.
+		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '0' ) ) {
+			return; // Not enabled in the admin panel.
 		}
 
-		// The option is on by default, but with no enabled content type there is
-		// nothing to index: the endpoint would answer a site name and a tagline,
-		// and would take /llms.txt over from whatever else may be handling it
-		// while the rest of the plugin is still inactive. Stay out of the way
-		// until the site owner has selected something.
+		// Enabled, but with no enabled content type there is nothing to index:
+		// the endpoint would answer a site name and a tagline, and would take
+		// /llms.txt over from whatever else may be handling it while the rest
+		// of the plugin is still inactive. Stay out of the way until the site
+		// owner has selected something.
 		if ( empty( PostSupport::supported_post_types() ) ) {
 			return;
 		}

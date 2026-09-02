@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.49.4
+Stable tag: 0.50.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -29,7 +29,7 @@ It is built for the era of AI assistants, agents and technical scrapers that pre
 * **Markdown discovery in HTML and HTTP**: supported canonical pages advertise the representation with both `<link rel="alternate" type="text/markdown">` in the document head and a typed `Link: rel="alternate"` response header. The HTTP form is also available to `HEAD` requests. When `/llms.txt` is enabled, the same pages also point at it with `rel="describedby"`, the relation added by version 2 of the llms.txt specification, so an agent can find the site's index from any article.
 * **Correct HTTP headers**: `Content-Type: text/markdown`, `X-Robots-Tag` (default `noindex, follow`) and a `Link: rel="canonical"` back to the HTML.
 * **Clean conversion**: Gutenberg blocks are rendered individually (no injected related/CTA blocks), excluded blocks/shortcodes/CSS classes are removed, code blocks become fenced blocks, URLs are made absolute, and an embedded video, tweet or track leaves a link to what it embeds rather than an empty gap. Clickable link cards keep their name too: the invisible overlay link such cards are built from takes the name the markup declares, instead of arriving with no text at all.
-* **`/llms.txt` endpoint** (optional): an index of your content for LLMs and AI agents. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
+* **`/llms.txt` endpoint** (optional, off by default): an index of your content for LLMs and AI agents. It is never enabled on your behalf — serving that URL takes it over from any other plugin that might answer it, so you turn it on yourself after checking the panel's conflict notice. An optional **enriched mode** (off by default) adds a site summary, a curated "Key content" section, a description for each entry and an `Optional` section for older posts. Another optional toggle appends the **last modified date** (`updated: YYYY-MM-DD`) to every entry, so crawlers can spot changed content without re-fetching each URL.
 * **Custom taxonomies in the front matter** (optional, nothing selected by default): tick the taxonomies you want and their terms are added as a `taxonomies:` block, alphabetically ordered. Nothing is ever published automatically: a taxonomy registered by another plugin appears in the panel unticked, and taxonomies with no public term archive are labelled as internal.
 * **Extra custom fields** (optional, empty by default): list the post meta keys whose values belong in the document and they are appended to the body. One setting covers ACF, JetEngine, Meta Box and WordPress's own Custom Fields box, because underneath they all store post meta — so a page whose text comes partly from a template's fields is no longer published half missing. Nothing is detected automatically, and posts without the field keep their document and their cache validator untouched.
 * **Object cache** with proactive invalidation on post edit, plugin update and settings change: a persistent object cache is used when one is available, falling back to transients otherwise.
@@ -190,6 +190,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.50.0 =
+
+* Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. Only new installations get the new default.
+
 = 0.49.4 =
 
 * Fixed image `alt`/`title` and link `title`/destination interpolation in the Markdown body, which was previously placed into the output with no escaping at all — a value containing `]`, `"` or a backslash could corrupt the surrounding Markdown syntax, and a destination containing a space or a parenthesis was never wrapped in angle brackets.
@@ -199,13 +203,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Updated the wordpress.org listing screenshots to the current settings panel (previously several versions out of date) and added a sixth screenshot showing the `[sysmda_md_actions]` front-end split button. Metadata and repository tooling only — no plugin code, output or behaviour changes.
 
-= 0.49.2 =
-
-* The Live Preview blueprint now lands on the site's front page instead of a raw `.md` response, so a first-time visitor sees an ordinary WordPress site to click around rather than a downloaded file with no context. Metadata and repository tooling only — no plugin code, output or behaviour changes.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.50.0 =
+/llms.txt now ships OFF on new installations. Existing sites keep whatever they have saved, so nothing changes for them; only a site that never saved the settings page is affected.
 
 = 0.8.0 =
 The GenerateBlocks Dynamic Tag is now always available when GenerateBlocks is active; the enable/disable toggle was removed. No action required.

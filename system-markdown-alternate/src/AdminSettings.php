@@ -1132,7 +1132,7 @@ class AdminSettings {
 	 * Presentation only: uses the same data already calculated by the plugin.
 	 */
 	public function render_llmstxt_aside(): void {
-		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
+		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '0' ); // Off by default.
 		$url     = home_url( '/llms.txt' );
 
 		// The option being on is not the same as the endpoint answering. With no
@@ -1420,9 +1420,9 @@ class AdminSettings {
 	}
 
 	public function field_llms_txt_enabled(): void {
-		$v = get_option( 'sysmda_llms_txt_enabled', '1' ); // Enabled by default.
+		$v = get_option( 'sysmda_llms_txt_enabled', '0' ); // Off by default: enabling it is always a manual choice.
 		echo '<label><input type="checkbox" name="sysmda_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
-		echo '<p class="description">' . wp_kses_post( __( 'Disable if another plugin already handles <code>/llms.txt</code>.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'Off by default. Enabling it takes <code>/llms.txt</code> over immediately, so check the status panel first for another plugin already serving it.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	/**

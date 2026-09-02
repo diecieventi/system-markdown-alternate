@@ -9,6 +9,34 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.50.0
+
+* **Changed: `/llms.txt` is now off by default**, reversing the July 2026 "on by
+  default" decision. `LlmsTxtController` intercepts `/llms.txt` at
+  `template_redirect` priority 0 and calls `exit` the moment it renders, which
+  is a hard takeover of the URL: if another plugin or SEO tool generates the
+  file dynamically, this plugin's priority-0 exit wins the race and the other
+  handler is never reached. `ConflictDetector` can only ever surface an admin
+  notice — by design it never disables anything on the strength of a guess — so
+  an on-by-default endpoint meant a fresh install could start shadowing another
+  plugin's `/llms.txt` the moment the owner ticked a single post type for the
+  unrelated `.md` feature. Serving the file is now always an explicit choice
+  from Settings → Markdown Alternate → llms.txt.
+  **Impact on existing sites: none in practice.** The toggle is registered in
+  the plugin's single settings group with a checkbox sanitizer, and the
+  Settings API writes every registered option of the group on each save — so
+  any install that ever saved the settings page (which is the only way to
+  select a content type) already holds an explicit `'1'` or `'0'` row and keeps
+  its current behaviour. Only an install that never saved the panel picks up
+  the new default, and that install serves nothing anyway: with no content type
+  enabled the endpoint was already silent.
+  Four call sites read the option and all four now default to `'0'`
+  (`LlmsTxtController::maybe_render_llms_txt()`,
+  `MarkdownController::should_advertise_llms_txt()` and two in
+  `AdminSettings`), so the endpoint, the `rel="describedby"` discovery, the
+  status aside and the checkbox itself cannot disagree about what a fresh
+  install does.
+
 ## 0.49.4
 
 * Fixed image `alt`/`title` and link `title`/destination interpolation in the
