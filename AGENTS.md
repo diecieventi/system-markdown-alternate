@@ -147,9 +147,9 @@ The v1 scope is done and widely exceeded. Implemented:
   headers, no `type` parameter — gated on `is_negotiable_request()` **plus**
   `sysmda_llms_txt_enabled`. That conjunction is a correctness requirement, not
   a style choice: `maybe_render_llms_txt()` has a *second* gate after its own
-  option (it stays silent with no enabled content type), and since that option
-  defaults on while the type selection defaults empty, gating on the option
-  alone would advertise a 404 on every unconfigured install.
+  option (it stays silent with no enabled content type), so gating on the
+  option alone would advertise a 404 on an install whose owner ticked the
+  toggle before selecting a content type.
   `is_negotiable_request()` covers it transitively — so anything that widens
   this beyond negotiable requests must re-add the `supported_post_types()`
   check explicitly. **The two relations are emitted independently**: one
@@ -509,7 +509,9 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
-- **`/llms.txt`** (cached, excludes protected content) with an on/off toggle.
+- **`/llms.txt`** (cached, excludes protected content) with an on/off toggle,
+  **off by default** — enabling it is always the owner's explicit choice (see
+  the durable decision below).
   The body cache is the anonymous representation only: authenticated requests
   rebuild in the visitor's context without reading or populating the shared
   entry and are sent `private, no-store, must-revalidate`. Their strong ETag is
@@ -1434,10 +1436,51 @@ The v1 scope is done and widely exceeded. Implemented:
   differ between the `.md` suffix route and the negotiated permalink route
   (documentation only; no code change, and no broader `is_singular()`-style
   risk turned out to exist to fix).
+- **`/llms.txt` is OFF by default** (decided September 2026, `0.50.0` —
+  **reverses** the July 2026 "on by default" default; do not restore it).
+  `maybe_render_llms_txt()` intercepts the URL at `template_redirect` priority
+  0 and `exit`s the moment it renders: a hard takeover no other handler can
+  win. `ConflictDetector` can only ever raise an admin notice — it must not
+  disable anything on a guess (see its own decision below) — so an
+  on-by-default endpoint let a fresh install start shadowing another plugin's
+  `/llms.txt` as a side effect of ticking one post type for the unrelated
+  `.md` feature, with a sidebar notice as the only warning. That is "NO
+  auto-yield" read from the other side: the plugin never disables itself in
+  reaction to another handler, and by the same logic must never enable itself
+  in reaction to nothing at all. **Four call sites read the option and all
+  four default to `'0'`** (`LlmsTxtController::maybe_render_llms_txt()`,
+  `MarkdownController::should_advertise_llms_txt()`,
+  `AdminSettings::render_llmstxt_aside()`, `field_llms_txt_enabled()`); the
+  endpoint, the `describedby` discovery, the status aside and the checkbox
+  must never disagree about what a fresh install does. **The upgrade is a
+  no-op for every install that ever saved the panel, and saying so matters** —
+  the first attempt at this change (PR #134, closed) shipped an alarming
+  "re-enable it after updating" notice that was simply false: the toggle is in
+  the single settings group with `sanitize_checkbox()`, and the Settings API
+  writes *every* registered option of the group on each save (unchecked →
+  `'0'`), so such an install already holds an explicit row and keeps it. The
+  pre-ticked checkbox, not the endpoint's own gate, was the actual lever: it
+  turned the very first save into an implicit "yes".
+  **One install does lose the endpoint, and it is deliberately not migrated**
+  (Codex, PR #135): a site that enables its content types *only* through the
+  Stable `sysmda_markdown_supported_post_types` filter and has never saved the
+  settings page has no option row while `supported_post_types()` is non-empty,
+  so it was serving `/llms.txt` on the old default and stops. A migration
+  writing back the implicit `'1'` was considered and rejected on two grounds,
+  the first decisive: **that site stores nothing at all**, so it is
+  indistinguishable from a fresh install — the migration would have to guess
+  from an unrelated option's presence, and guessing wrong writes the implicit
+  "yes" into exactly the fresh installs this decision exists to protect. And
+  preserving an implicit enablement is the behaviour being ended, not an
+  invariant to carry forward: the site never chose it. It is a
+  developer-managed install by construction (someone wrote the filter), the
+  fix is one tick or one `update_option()`, and the release note names the
+  case.
 - **`/llms.txt` stays silent until a content type is enabled** (decided July
-  2026): the option remains **on by default**, but with nothing to index the
-  endpoint answered a site name plus a tagline and took the URL over from anything
-  else that might serve it, while the rest of the plugin was still inactive. This
+  2026; unaffected by the default reversal above, which changed only what the
+  *toggle* defaults to): with nothing to index the endpoint answered a site
+  name plus a tagline and took the URL over from anything else that might serve
+  it, while the rest of the plugin was still inactive. This
   is NOT auto-yielding (see the decision below): the plugin never reacts to
   another handler, it simply has nothing to say yet.
 - **`.htaccess`: the lock spans the whole read-modify-write, and the write is
@@ -2723,9 +2766,9 @@ is a better first impression than a single raw `.md` response — the earlier
 draft of this blueprint landed straight on `/hello-world.md`, and got called
 out for exactly that: a `text/markdown` response is a download or a wall of
 plain text with zero context to a visitor who has not read this file, not a
-demo. `sysmda_llms_txt_enabled` is already on by default, but the option is
-set explicitly here too, so the blueprint keeps demonstrating `/llms.txt`
-even if that default ever changes.
+demo. `sysmda_llms_txt_enabled` defaults **off** (see the durable decision in
+"Product decisions"), so the blueprint sets it to `'1'` explicitly — without
+that line the Preview would not demonstrate `/llms.txt` at all.
 **Verified live before merging, not just schema-validated** (the "a guard is
 not done until it has been seen to fire" rule applies to a blueprint exactly
 as it does to code): validated against the published
