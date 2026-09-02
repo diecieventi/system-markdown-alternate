@@ -192,7 +192,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 = 0.50.0 =
 
-* Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. Only new installations get the new default.
+* Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. The new default reaches new installations — and the one unusual case of a site whose content types come from the `sysmda_markdown_supported_post_types` filter alone, with the settings page never saved: there the endpoint stops answering until you tick the box.
 
 = 0.49.4 =
 
@@ -208,7 +208,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 == Upgrade Notice ==
 
 = 0.50.0 =
-/llms.txt now ships OFF on new installations. Existing sites keep whatever they have saved, so nothing changes for them; only a site that never saved the settings page is affected.
+/llms.txt now ships OFF on new installations. Existing sites keep whatever they have saved, so nothing changes for them. Only a site that never saved the settings page is affected — and it only notices if its content types come from the sysmda_markdown_supported_post_types filter; one tick in Settings - Markdown Alternate - llms.txt restores the endpoint.
 
 = 0.8.0 =
 The GenerateBlocks Dynamic Tag is now always available when GenerateBlocks is active; the enable/disable toggle was removed. No action required.

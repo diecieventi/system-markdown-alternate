@@ -1453,15 +1453,29 @@ The v1 scope is done and widely exceeded. Implemented:
   `AdminSettings::render_llmstxt_aside()`, `field_llms_txt_enabled()`); the
   endpoint, the `describedby` discovery, the status aside and the checkbox
   must never disagree about what a fresh install does. **The upgrade is a
-  no-op for configured sites, and saying so matters** — the first attempt at
-  this change (PR #134, closed) shipped an alarming "re-enable it after
-  updating" notice that was simply false: the toggle is in the single settings
-  group with `sanitize_checkbox()`, and the Settings API writes *every*
-  registered option of the group on each save (unchecked → `'0'`), so any
-  install that ever saved the panel — the only way to select a content type —
-  already holds an explicit row and keeps it. The default reaches new installs
-  only. The pre-ticked checkbox, not the endpoint's own gate, was the actual
-  lever: it turned the very first save into an implicit "yes".
+  no-op for every install that ever saved the panel, and saying so matters** —
+  the first attempt at this change (PR #134, closed) shipped an alarming
+  "re-enable it after updating" notice that was simply false: the toggle is in
+  the single settings group with `sanitize_checkbox()`, and the Settings API
+  writes *every* registered option of the group on each save (unchecked →
+  `'0'`), so such an install already holds an explicit row and keeps it. The
+  pre-ticked checkbox, not the endpoint's own gate, was the actual lever: it
+  turned the very first save into an implicit "yes".
+  **One install does lose the endpoint, and it is deliberately not migrated**
+  (Codex, PR #135): a site that enables its content types *only* through the
+  Stable `sysmda_markdown_supported_post_types` filter and has never saved the
+  settings page has no option row while `supported_post_types()` is non-empty,
+  so it was serving `/llms.txt` on the old default and stops. A migration
+  writing back the implicit `'1'` was considered and rejected on two grounds,
+  the first decisive: **that site stores nothing at all**, so it is
+  indistinguishable from a fresh install — the migration would have to guess
+  from an unrelated option's presence, and guessing wrong writes the implicit
+  "yes" into exactly the fresh installs this decision exists to protect. And
+  preserving an implicit enablement is the behaviour being ended, not an
+  invariant to carry forward: the site never chose it. It is a
+  developer-managed install by construction (someone wrote the filter), the
+  fix is one tick or one `update_option()`, and the release note names the
+  case.
 - **`/llms.txt` stays silent until a content type is enabled** (decided July
   2026; unaffected by the default reversal above, which changed only what the
   *toggle* defaults to): with nothing to index the endpoint answered a site

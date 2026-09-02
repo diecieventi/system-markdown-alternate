@@ -25,11 +25,18 @@ notes are generated from the entries in this file by `bin/release-tag.sh`.
   **Impact on existing sites: none in practice.** The toggle is registered in
   the plugin's single settings group with a checkbox sanitizer, and the
   Settings API writes every registered option of the group on each save — so
-  any install that ever saved the settings page (which is the only way to
-  select a content type) already holds an explicit `'1'` or `'0'` row and keeps
-  its current behaviour. Only an install that never saved the panel picks up
-  the new default, and that install serves nothing anyway: with no content type
-  enabled the endpoint was already silent.
+  any install that ever saved the settings page already holds an explicit `'1'`
+  or `'0'` row and keeps its current behaviour. Only an install that never
+  saved the panel picks up the new default, and for almost all of them that is
+  invisible: with no content type enabled the endpoint was already silent.
+  The exception is a site that enables its content types *only* through the
+  `sysmda_markdown_supported_post_types` filter and has never saved the
+  settings page — there `/llms.txt` does stop answering, and one tick in the
+  panel (or `update_option( 'sysmda_llms_txt_enabled', '1' )`) brings it back.
+  That case is deliberately not migrated: such a site stores no option at all,
+  so it cannot be told apart from a fresh install, and writing the implicit
+  "yes" back would put it into the fresh installs this change exists to
+  protect.
   Four call sites read the option and all four now default to `'0'`
   (`LlmsTxtController::maybe_render_llms_txt()`,
   `MarkdownController::should_advertise_llms_txt()` and two in
