@@ -2203,6 +2203,46 @@ $GLOBALS['sysmda_test_bloginfo']['description'] = 'New tagline';
 check( 'llms: changing the tagline invalidates the cached index', true, $sysmda_llms_cv_named !== $sysmda_llms_cv() );
 check( 'llms: unchanged identity keeps the same version', $sysmda_llms_cv(), $sysmda_llms_cv() );
 
+// ─── LlmsTxtController::is_enabled — off by default, and the single gate ──
+//
+// The takeover risk this predicate exists to prevent (see the durable
+// decision in AGENTS.md): the endpoint intercepts /llms.txt at the earliest
+// template_redirect priority and exits the moment it renders, so an
+// on-by-default option would silently shadow another plugin's /llms.txt the
+// moment a site owner enabled a single post type for the unrelated .md
+// feature. is_enabled() is now the ONE place that reads the option — both
+// maybe_render_llms_txt() below and MarkdownController::should_advertise_llms_txt()
+// call it rather than each keeping its own get_option() literal, which is
+// exactly how the previous default drifted out of step across four separate
+// call sites. Proving it here therefore proves every consumer at once; a
+// second, duplicate test of should_advertise_llms_txt() would only be
+// re-exercising the same line through is_negotiable_request(), which this
+// change never touched.
+
+unset( $GLOBALS['sysmda_test_options']['sysmda_llms_txt_enabled'] );
+check( 'llms: is_enabled() is off with no saved option (a fresh install)', false, LlmsTxtController::is_enabled() );
+
+$GLOBALS['sysmda_test_options']['sysmda_llms_txt_enabled'] = '1';
+check( 'llms: is_enabled() is on once explicitly saved as \'1\'', true, LlmsTxtController::is_enabled() );
+
+$GLOBALS['sysmda_test_options']['sysmda_llms_txt_enabled'] = '0';
+check( 'llms: is_enabled() is off once explicitly saved as \'0\'', false, LlmsTxtController::is_enabled() );
+
+unset( $GLOBALS['sysmda_test_options']['sysmda_llms_txt_enabled'] );
+
+// End-to-end proof that the endpoint itself stays silent on a fresh install:
+// the option is absent, so maybe_render_llms_txt() must return before ever
+// reaching render()/exit — safe to call directly here only because that
+// early return is the branch under test. Never call this method in a test
+// once the option is enabled: the success path ends in exit() and would
+// terminate the whole suite.
+$_SERVER['REQUEST_URI'] = '/llms.txt';
+ob_start();
+$sysmda_llms_controller->maybe_render_llms_txt();
+$sysmda_llms_default_output = ob_get_clean();
+unset( $_SERVER['REQUEST_URI'] );
+check( 'llms: maybe_render_llms_txt() renders nothing on a fresh install', '', $sysmda_llms_default_output );
+
 // ─── LlmsTxtController: validators on the index ───────────────────────
 //
 // The ETag hashes the BYTES about to be sent, not cache_version(): the version

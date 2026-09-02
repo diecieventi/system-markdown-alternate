@@ -156,6 +156,11 @@ class MarkdownController {
 	 * is_negotiable_request() covers that gate transitively, because it also
 	 * returns false with no enabled type.
 	 *
+	 * Reads the option through LlmsTxtController::is_enabled() rather than its
+	 * own get_option() call, so this predicate and the endpoint itself cannot
+	 * drift onto different defaults again — which is exactly how the previous
+	 * default went stale across four separate call sites in the first place.
+	 *
 	 * Anything that later widens this beyond negotiable requests MUST re-add
 	 * the PostSupport::supported_post_types() check explicitly: the two are in
 	 * step by construction here and nothing enforces it.
@@ -169,7 +174,7 @@ class MarkdownController {
 			return false;
 		}
 
-		return '1' === get_option( 'sysmda_llms_txt_enabled', '0' );
+		return LlmsTxtController::is_enabled();
 	}
 
 	/**

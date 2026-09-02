@@ -56,14 +56,7 @@ class LlmsTxtController {
 			return;
 		}
 
-		// Off by default: the endpoint intercepts /llms.txt at the earliest
-		// template_redirect priority and exits, which would otherwise take the
-		// URL over from any other plugin already serving it the moment a site
-		// owner enables a single post type for the unrelated .md feature.
-		// Serving this file is therefore always a manual, explicit opt-in from
-		// the panel — never on by construction. See the durable decision in
-		// AGENTS.md.
-		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '0' ) ) {
+		if ( ! self::is_enabled() ) {
 			return; // Disabled (the default) or not yet enabled in the admin panel.
 		}
 
@@ -83,6 +76,29 @@ class LlmsTxtController {
 
 		$this->render();
 		exit;
+	}
+
+	/**
+	 * Whether the /llms.txt endpoint is enabled in the admin panel.
+	 *
+	 * Off by default (`'0'`): the endpoint intercepts /llms.txt at the earliest
+	 * template_redirect priority and exits the moment it renders, which would
+	 * otherwise take the URL over from any other plugin already serving it the
+	 * moment a site owner enables a single post type for the unrelated .md
+	 * feature. Serving this file is therefore always a manual, explicit opt-in
+	 * from the panel — never on by construction. See the durable decision in
+	 * AGENTS.md.
+	 *
+	 * The single source of truth for that default, called from here,
+	 * `MarkdownController::should_advertise_llms_txt()` and
+	 * `AdminSettings::render_llmstxt_aside()` — not re-read as a literal
+	 * `get_option()` in each of them, which is exactly how the option's
+	 * default drifted out of step across four call sites before. Public
+	 * (rather than mirrored privately in each caller) precisely so those other
+	 * classes have one method to call instead of one literal to keep in sync.
+	 */
+	public static function is_enabled(): bool {
+		return '1' === get_option( 'sysmda_llms_txt_enabled', '0' );
 	}
 
 	/**
