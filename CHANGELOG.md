@@ -9,6 +9,27 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.49.5
+
+* **Changed: `/llms.txt` is now off by default, and enabling it is always a
+  manual, explicit choice** — reversing the `0.29.0`-era "on by default"
+  decision. `LlmsTxtController` intercepts `/llms.txt` at `template_redirect`
+  priority 0 and calls `exit` the moment it renders, which is a hard takeover:
+  if another plugin or SEO tool also generates `/llms.txt` dynamically (its
+  own request hook, not a physical file), this plugin's priority-0 exit wins
+  the race and the other handler is never reached. The built-in conflict
+  detector only ever shows an admin notice — it cannot prevent the takeover —
+  so shipping the endpoint on by default meant a fresh install could start
+  silently shadowing another plugin's `/llms.txt` the moment the owner ticked
+  a single post type for the unrelated `.md` feature. Serving this file is now
+  always something the site owner turns on themselves, from Settings →
+  Markdown Alternate → llms.txt, after checking the status panel for any
+  other plugin already serving it.
+  **Upgrade impact**: a site that never explicitly saved this toggle will see
+  `/llms.txt` stop responding after updating — re-enable it from the panel if
+  you want the endpoint. A site that explicitly turned it on (or off) keeps
+  its own choice; only the *default* changed.
+
 ## 0.49.4
 
 * Fixed image `alt`/`title` and link `title`/destination interpolation in the

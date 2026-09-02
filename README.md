@@ -88,9 +88,10 @@ Two consequences worth knowing:
 
 - `<link rel="alternate" type="text/markdown">` in the document head, and the
   same relation as a typed HTTP `Link` header (also on `HEAD`).
-- **`/llms.txt`** (optional): a content index for LLMs and agents, with an
-  optional enriched mode (site summary, curated "Key content", per-entry
-  descriptions) and optional last-modified dates. Both off by default.
+- **`/llms.txt`** (optional, off by default — enabling it is a manual choice):
+  a content index for LLMs and agents, with an optional enriched mode (site
+  summary, curated "Key content", per-entry descriptions) and optional
+  last-modified dates, both also off by default.
 - **Shortcodes** `[sysmda_md_url]`, `[sysmda_md_download]` and
   `[sysmda_md_actions]` — the last an opt-in split button that copies, opens or
   downloads the document, whose assets load only where it renders. All accept

@@ -38,11 +38,12 @@ the server.
   Markdown, `406`, feed, embed, trackback, paged comments, sub-pages). Turning
   `/llms.txt` off removes it while the alternate stays — the two are gated
   independently and nothing else exercises that. **Run the unconfigured case
-  first**: `/llms.txt` enabled but no content type selected is the default
-  state of a fresh install and the one where a naive gate advertises a 404, so
-  no `describedby` may appear anywhere. On a subdirectory install, confirm the
-  advertised target is the endpoint's real path under `home_url()` and that it
-  resolves.
+  first**: a fresh install has `/llms.txt` off by default, so confirm no
+  `describedby` appears anywhere in that state; then enable the toggle with no
+  content type selected yet — the one where a naive gate would advertise a
+  404 — and confirm it still stays silent. On a subdirectory install, confirm
+  the advertised target is the endpoint's real path under `home_url()` and
+  that it resolves.
 - Excluded shortcodes are absent from prose but survive literally inside inline
   and fenced code examples.
 - Embed blocks leave a usable address: a video embed becomes a link to it,

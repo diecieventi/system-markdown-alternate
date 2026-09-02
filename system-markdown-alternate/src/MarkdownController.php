@@ -151,10 +151,10 @@ class MarkdownController {
 	 *
 	 * Both conditions are required, and the second is not decoration: the
 	 * endpoint has a gate after its own option — it stays silent while no
-	 * content type is enabled — and the two option defaults are on and empty
-	 * respectively, so "the option is on" alone would advertise a target that
-	 * 404s on an unconfigured install. is_negotiable_request() covers that
-	 * gate transitively, because it also returns false with no enabled type.
+	 * content type is enabled — so an owner who enables the option before
+	 * selecting a content type still advertises no dead link.
+	 * is_negotiable_request() covers that gate transitively, because it also
+	 * returns false with no enabled type.
 	 *
 	 * Anything that later widens this beyond negotiable requests MUST re-add
 	 * the PostSupport::supported_post_types() check explicitly: the two are in
@@ -169,7 +169,7 @@ class MarkdownController {
 			return false;
 		}
 
-		return '1' === get_option( 'sysmda_llms_txt_enabled', '1' );
+		return '1' === get_option( 'sysmda_llms_txt_enabled', '0' );
 	}
 
 	/**

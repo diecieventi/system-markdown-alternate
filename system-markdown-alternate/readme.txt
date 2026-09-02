@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.49.4
+Stable tag: 0.49.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.49.5 =
+
+* Changed: the `/llms.txt` endpoint is now **off by default**. Enabling it takes the URL over immediately (the endpoint intercepts the request before anything else can answer it), so serving it is always a manual, explicit choice from Settings → Markdown Alternate → llms.txt — never assumed on your behalf. Sites that never touched this toggle will see `/llms.txt` stop responding after updating; re-enable it from the panel if you want the endpoint (see the Upgrade Notice below).
+
 = 0.49.4 =
 
 * Fixed image `alt`/`title` and link `title`/destination interpolation in the Markdown body, which was previously placed into the output with no escaping at all — a value containing `]`, `"` or a backslash could corrupt the surrounding Markdown syntax, and a destination containing a space or a parenthesis was never wrapped in angle brackets.
@@ -199,13 +203,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Updated the wordpress.org listing screenshots to the current settings panel (previously several versions out of date) and added a sixth screenshot showing the `[sysmda_md_actions]` front-end split button. Metadata and repository tooling only — no plugin code, output or behaviour changes.
 
-= 0.49.2 =
-
-* The Live Preview blueprint now lands on the site's front page instead of a raw `.md` response, so a first-time visitor sees an ordinary WordPress site to click around rather than a downloaded file with no context. Metadata and repository tooling only — no plugin code, output or behaviour changes.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.49.5 =
+/llms.txt now defaults to OFF instead of ON. If you rely on it, open Settings → Markdown Alternate → llms.txt and tick "Enable the /llms.txt endpoint" again after updating.
 
 = 0.8.0 =
 The GenerateBlocks Dynamic Tag is now always available when GenerateBlocks is active; the enable/disable toggle was removed. No action required.

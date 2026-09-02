@@ -56,15 +56,21 @@ class LlmsTxtController {
 			return;
 		}
 
-		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '1' ) ) {
-			return; // Disabled in the admin panel.
+		// Off by default: the endpoint intercepts /llms.txt at the earliest
+		// template_redirect priority and exits, which would otherwise take the
+		// URL over from any other plugin already serving it the moment a site
+		// owner enables a single post type for the unrelated .md feature.
+		// Serving this file is therefore always a manual, explicit opt-in from
+		// the panel — never on by construction. See the durable decision in
+		// AGENTS.md.
+		if ( '1' !== get_option( 'sysmda_llms_txt_enabled', '0' ) ) {
+			return; // Disabled (the default) or not yet enabled in the admin panel.
 		}
 
-		// The option is on by default, but with no enabled content type there is
-		// nothing to index: the endpoint would answer a site name and a tagline,
-		// and would take /llms.txt over from whatever else may be handling it
-		// while the rest of the plugin is still inactive. Stay out of the way
-		// until the site owner has selected something.
+		// With no enabled content type there is nothing to index: the endpoint
+		// would answer a bare site name and a tagline. Stay out of the way
+		// until the site owner has selected something, even if they enabled
+		// this toggle first.
 		if ( empty( PostSupport::supported_post_types() ) ) {
 			return;
 		}
