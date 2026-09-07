@@ -185,6 +185,19 @@ The v1 scope is done and widely exceeded. Implemented:
   out-of-post dependency fingerprints, see "Technical notes" 6), so a `304`
   always means the cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
+  **Only on `GET`/`HEAD`** (`0.50.1`, `MarkdownController::is_read_request()`,
+  shared with `LlmsTxtController`): `304` answers a revalidation, and the same
+  headers on another method are a precondition whose failure is `412` — which
+  neither endpoint implements, so such a request is served in full. An
+  anonymous `POST` carrying `If-None-Match: *` was answered `304`, a body-less
+  reply to a request that never asked for a body. The same predicate keeps
+  content negotiation off a non-read request on the **canonical permalink**,
+  which is WordPress's URL and not the plugin's: a form posting to the page it
+  sits on, with an `Accept` preferring Markdown, would otherwise get the
+  article (or a `406`) instead of being processed. The `.md` route is
+  deliberately NOT method-restricted beyond the conditional shortcut — that URL
+  serves nothing else, so a `POST` to it keeps getting the document rather than
+  the `404` WordPress would produce if the route stopped intercepting.
   `If-Modified-Since` is honoured **only while the date is a strong validator**:
   when the taxonomy block is emitted the body can change without
   `post_modified_gmt` moving, so the date check is skipped and the (taxonomy-aware)
@@ -930,6 +943,22 @@ The v1 scope is done and widely exceeded. Implemented:
     untouched — naming is a new, separate filter
     (`sysmda_md_hits_named_bot_patterns`), not a widened reach of the
     existing bot/human one.
+- **External review follow-up** (`docs/review-followup-plan.md`): an independent
+  review of `0.50.0` found eight defects. **Four shipped in `0.50.1`** (the
+  protected-pattern disclosure, dot segments inside a query or fragment,
+  `div`-grouped definition lists being deleted, and `304` on any HTTP method);
+  **five remain, none started**. In the order the plan recommends: a plugin
+  upgrade must invalidate date-only revalidation (the fix is a salt bump on a
+  version change, not a policy change — the mechanism already exists); the
+  Bricks description fallback loses ancestor exclusions; nested Bricks
+  templates may not move the fingerprint (**measure on the Bricks staging
+  before writing code** — the rendering half was never verified); synced-pattern
+  instance overrides are discarded (**measure the corpus first**: it needs WP
+  6.6+ and a pattern deliberately authored with overrides); and two small
+  performance items. A sixth, escaping Markdown syntax in the `# Title`, is
+  written up with a recommendation to decline — the obvious remedy
+  (`escape_inline()`) was measured and puts `&amp;` in the H1 of every title
+  containing an ampersand.
 - Once live on wordpress.org: translate the strings into Italian on
   translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
   gets built — no translation files live in this repo.
@@ -1206,6 +1235,26 @@ The v1 scope is done and widely exceeded. Implemented:
   returned `! empty( $post->post_password )` — it encoded the assumption the
   code was making instead of WordPress's actual behaviour; it now models the
   cookie, which is what makes the regression test bite.
+- **A password-protected synced pattern is never expanded, anywhere** (decided
+  September 2026, `0.50.1`, `BlockCleaner::expand_reusable()`): the referenced
+  `wp_block` must be published **and** carry no password. Core's own
+  `render_block_core_block()` refuses a protected reference, so without the same
+  check the plugin published text the HTML page does not — anonymously, and in
+  three places at once: the `.md` body, the front-matter `description` (whose
+  fallback walks the same expansion) and the enriched `/llms.txt` (which reuses
+  that fallback). One guard in one method closes all three, which is the reason
+  the expansion is worth keeping in a single place. Same reading as the
+  decision above: the test is `'' !== $post_password` on the *content*, never
+  `post_password_required()` on the visitor. Deliberately stricter than core for
+  the degenerate password `"0"`, which core's `! empty()` reads as unprotected.
+  Found by an external review that reproduced it over anonymous HTTP; the pure
+  suite could not see it because no fixture had ever put a password on a
+  pattern. **Corollary for anything that follows a reference out of the post**:
+  the referenced object's own eligibility is not implied by the referring post's
+  — it has to be asked. The cache fingerprint deliberately keeps covering the
+  protected pattern's modification date: over-invalidation is harmless, and
+  removing the password changes the body without touching the article's
+  `post_modified_gmt`.
 - **`/llms.txt` invalidation covers the site identity, and deliberately NOT the
   post format** (decided July 2026, closes M2 of the same review): the cached
   index is versioned on the site name and tagline as well, because they are its
@@ -2198,6 +2247,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section (designed, not started)
+│   ├── review-followup-plan.md   ← what the 0.50.0 external review found: 4 fixed in 0.50.1, 5 open
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
@@ -2923,6 +2973,20 @@ Test posts:
     default pages it creates on activation, or `wc_get_page_id()`/the three
     `woocommerce_*_page_id` options reproduced by hand as the live
     verification here did.
+
+22. **Protected synced pattern.** A published `wp_block` with a password, and a
+    public post that references it. The HTML page shows nothing for the
+    reference (core refuses it) → the `.md`, the front-matter `description`
+    (post with no SEO description and no excerpt) and the enriched `/llms.txt`
+    entry must show nothing either. Removing the password puts the content back
+    in all three. A pattern nested inside a public one is checked at its own
+    level, not the outer one's.
+
+23. **Method handling.** `curl -X POST -H 'If-None-Match: *' '<permalink>.md'`
+    → the full document, never `304`; the same on `/llms.txt`. `GET`/`HEAD`
+    with a matching validator still answer `304` with no body. A `POST` to the
+    canonical permalink with `Accept: text/markdown` → whatever WordPress does
+    with that request, never Markdown and never `406`.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
