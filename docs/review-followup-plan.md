@@ -59,8 +59,26 @@ first) adds a part for **every** `core/block` reference in the post —
 independently of the referenced pattern's status or password
 (`MetadataBuilder.php:424-446`). So a post that references a synced pattern
 always has a non-empty fingerprint, and that is precisely the population of R1:
-**the protected-pattern disclosure fix is not affected by this defect at all**,
-for any client.
+**for content the plugin itself reads, the protected-pattern disclosure fix
+reaches every client.** That covers all three built-in sources — `post_content`
+(`:362`), the ACF source fields named through `sysmda_acf_field_keys` (`:489`)
+and the panel's extra meta keys (`:541`) — the latter two walking their own
+values for references, and each adding a part per configured key regardless.
+
+**One residual, and it is the documented one** (raised by Codex on PR #137,
+verified): `ContentRenderer::render()` applies `sysmda_markdown_source_content`
+*before* parsing blocks (`ContentRenderer.php:62,77-78`), and `render_appended()`
+does the same for `sysmda_markdown_appended_html`, so a site whose **own
+callback** injects a `core/block` gets that pattern expanded into the body while
+`collect_pattern_refs()` — which reads the raw `post_content` — never sees it.
+With no other dependency on the post the fingerprint stays empty and the date
+survives, so such a site can still be answered `304` with a pre-fix body. This
+is the contract `docs/filters.md` already states — content a site injects owes
+`sysmda_markdown_cache_dependencies` — and it is **wider than R5**: that site
+already gets a stale `304` whenever the injected pattern itself changes, with or
+without an upgrade. Fixing R5 does not close it and should not try to; the point
+here is only that "reaches every client" is a statement about the built-in
+paths.
 
 What is genuinely exposed is a post carrying *no* out-of-post dependency —
 no synced pattern, no featured image, no Rank Math description, no ACF or extra
