@@ -573,6 +573,16 @@ class ContentRenderer {
 	 * The converter has no definition-list support and `strip_tags` is on, so an
 	 * untouched `<dl>` came out as its terms and definitions concatenated with no
 	 * separator at all ("TermDefinition").
+	 *
+	 * An unrecognized shape is left to the converter, never deleted. The
+	 * empty-fragment branch used to remove the whole list, and with the standard
+	 * `div` grouping below unsupported that is exactly what it did: a valid list
+	 * lost both its terms and its definitions, silently, and only when other
+	 * content surrounded it — on its own the document came back empty and
+	 * process_dom()'s fallback republished the raw text, which is why a
+	 * list-only fixture could not see this. Degrading to an imperfect conversion
+	 * is always better than dropping content, so the removal is now reserved for
+	 * a list that carries no text at all.
 	 */
 	private function flatten_definition_lists( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'dl' ) ) as $list ) {
@@ -582,26 +592,16 @@ class ContentRenderer {
 
 			$fragment = $dom->createDocumentFragment();
 
-			foreach ( iterator_to_array( $list->childNodes ) as $child ) {
-				if ( ! $child instanceof \DOMElement ) {
-					continue;
-				}
-
-				$name = strtolower( $child->nodeName );
-
-				if ( 'dt' !== $name && 'dd' !== $name ) {
-					continue;
-				}
-
+			foreach ( self::definition_entries( $list ) as $entry ) {
 				$paragraph = $dom->createElement( 'p' );
 				$target    = $paragraph;
 
-				if ( 'dt' === $name ) {
+				if ( 'dt' === strtolower( $entry->nodeName ) ) {
 					$target = $dom->createElement( 'strong' );
 					$paragraph->appendChild( $target );
 				}
 
-				foreach ( iterator_to_array( $child->childNodes ) as $inner ) {
+				foreach ( iterator_to_array( $entry->childNodes ) as $inner ) {
 					$target->appendChild( $inner );
 				}
 
@@ -609,12 +609,58 @@ class ContentRenderer {
 			}
 
 			if ( ! $fragment->hasChildNodes() ) {
-				$list->parentNode->removeChild( $list );
+				if ( '' === trim( $list->textContent ) ) {
+					$list->parentNode->removeChild( $list );
+				}
 				continue;
 			}
 
 			$list->parentNode->replaceChild( $fragment, $list );
 		}
+	}
+
+	/**
+	 * The `dt`/`dd` entries of a `<dl>`, in document order.
+	 *
+	 * The HTML standard allows each term/definition group to be wrapped in a
+	 * `div` child of the list (so the pair can be styled or annotated as a
+	 * unit), and a `dl` built that way has no `dt`/`dd` child of its own. That
+	 * shape is what a hand-written HTML block or a theme's own markup produces;
+	 * see the `dl` content model in the HTML standard.
+	 *
+	 * One level of grouping and no deeper, deliberately: collecting every
+	 * descendant `dt`/`dd` would pull the entries of a nested definition list
+	 * up into its parent. A nested list keeps its own entries and is flattened
+	 * by this pass's own iteration over that element.
+	 */
+	private static function definition_entries( \DOMElement $dl ): array {
+		$entries = array();
+
+		foreach ( iterator_to_array( $dl->childNodes ) as $child ) {
+			if ( ! $child instanceof \DOMElement ) {
+				continue;
+			}
+
+			$name = strtolower( $child->nodeName );
+
+			if ( 'dt' === $name || 'dd' === $name ) {
+				$entries[] = $child;
+				continue;
+			}
+
+			if ( 'div' !== $name ) {
+				continue;
+			}
+
+			foreach ( iterator_to_array( $child->childNodes ) as $grouped ) {
+				if ( $grouped instanceof \DOMElement
+					&& in_array( strtolower( $grouped->nodeName ), array( 'dt', 'dd' ), true ) ) {
+					$entries[] = $grouped;
+				}
+			}
+		}
+
+		return $entries;
 	}
 
 	/**
@@ -1292,9 +1338,23 @@ class ContentRenderer {
 			return $origin . $base_path . $url;
 		}
 
+		// Dot-segment removal applies to the PATH only: RFC 3986 §5.2.2 resolves
+		// the components separately, and a query or fragment is opaque text. A
+		// reference like `../asset?return=/a/../b` carries a path inside its
+		// query, and normalizing the whole string rewrote that value — worse, in
+		// `../asset#section/../other` the `..` inside the fragment consumed
+		// `asset` itself and the link landed on a different page entirely.
+		$suffix = '';
+		$cut    = strcspn( $url, '?#' );
+
+		if ( $cut < strlen( $url ) ) {
+			$suffix = substr( $url, $cut );
+			$url    = substr( $url, 0, $cut );
+		}
+
 		// Root-relative: resolve against the origin.
 		if ( '/' === $url[0] ) {
-			return $origin . $this->resolve_dot_segments( $url );
+			return $origin . $this->resolve_dot_segments( $url ) . $suffix;
 		}
 
 		// Document-relative: resolve against the permalink directory.
@@ -1302,26 +1362,46 @@ class ContentRenderer {
 			? $base_path
 			: (string) preg_replace( '#/[^/]*$#', '/', $base_path );
 
-		return $origin . $this->resolve_dot_segments( $dir . $url );
+		return $origin . $this->resolve_dot_segments( $dir . $url ) . $suffix;
 	}
 
 	/**
-	 * Normalizes "." and ".." path segments while preserving the leading slash.
+	 * Removes "." and ".." path segments, preserving the leading slash (RFC 3986
+	 * §5.2.4). Takes a path, never a whole reference: see absolutize(), which
+	 * splits the query and the fragment off first.
+	 *
+	 * Two properties of the algorithm are easy to lose and were both wrong here:
+	 *
+	 * - a dot segment in FINAL position leaves a trailing slash behind
+	 *   (`/a/b/..` resolves to `/a/`, not `/a`), because the RFC's step 2C
+	 *   replaces the last `/..` with a `/` rather than deleting it. Dropping it
+	 *   turns a directory reference into a document one, which a server is free
+	 *   to answer differently;
+	 * - the only segment `..` may not consume is the leading empty one that
+	 *   carries the root slash. Refusing to pop ANY empty segment — which is
+	 *   what a `'' !== end( $out )` guard does — also protected the empty
+	 *   segment inside a doubled slash, so `/a//../b` came out `/a//b`.
 	 */
 	private function resolve_dot_segments( string $path ): string {
-		$out = array();
+		$segments = explode( '/', $path );
+		$last     = count( $segments ) - 1;
+		$out      = array();
 
-		foreach ( explode( '/', $path ) as $segment ) {
-			if ( '.' === $segment ) {
+		foreach ( $segments as $index => $segment ) {
+			if ( '.' !== $segment && '..' !== $segment ) {
+				$out[] = $segment;
 				continue;
 			}
-			if ( '..' === $segment ) {
-				if ( ! empty( $out ) && '' !== end( $out ) ) {
-					array_pop( $out );
-				}
-				continue;
+
+			// Percent-encoded dots are not dot segments and never reach here:
+			// the comparison is on the literal text, so `%2e%2e` stays a name.
+			if ( '..' === $segment && count( $out ) > 1 ) {
+				array_pop( $out );
 			}
-			$out[] = $segment;
+
+			if ( $index === $last ) {
+				$out[] = ''; // Trailing slash: the reference names a directory.
+			}
 		}
 
 		$result = implode( '/', $out );

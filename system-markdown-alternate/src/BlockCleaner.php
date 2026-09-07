@@ -144,6 +144,19 @@ class BlockCleaner {
 	 * Expands a `core/block` into the referenced `wp_block` post content, strips
 	 * excluded shortcodes, and cleans it recursively.
 	 *
+	 * The referenced post must be published AND unprotected. Core's own
+	 * `render_block_core_block()` refuses a reference whose `post_password` is
+	 * set, so without the same check this expansion published text the HTML page
+	 * does not: an anonymous `.md` — and, through the description fallback, the
+	 * front matter and the enriched `/llms.txt` — carried the body of a
+	 * protected pattern. The rule is about the content, not the visitor, exactly
+	 * as in `PostSupport::is_servable()`: the password field is read directly and
+	 * never through `post_password_required()`, which answers the different
+	 * question of whether *this* visitor still has to supply it.
+	 *
+	 * Deliberately stricter than core's `! empty()` for the degenerate password
+	 * `"0"`, which core reads as unprotected. A password is a password.
+	 *
 	 * @return array Clean pattern blocks (empty when expansion is not possible).
 	 */
 	private function expand_reusable( array $block ): array {
@@ -157,7 +170,8 @@ class BlockCleaner {
 
 		if ( ! $reusable instanceof \WP_Post
 			|| 'wp_block' !== $reusable->post_type
-			|| 'publish' !== $reusable->post_status ) {
+			|| 'publish' !== $reusable->post_status
+			|| '' !== (string) $reusable->post_password ) {
 			return array();
 		}
 

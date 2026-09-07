@@ -204,8 +204,17 @@ class LlmsTxtController {
 	 * identity — and inventing one would be a validator that lies. Without the
 	 * header there is nothing for `If-Modified-Since` to compare against, so it
 	 * is not honoured either.
+	 *
+	 * Restricted to read requests for the same reason as
+	 * `MarkdownController::handle_conditional()`: a `304` answers a `GET`/`HEAD`
+	 * revalidation, and on another method the same header is a precondition
+	 * this endpoint does not implement. One rule, applied to both endpoints.
 	 */
 	private function handle_conditional( string $etag ): bool {
+		if ( ! MarkdownController::is_read_request() ) {
+			return false;
+		}
+
 		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] )
 			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_NONE_MATCH'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 			: '';
