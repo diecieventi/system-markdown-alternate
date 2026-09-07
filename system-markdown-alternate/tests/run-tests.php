@@ -753,6 +753,18 @@ function check( $label, $expected, $actual ) {
 }
 
 /**
+ * Runs $callback with $_SERVER['REQUEST_METHOD'] set, and restores its absence
+ * afterwards: the harness is not an HTTP request, and a method left behind would
+ * silently change what every later test exercises.
+ */
+function sysmda_with_method( $method, callable $callback ) {
+	$_SERVER['REQUEST_METHOD'] = $method;
+	$result                    = $callback();
+	unset( $_SERVER['REQUEST_METHOD'] );
+	return $result;
+}
+
+/**
  * Creates an invokable reflection method across the supported PHP range.
  *
  * Private methods require setAccessible() through PHP 8.0. Since PHP 8.1 they
@@ -908,6 +920,57 @@ $GLOBALS['sysmda_test_posts'][11] = new WP_Post( array( 'ID' => 11, 'post_type' 
 check( 'reusable: draft discarded', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 11 ) ) ) ) );
 check( 'reusable: nonexistent ref discarded', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 999 ) ) ) ) );
 
+// A password-protected pattern has no Markdown representation, exactly as it has
+// no HTML one: core's own render_block_core_block() refuses a reference whose
+// post_password is set, so expanding it here published — anonymously, in the
+// .md, in the front-matter description and in the enriched /llms.txt — text the
+// page itself does not carry. The test is on the content, never on whether this
+// visitor happens to hold the password.
+$GLOBALS['sysmda_test_posts'][14] = new WP_Post(
+	array(
+		'ID'            => 14,
+		'post_type'     => 'wp_block',
+		'post_status'   => 'publish',
+		'post_content'  => 'PATTERN_LOCKED',
+		'post_password' => 'secret',
+	)
+);
+$GLOBALS['sysmda_test_parsed']['PATTERN_LOCKED'] = array( make_block( 'core/paragraph' ) );
+check( 'reusable: password-protected discarded', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 14 ) ) ) ) );
+
+// "0" is a password like any other. Core's guard is `! empty()`, which reads it
+// as unprotected; this one is deliberately stricter, and the difference is worth
+// pinning rather than rediscovering.
+$GLOBALS['sysmda_test_posts'][15] = new WP_Post(
+	array(
+		'ID'            => 15,
+		'post_type'     => 'wp_block',
+		'post_status'   => 'publish',
+		'post_content'  => 'PATTERN_LOCKED',
+		'post_password' => '0',
+	)
+);
+check( 'reusable: password "0" is still a password', array(), $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 15 ) ) ) ) );
+
+// The guard has to hold at every level of the expansion, not only at the first:
+// a public pattern referencing a protected one keeps its own content and nothing
+// of the protected reference.
+$GLOBALS['sysmda_test_posts'][16] = new WP_Post(
+	array(
+		'ID'           => 16,
+		'post_type'    => 'wp_block',
+		'post_status'  => 'publish',
+		'post_content' => 'PATTERN_WRAPPER',
+	)
+);
+$GLOBALS['sysmda_test_parsed']['PATTERN_WRAPPER'] = array(
+	make_block( 'core/paragraph' ),
+	make_block( 'core/block', array(), array( 'ref' => 14 ) ),
+);
+$out = $cleaner->clean( array( make_block( 'core/block', array(), array( 'ref' => 16 ) ) ) );
+check( 'nested reusable: protected reference dropped', 1, count( $out ) );
+check( 'nested reusable: public sibling kept', 'core/paragraph', $out[0]['blockName'] );
+
 // Recursion guard: a pattern that references itself.
 $GLOBALS['sysmda_test_posts'][12] = new WP_Post( array( 'ID' => 12, 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_content' => 'PATTERN_SELF' ) );
 $GLOBALS['sysmda_test_parsed']['PATTERN_SELF'] = array( make_block( 'core/paragraph' ), make_block( 'core/block', array(), array( 'ref' => 12 ) ) );
@@ -955,6 +1018,32 @@ check( 'absolutize: TEL uppercase', 'TEL:+390212345', $sysmda_abs( 'TEL:+3902123
 check( 'absolutize: data', 'data:image/png;base64,AAA', $sysmda_abs( 'data:image/png;base64,AAA' ) );
 check( 'absolutize: DATA uppercase', 'DATA:image/png;base64,AAA', $sysmda_abs( 'DATA:image/png;base64,AAA' ) );
 check( 'absolutize: fragment', '#section-2', $sysmda_abs( '#section-2' ) );
+
+// Dot-segment removal applies to the path and to nothing else. A query or a
+// fragment is opaque text: `?return=/a/../b` is a value that happens to look
+// like a path, and normalizing it rewrote the value — and, in the fragment case,
+// consumed the very document the link points at (`../asset#section/../other`
+// resolved to `/blog/other`, with `asset` gone).
+check( 'absolutize: dots inside a query are not path navigation', 'https://example.com/blog/asset?return=/a/../b', $sysmda_abs( '../asset?return=/a/../b' ) );
+check( 'absolutize: dots inside a fragment are not path navigation', 'https://example.com/blog/asset#section/../other', $sysmda_abs( '../asset#section/../other' ) );
+check( 'absolutize: query and fragment kept together', 'https://example.com/blog/my-post/x?y=1#z', $sysmda_abs( './x?y=1#z' ) );
+
+// A dot segment in final position names a directory, so it leaves the trailing
+// slash behind (RFC 3986 §5.2.4 step 2C replaces the last `/..` with a `/`).
+check( 'absolutize: terminal .. keeps the trailing slash', 'https://example.com/blog/', $sysmda_abs( '..' ) );
+check( 'absolutize: terminal . keeps the trailing slash', 'https://example.com/blog/my-post/', $sysmda_abs( '.' ) );
+
+// The only empty segment `..` may not consume is the leading one carrying the
+// root slash. Refusing to pop ANY empty segment also protected the one inside a
+// doubled slash, and `/a//../b` came out `/a//b`.
+check( 'absolutize: doubled slash before ..', 'https://example.com/a/b', $sysmda_abs( '/a//../b' ) );
+check( 'absolutize: traversal above the root stops at it', 'https://example.com/up', $sysmda_abs( '../../../up' ) );
+
+// Percent-encoded dots are a name, not a dot segment, and stay encoded.
+check( 'absolutize: percent-encoded dots are not dot segments', 'https://example.com/blog/my-post/%2e%2e/x', $sysmda_abs( '%2e%2e/x' ) );
+
+// Query-only references still resolve against the base PATH, not its directory.
+check( 'absolutize: query-only against the base path', 'https://example.com/blog/my-post/?page=2', $sysmda_abs( '?page=2' ) );
 
 // ─── ContentRenderer::expand_shortcodes ──────────────────────────────────────
 //
@@ -1201,6 +1290,28 @@ $GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
 
 $p = new WP_Post( array( 'ID' => 26, 'post_content' => $sysmda_desc_src ) );
 check( 'description: ordinary block content unaffected', 'First. Second.', $metadata->description( $p ) );
+
+// The description fallback expands synced patterns, so the protected-pattern
+// leak reached the front matter and the enriched /llms.txt as well as the body —
+// which is where it was actually observed. One guard in expand_reusable() closes
+// all three, and this asserts the path rather than the guard: a post with no SEO
+// description and no excerpt is summarised straight from the source.
+$sysmda_desc_src = '<!-- wp:paragraph --><p>Public intro.</p><!-- /wp:paragraph --><!-- wp:block {"ref":14} /-->';
+
+$GLOBALS['sysmda_test_parsed'][ $sysmda_desc_src ] = array(
+	sysmda_source_block( 'core/paragraph', '<p>Public intro.</p>' ),
+	sysmda_source_block( 'core/block', '', array( 'ref' => 14 ) ),
+);
+$GLOBALS['sysmda_test_parsed']['PATTERN_LOCKED'] = array( sysmda_source_block( 'core/paragraph', '<p>Members only.</p>' ) );
+
+$p = new WP_Post( array( 'ID' => 27, 'post_content' => $sysmda_desc_src ) );
+check( 'description: protected pattern text never reaches the front matter', 'Public intro.', $metadata->description( $p ) );
+
+// The same reference without the password is expanded as it always was: the
+// guard must not cost an ordinary synced pattern its content.
+$GLOBALS['sysmda_test_posts'][14]->post_password = '';
+check( 'description: an unprotected pattern is still expanded', 'Public intro. Members only.', $metadata->description( $p ) );
+$GLOBALS['sysmda_test_posts'][14]->post_password = 'secret';
 
 // ─── MetadataBuilder::build_front_matter (F1 golden conformance) ─────
 //
@@ -1970,6 +2081,46 @@ $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
 check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 
+// A `304` answers a GET/HEAD revalidation. On any other method the same header
+// is a precondition, whose failure is a `412` and never a "not modified" — and
+// an anonymous `POST` carrying `If-None-Match: *` was answered `304`, i.e. a
+// body-less reply to a request that had not asked for a body. The wildcard is
+// what makes the case sharp: etag_matches() returns true for it without
+// comparing anything, so nothing else could stop the 304.
+$_SERVER['HTTP_IF_NONE_MATCH'] = '*';
+
+$sysmda_hc_with_method = function ( $method ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv, $sysmda_cv_post ) {
+	$GLOBALS['sysmda_test_status'] = array();
+	$_SERVER['REQUEST_METHOD']     = $method;
+	$result                        = $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) );
+	unset( $_SERVER['REQUEST_METHOD'] );
+	return $result;
+};
+
+check( 'conditional: POST is never answered 304', false, $sysmda_hc_with_method( 'POST' ) );
+check( 'conditional: no 304 status sent on POST', array(), $GLOBALS['sysmda_test_status'] );
+check( 'conditional: PUT is never answered 304', false, $sysmda_hc_with_method( 'PUT' ) );
+check( 'conditional: OPTIONS is never answered 304', false, $sysmda_hc_with_method( 'OPTIONS' ) );
+
+// The two methods that do revalidate keep working, whatever case they arrive in.
+check( 'conditional: GET still revalidates', true, $sysmda_hc_with_method( 'GET' ) );
+check( 'conditional: HEAD still revalidates', true, $sysmda_hc_with_method( 'HEAD' ) );
+check( 'conditional: 304 actually sent on HEAD', array( 304 ), $GLOBALS['sysmda_test_status'] );
+check( 'conditional: lowercase method still revalidates', true, $sysmda_hc_with_method( 'get' ) );
+
+// No method at all means no HTTP request — WP-CLI, cron, this harness — and must
+// keep behaving like a read, or the endpoint would lose the conditional path
+// outside a request context.
+$GLOBALS['sysmda_test_status'] = array();
+check( 'conditional: a missing method reads as GET', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+check( 'is_read_request: GET', true, sysmda_with_method( 'GET', array( MarkdownController::class, 'is_read_request' ) ) );
+check( 'is_read_request: HEAD', true, sysmda_with_method( 'HEAD', array( MarkdownController::class, 'is_read_request' ) ) );
+check( 'is_read_request: POST', false, sysmda_with_method( 'POST', array( MarkdownController::class, 'is_read_request' ) ) );
+check( 'is_read_request: DELETE', false, sysmda_with_method( 'DELETE', array( MarkdownController::class, 'is_read_request' ) ) );
+check( 'is_read_request: absent', true, MarkdownController::is_read_request() );
+
 // The same rule for the out-of-post dependencies, and it is NOT covered by the
 // taxonomy check above: a client sending only If-Modified-Since never presents
 // the ETag, so folding synced patterns, the featured image, the description and
@@ -2239,6 +2390,25 @@ check( 'llms: stale validator => full body', false, $sysmda_llms_hc( '"outdated"
 check( 'llms: no 304 for a stale validator', array(), $GLOBALS['sysmda_test_status'] );
 // Same weak comparison as the .md endpoint: the index reuses etag_matches().
 check( 'llms: weakened validator still revalidates', true, $sysmda_llms_hc( 'W/' . $sysmda_llms_etag, $sysmda_llms_etag ) );
+
+// One rule for both endpoints: a 304 answers a GET/HEAD revalidation, and the
+// index must not answer one to a POST any more than the .md route does.
+check(
+	'llms: POST is never answered 304',
+	false,
+	sysmda_with_method( 'POST', function () use ( $sysmda_llms_hc, $sysmda_llms_etag ) {
+		return $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag );
+	} )
+);
+check( 'llms: no 304 status sent on POST', array(), $GLOBALS['sysmda_test_status'] );
+check(
+	'llms: HEAD still revalidates',
+	true,
+	sysmda_with_method( 'HEAD', function () use ( $sysmda_llms_hc, $sysmda_llms_etag ) {
+		return $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag );
+	} )
+);
+
 $GLOBALS['sysmda_test_status'] = array();
 
 // ─── Cache-Control on the URLs the plugin owns ────────────────────────
@@ -3142,6 +3312,49 @@ check(
 	'dom: dl flattened to bold term + paragraphs',
 	'<p><strong>Term</strong></p><p>Def</p>',
 	$sysmda_dom( '<dl><dt>Term</dt><dd>Def</dd></dl>' )
+);
+
+// The standard also allows each pair to be wrapped in a `div` child of the list,
+// which is what hand-written HTML and theme markup produce. Recognizing only
+// direct dt/dd children left the fragment empty, and the empty branch REMOVED
+// the list: term and definition both disappeared from the document.
+//
+// The surrounding prose is load-bearing in this fixture. Without it the whole
+// document comes back empty and process_dom()'s fallback republishes the raw
+// text ("TermDefinition"), so a list-only test passes while the defect is
+// intact — which is exactly how it survived.
+check(
+	'dom: div-grouped dl flattened, with prose around it',
+	'<p>Before</p><p><strong>Term</strong></p><p>Definition</p><p>After</p>',
+	$sysmda_dom( '<p>Before</p><dl><div><dt>Term</dt><dd>Definition</dd></div></dl><p>After</p>' )
+);
+check(
+	'dom: several div-grouped entries keep their order',
+	'<p><strong>A</strong></p><p>1</p><p><strong>B</strong></p><p>2</p>',
+	$sysmda_dom( '<dl><div><dt>A</dt><dd>1</dd></div><div><dt>B</dt><dd>2</dd></div></dl>' )
+);
+check(
+	'dom: grouped and direct entries in one list',
+	'<p><strong>A</strong></p><p>1</p><p><strong>B</strong></p><p>2</p>',
+	$sysmda_dom( '<dl><dt>A</dt><dd>1</dd><div><dt>B</dt><dd>2</dd></div></dl>' )
+);
+check(
+	'dom: one term with several definitions',
+	'<p><strong>Term</strong></p><p>1</p><p>2</p>',
+	$sysmda_dom( '<dl><div><dt>Term</dt><dd>1</dd><dd>2</dd></div></dl>' )
+);
+
+// A shape this pass does not recognize is left to the converter, never deleted:
+// an imperfect conversion beats losing the text.
+check(
+	'dom: unrecognized dl content is kept',
+	'<p>Before</p><dl><p>Loose text</p></dl><p>After</p>',
+	$sysmda_dom( '<p>Before</p><dl><p>Loose text</p></dl><p>After</p>' )
+);
+check(
+	'dom: a genuinely empty dl is still removed',
+	'<p>Before</p><p>After</p>',
+	$sysmda_dom( '<p>Before</p><dl></dl><p>After</p>' )
 );
 
 // Code blocks: a highlighter that wraps each line in its own element and relies

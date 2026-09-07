@@ -85,6 +85,15 @@ class MarkdownController {
 		// responding with Markdown or leaving HTML rendering to WordPress.
 		$this->send_vary_header();
 
+		// The canonical permalink is WordPress's URL, borrowed for a read. A
+		// POST to it belongs to whatever handles that form, and answering it
+		// with the article — or with a `406` — would swallow the submission.
+		// Sent after the Vary header, which describes the URL rather than this
+		// request and stays exactly as it was.
+		if ( ! self::is_read_request() ) {
+			return;
+		}
+
 		if ( $this->prefers_markdown() ) {
 			// The negotiated Markdown shares its URL with the HTML page: page
 			// caches that key by URL only (observed on some LiteSpeed setups,
@@ -814,6 +823,37 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether this is a read request, i.e. one this plugin may answer with a
+	 * representation of its own.
+	 *
+	 * Two rules depend on it, and both were missing. A `304` is reserved for
+	 * `GET`/`HEAD` (RFC 9110 §13.1.2: on any other method a failed
+	 * `If-None-Match` is a `412`, never a "not modified"), and an anonymous
+	 * `POST` carrying `If-None-Match: *` was answered `304` — a body-less reply
+	 * to a request that was not asking for a body. And on the canonical
+	 * permalink, which belongs to WordPress rather than to this plugin, taking
+	 * a non-read request over would swallow it: a form posting to the page it
+	 * is on, with an `Accept` that happens to prefer Markdown, would receive
+	 * the article instead of being processed.
+	 *
+	 * The `.md` route is deliberately NOT restricted: that URL is this
+	 * plugin's own and answers nothing else, so a `POST` to it keeps getting
+	 * the document rather than the `404` WordPress would produce if the route
+	 * stopped intercepting. Only the conditional shortcut is withheld there.
+	 *
+	 * A missing method means no HTTP request at all — WP-CLI, cron, the test
+	 * harness — and reads as `GET`, so nothing that runs outside a request
+	 * loses behaviour it had.
+	 */
+	public static function is_read_request(): bool {
+		$method = isset( $_SERVER['REQUEST_METHOD'] )
+			? strtoupper( trim( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: 'GET';
+
+		return 'GET' === $method || 'HEAD' === $method || '' === $method;
+	}
+
+	/**
 	 * The `Cache-Control` value for the plugin's own URLs.
 	 *
 	 * Public and separate from the header call so the policy is testable
@@ -972,6 +1012,15 @@ class MarkdownController {
 		// anonymous fetch. Such a request is always answered in full, and
 		// send_headers() leaves the validators off it for the same reason.
 		if ( ! self::representation_is_shared() ) {
+			return false;
+		}
+
+		// A conditional GET/HEAD is a revalidation; the same headers on another
+		// method are a precondition, whose failure is a `412` rather than a
+		// `304`. This endpoint implements neither, so it simply answers in
+		// full. Like the rule above, the precondition lives here rather than at
+		// the call site so no caller can forget it.
+		if ( ! self::is_read_request() ) {
 			return false;
 		}
 

@@ -196,7 +196,11 @@ is byte-identical to a site that never had it.
    (`BlockCleaner`): excluded blocks are dropped, synced patterns
    (`core/block`) are expanded and cleaned with the same rules (with a
    reference-cycle guard), and elements carrying excluded CSS classes are
-   removed. Cleaned blocks are then rendered with `render_block()`.
+   removed. A pattern is expanded only when the referenced `wp_block` is
+   published **and** carries no password, which is the same gate WordPress
+   applies when rendering the HTML page: a protected pattern contributes
+   nothing to the Markdown, the front-matter `description` or `/llms.txt`
+   (since `0.50.1`). Cleaned blocks are then rendered with `render_block()`.
 2. **HTML cleanup** — excluded shortcodes are stripped; absolute URLs are
    resolved against the **post permalink** (document-relative, `../` and
    root-relative links all become absolute); syntax-highlighter markup is reduced
@@ -231,7 +235,7 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 | Source | Emitted as |
 |---|---|
 | `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table; a `<caption>` becomes a line above it |
-| `<dl>` / `<dt>` / `<dd>` | `**Term**` as its own paragraph, each definition as a following paragraph |
+| `<dl>` / `<dt>` / `<dd>` | `**Term**` as its own paragraph, each definition as a following paragraph — including the standard shape that wraps each pair in a `<div>` child of the list (since `0.50.1`) |
 | `<figure>` around an image | paragraph (so images and captions get blank-line separation) |
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
 | `<pre>` from a syntax highlighter | fenced block, with the `language-*` class preserved as the info string and line breaks reconstructed when the highlighter relies on CSS for them |
@@ -493,6 +497,15 @@ brief, a successful Markdown response carries:
 
   Authenticated `.md` requests are rebuilt in the visitor's context, bypass the
   shared body cache and carry neither validator; they are never answered `304`.
+
+  Conditional headers are honoured on `GET` and `HEAD` only (since `0.50.1`).
+  On any other method the same headers are a precondition rather than a
+  revalidation — a failed `If-None-Match` there is a `412`, never a `304` — and
+  neither endpoint implements one, so such a request is answered in full. On
+  the canonical permalink a non-`GET`/`HEAD` request is left to WordPress
+  entirely: neither negotiated Markdown nor the `406` takes it over. The `.md`
+  URL itself keeps answering every method with the document, since nothing else
+  is served there.
 
   Since `0.28.0` the anonymous `ETag` is **weak** (`W/"…"`). It is derived from
   the post's modification date, the plugin version, the settings salt and the

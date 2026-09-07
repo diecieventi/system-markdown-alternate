@@ -116,6 +116,16 @@ the server.
   WooCommerce for real on a future pass to close that gap, the same way the
   ACF fixture above is still owed a real field group.
 - `/llms.txt` is healthy and excludes ineligible content.
+- A **password-protected synced pattern** referenced by a public post
+  contributes nothing to that post's `.md`, its front-matter `description`
+  (use a post with no SEO description and no excerpt, so the fallback runs) or
+  its enriched `/llms.txt` entry — matching the HTML page, which core already
+  renders without it. Removing the password puts the content back in all three.
+- A `POST` carrying `If-None-Match: *` to a `.md` URL and to `/llms.txt`
+  returns the full response, never `304`, while `GET`/`HEAD` with a matching
+  validator still return `304` with no body. A `POST` to a canonical permalink
+  with `Accept: text/markdown` is handled by WordPress, not answered with
+  Markdown or a `406`.
 - Render `[sysmda_md_actions]` through the real `wp_footer` both before and
   after WordPress's footer-script printer (representative priorities 10 and 25).
   In both cases markup, localization and exactly one script must be emitted.

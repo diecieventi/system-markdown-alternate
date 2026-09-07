@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.50.0
+Stable tag: 0.50.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,13 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.50.1 =
+
+* Fixed: a **password-protected synced pattern** was expanded into the Markdown of every post that used it. WordPress refuses to render such a pattern on the HTML page, so its text was reaching the `.md`, the front-matter `description` and the enriched `/llms.txt` while the page itself showed nothing. A password on a pattern now keeps it out of all of them, for everyone.
+* Fixed: relative links whose query string or fragment contains `../` were rewritten. `../file?return=/a/../b` had its value mangled, and `../file#section/../other` lost the target document itself. Dot segments are now resolved in the path only, as the URL standard requires; a trailing `..` also keeps its slash, and `/a//../b` resolves to `/a/b`.
+* Fixed: a definition list whose term/definition pairs are wrapped in `<div>` elements — a shape the HTML standard allows and hand-written markup often uses — was **removed entirely** from the Markdown, terms and definitions alike. It is now flattened like any other definition list, and an unrecognised list is never deleted: at worst it converts imperfectly.
+* Fixed: conditional requests (`If-None-Match` / `If-Modified-Since`) are now answered with `304` only on `GET` and `HEAD`, and a `POST` to a post's permalink is left to WordPress instead of being answered with Markdown or a `406`.
+
 = 0.50.0 =
 
 * Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. The new default reaches new installations — and the one unusual case of a site whose content types come from the `sysmda_markdown_supported_post_types` filter alone, with the settings page never saved: there the endpoint stops answering until you tick the box.
@@ -199,13 +206,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed image `alt`/`title` and link `title`/destination interpolation in the Markdown body, which was previously placed into the output with no escaping at all — a value containing `]`, `"` or a backslash could corrupt the surrounding Markdown syntax, and a destination containing a space or a parenthesis was never wrapped in angle brackets.
 * `Tested up to: 7.1`.
 
-= 0.49.3 =
-
-* Updated the wordpress.org listing screenshots to the current settings panel (previously several versions out of date) and added a sixth screenshot showing the `[sysmda_md_actions]` front-end split button. Metadata and repository tooling only — no plugin code, output or behaviour changes.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.50.1 =
+Recommended for every site. A password on a synced pattern no longer leaks that pattern's text into the Markdown of the posts using it. Also fixes relative links carrying ../ inside a query or fragment, and definition lists whose pairs are wrapped in div elements (previously dropped from the output entirely).
 
 = 0.50.0 =
 /llms.txt now ships OFF on new installations. Existing sites keep whatever they have saved, so nothing changes for them. Only a site that never saved the settings page is affected — and it only notices if its content types come from the sysmda_markdown_supported_post_types filter; one tick in Settings - Markdown Alternate - llms.txt restores the endpoint.
