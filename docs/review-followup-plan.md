@@ -48,6 +48,49 @@ Narrow in practice: a client that received both validators sends both, and
 `If-None-Match` takes precedence. It bites IMS-only clients — some crawlers and
 proxies, `curl -z`, an intermediary that strips `ETag`.
 
+**And narrower still, in a way worth knowing before estimating the impact.**
+Codex raised this independently on PR #136 and reached the same fix, but framed
+the exposure as a client keeping "the pre-fix Markdown indefinitely" after
+`0.50.1`. That overstates it, because the date path is *already* off for most of
+the posts this release changed. `date_is_strong_validator()` refuses the date as
+soon as `dependencies_fingerprint()` is non-empty, and
+`MetadataBuilder::collect_pattern_refs()` (`MetadataBuilder.php:362`, walked
+first) adds a part for **every** `core/block` reference in the post —
+independently of the referenced pattern's status or password
+(`MetadataBuilder.php:424-446`). So a post that references a synced pattern
+always has a non-empty fingerprint, and that is precisely the population of R1:
+**for content the plugin itself reads, the protected-pattern disclosure fix
+reaches every client.** That covers all three built-in sources — `post_content`
+(`:362`), the ACF source fields named through `sysmda_acf_field_keys` (`:489`)
+and the panel's extra meta keys (`:541`) — the latter two walking their own
+values for references, and each adding a part per configured key regardless.
+
+**One residual, and it is the documented one** (raised by Codex on PR #137,
+verified): `ContentRenderer::render()` applies `sysmda_markdown_source_content`
+*before* parsing blocks (`ContentRenderer.php:62,77-78`), and `render_appended()`
+does the same for `sysmda_markdown_appended_html`, so a site whose **own
+callback** injects a `core/block` gets that pattern expanded into the body while
+`collect_pattern_refs()` — which reads the raw `post_content` — never sees it.
+With no other dependency on the post the fingerprint stays empty and the date
+survives, so such a site can still be answered `304` with a pre-fix body. This
+is the contract `docs/filters.md` already states — content a site injects owes
+`sysmda_markdown_cache_dependencies` — and it is **wider than R5**: that site
+already gets a stale `304` whenever the injected pattern itself changes, with or
+without an upgrade. Fixing R5 does not close it and should not try to; the point
+here is only that "reaches every client" is a statement about the built-in
+paths.
+
+What is genuinely exposed is a post carrying *no* out-of-post dependency —
+no synced pattern, no featured image, no Rank Math description, no ACF or extra
+meta field, no selected taxonomy — whose salt is older than its own
+modification date, and whose output an upgrade changed. For `0.50.1` that means
+an R4 post (a relative link whose query or fragment contains `../`) or an R6
+post (a `<dl>` grouping its pairs in `div` children). Real, and a fidelity
+problem rather than a disclosure one. The fix is still worth doing on its own
+terms: the guarantee in `AGENTS.md` — a `304` means the body would be identical
+— does not currently survive an upgrade, and the next release that changes
+conversion may well touch plain posts.
+
 **Recommended fix — bump the cache salt when the version changes.** The
 mechanism already exists and its contract is exactly this shape: a site-wide,
 rare invalidation, and `date_is_strong_validator()` already refuses the date
