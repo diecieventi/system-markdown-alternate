@@ -968,8 +968,10 @@ The v1 scope is done and widely exceeded. Implemented:
     read as a close: none of the three connected installs contains a single
     synced pattern, so the denominator is zero. Re-run the query in the plan on
     the production reference site before spending anything.
-  What remains: B1 (above), the Bricks description fallback losing ancestor
-  exclusions, R3 (parked pending that corpus), and two small performance items
+  **R2 also shipped in `0.51.0`** (the Bricks description fallback losing
+  ancestor exclusions), reproduced live before being fixed.
+  What remains: B1 (above), R3 (parked pending that corpus), and two small
+  performance items
   — PERF2 has become "snapshot the fingerprints once per request", since
   `0.51.0` deliberately computes them twice (measured at 0.33 ms on an 18 KB
   article, against a ~1000 ms TTFB). A sixth, escaping Markdown syntax in the
@@ -1464,6 +1466,21 @@ The v1 scope is done and widely exceeded. Implemented:
     wrapped in a span carrying the element's own class so the same exclusion
     pass applies) is the one honest source there — empty when it finds
     nothing, never stale.
+    **The span carries the ANCESTORS' classes too** (`0.51.0`,
+    `lineage_classes()`, R2 of the `0.50.0` review). Bricks stores a flat
+    element array with `parent`/`children` links, so a container marked
+    `md-exclude` is a separate entry from the text inside it: wrapping each
+    leaf in its own classes alone left `strip_excluded_content()` nothing to
+    match on. Reproduced live on Bricks 2.3.12 against the staging page's real
+    tree — with `md-exclude` on the container, Bricks emits it on the rendered
+    wrapper so the **body** correctly dropped the sentinel, while the
+    description source kept it. The exclusion contract is "what the body
+    excludes is excluded everywhere", and this was the one place it did not
+    hold. The classes are concatenated onto the leaf's own span rather than
+    rebuilt as real nesting, because the pass matches any element carrying an
+    excluded class; the parent map is built once per tree (a per-leaf rescan
+    would be quadratic, and `/llms.txt` runs this once per listed post), and a
+    missing parent or a cycle ends the walk instead of looping.
   - **Suppressing foreign `the_content` filters around Bricks' Post Content
     element is implemented, but as a maintainer-reversible default, not a
     settled answer** (closes `docs/page-builders-plan.md` §10's open

@@ -143,6 +143,14 @@ the server.
   the plugin, then re-request it with that `If-Modified-Since`: the response
   must be a `200`, not a `304`. Saving that post afterwards restores the date
   path for it.
+- **An exclusion on a Bricks container reaches the description** (since
+  `0.51.0`). Put `md-exclude` in the *CSS Classes* field of a Bricks **container
+  or section**, not of the text element itself, and give the page no Rank Math
+  description and no excerpt so the fallback runs. The text inside it must be
+  absent from the `.md` body **and** from the front-matter `description:` and
+  the page's enriched `/llms.txt` entry. Before `0.51.0` the body was right and
+  the other two kept the text, which is the whole point of the fixture: an
+  exclusion applied to the leaf directly always worked and proves nothing here.
 - A `POST` carrying `If-None-Match: *` to a `.md` URL and to `/llms.txt`
   returns the full response, never `304`, while `GET`/`HEAD` with a matching
   validator still return `304` with no body. A `POST` to a canonical permalink

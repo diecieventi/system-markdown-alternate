@@ -41,6 +41,7 @@ pattern is never expanded, anywhere"), with the corollary that generalizes it:
 |---|---|---|
 | R5 | A plugin version change bumps the cache salt, so an upgrade stops date-only revalidation | `AdminSettings::maybe_bump_for_plugin_version()` |
 | — | **`Last-Modified` is withheld whenever the date is not a usable validator** — found while measuring R5, and the reason R5's own fix would otherwise have been a no-op on most hosting | `MarkdownController::advertised_modified_timestamp()` |
+| R2 | A Bricks leaf's span now carries its ancestors' classes, so an exclusion on a container reaches the description fallback and the enriched `/llms.txt` | `BricksAdapter::lineage_classes()` |
 
 **The second one was not in the review, and it changes how R5 has to be read.**
 The recommended fix below works by making `date_is_strong_validator()` return
@@ -204,32 +205,44 @@ and same-second invalidations still behave; authenticated and cache-disabled
 requests unchanged. Add the version transition to the pure suite by driving the
 stored option directly.
 
-### 3. R2 — Bricks description fallback loses ancestor exclusions
+### 3. R2 — Bricks description fallback loses ancestor exclusions — **shipped in `0.51.0`**
 
-**The defect.** `BricksAdapter::leaves_markup()` walks the flat element array and
-wraps each text-bearing element in a span carrying only *its own* classes. Bricks
-stores `parent`/`children` relationships, so a container marked `md-exclude`
-never reaches its text child, and `ContentRenderer::strip_excluded_content()`
-has nothing to match on. The excluded subtree survives in the front-matter
-`description` and in the enriched `/llms.txt`, while the body correctly drops it.
+**The defect.** `BricksAdapter::leaves_markup()` walked the flat element array
+and wrapped each text-bearing element in a span carrying only *its own* classes.
+Bricks stores `parent`/`children` relationships, so a container marked
+`md-exclude` never reached its text child, and
+`ContentRenderer::strip_excluded_content()` had nothing to match on.
 
-Scope: the fallback tier only — no Rank Math description and no excerpt. It is an
-exclusion-contract inconsistency, not an authorization defect.
+**Reproduced live before fixing**, on the staging page's real tree (Bricks
+2.3.12, plugin 0.49.3 as installed), with `md-exclude` moved onto the container
+that holds the text leaves:
 
-**Recommended fix.** Build a parent map once, then give each leaf's span the
-classes of its ancestors as well as its own. Concatenating is enough because the
-exclusion pass matches any element carrying the class; nesting real spans would
-also work and costs more. Guard against a missing parent and a cycle with a
-depth cap, and do not re-scan the tree per leaf.
+| | result |
+|---|---|
+| `md-exclude` present on the rendered wrapper Bricks emits | yes |
+| Body, after `strip_excluded_content()` | sentinel **absent** — correct |
+| Description source, after the same pass | sentinel **present** — the defect |
 
-**Do not:** duplicate a hardcoded exclusion list inside the adapter, or render
-posts through Bricks to obtain a description (`/llms.txt` builds N of these).
+The tree was restored immediately afterwards.
 
-**Acceptance.** Parent and grandparent exclusions; each built-in exclusion class;
-a class added through the filters; excluded builder-element classes; a directly
-excluded leaf; visible siblings; missing and cyclic ancestry; description and
-enriched index agree with the body. `post_content` still never used for a
+**The fix.** `lineage_classes()` builds a parent map once per tree and gives
+each leaf's span its ancestors' classes as well as its own. Concatenating is
+enough because the exclusion pass matches any element carrying the class;
+rebuilding real nesting would cost more and decide nothing extra. A missing
+parent, a cycle and a `MAX_ANCESTOR_DEPTH` backstop all end the walk rather
+than loop, and a truncated lineage degrades to the old behaviour for that one
+leaf. `element_class()` no longer emits a bare `brxe-` token for an ancestor
+with no usable name.
+
+Seen to fire: reverting `lineage_classes()` to the leaf's own classes flips
+four assertions, including the end-to-end one that runs the produced markup
+through the shared exclusion pass.
+
+**Still true, and deliberately unchanged:** no hardcoded exclusion list inside
+the adapter, and no rendering of posts through Bricks to obtain a description
+(`/llms.txt` builds N of these). `post_content` is still never used for a
 builder-handled post.
+
 
 ### 4. R3 — synced-pattern instance overrides — **measured, inconclusive**
 

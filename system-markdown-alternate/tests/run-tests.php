@@ -4097,6 +4097,97 @@ check(
 );
 check( 'bricks adapter: source_text is empty for a post it does not handle', '', $sysmda_bricks->source_text( $sysmda_wp_mode_page ) );
 
+// ─── R2: an exclusion on an ancestor reaches the leaf ────────────────
+//
+// Bricks stores a FLAT element array with parent/children links, so a container
+// marked md-exclude is a separate entry from the text inside it. Wrapping each
+// leaf in its own classes alone left the exclusion pass nothing to match on:
+// the body correctly dropped the subtree while the front-matter description and
+// the enriched /llms.txt entry kept its text. What the body excludes is
+// excluded everywhere.
+$sysmda_bricks_nested = $sysmda_bricks_post(
+	array(
+		array(
+			'id'       => 'sec',
+			'name'     => 'section',
+			'parent'   => 0,
+			'settings' => array( '_cssClasses' => 'md-exclude' ),
+		),
+		array(
+			'id'       => 'box',
+			'name'     => 'container',
+			'parent'   => 'sec',
+			'settings' => array(),
+		),
+		// Two levels below the exclusion: the case a parent-only walk misses.
+		array(
+			'id'       => 'deep',
+			'name'     => 'text-basic',
+			'parent'   => 'box',
+			'settings' => array( 'text' => 'EXCLUDED_GRANDCHILD' ),
+		),
+		array(
+			'id'       => 'ok',
+			'name'     => 'text-basic',
+			'parent'   => 0,
+			'settings' => array( 'text' => 'Public text' ),
+		),
+	),
+	'bricks',
+	960
+);
+
+$sysmda_nested_markup = $sysmda_bricks->source_text( $sysmda_bricks_nested );
+check( 'bricks R2: an excluded ancestor class reaches the leaf span', true, false !== strpos( $sysmda_nested_markup, 'md-exclude' ) );
+check( 'bricks R2: the ancestor element class is carried too', true, false !== strpos( $sysmda_nested_markup, 'brxe-section' ) );
+check( 'bricks R2: a visible sibling keeps only its own classes', true, false !== strpos( $sysmda_nested_markup, '<span class="brxe-text-basic">Public text</span>' ) );
+
+// The point of carrying the classes at all: the SHARED exclusion pass, not a
+// second implementation, must now drop the subtree.
+$sysmda_bricks_stripper = new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner(), array() );
+$sysmda_nested_stripped = $sysmda_bricks_stripper->strip_excluded_content( $sysmda_nested_markup );
+check( 'bricks R2: the excluded grandchild is stripped from the description source', false, false !== strpos( $sysmda_nested_stripped, 'EXCLUDED_GRANDCHILD' ) );
+check( 'bricks R2: the visible sibling survives the strip', true, false !== strpos( $sysmda_nested_stripped, 'Public text' ) );
+
+// Malformed ancestry is stored data, not an invariant. A parent naming an
+// element that is not in the tree, and a cycle, must both end the walk rather
+// than loop — the leaf simply keeps what could be resolved.
+$sysmda_bricks_broken = $sysmda_bricks_post(
+	array(
+		array(
+			'id'       => 'orphan',
+			'name'     => 'text-basic',
+			'parent'   => 'does-not-exist',
+			'settings' => array( 'text' => 'Orphan text' ),
+		),
+		array(
+			'id'       => 'a',
+			'name'     => 'container',
+			'parent'   => 'b',
+			'settings' => array( '_cssClasses' => 'ring-a' ),
+		),
+		array(
+			'id'       => 'b',
+			'name'     => 'container',
+			'parent'   => 'a',
+			'settings' => array( '_cssClasses' => 'ring-b' ),
+		),
+		array(
+			'id'       => 'inring',
+			'name'     => 'text-basic',
+			'parent'   => 'a',
+			'settings' => array( 'text' => 'Text inside the cycle' ),
+		),
+	),
+	'bricks',
+	961
+);
+
+$sysmda_broken_markup = $sysmda_bricks->source_text( $sysmda_bricks_broken );
+check( 'bricks R2: a missing parent does not lose the leaf', true, false !== strpos( $sysmda_broken_markup, 'Orphan text' ) );
+check( 'bricks R2: a cyclic ancestry terminates and keeps the leaf', true, false !== strpos( $sysmda_broken_markup, 'Text inside the cycle' ) );
+check( 'bricks R2: the cycle contributes each ancestor once', 1, substr_count( $sysmda_broken_markup, 'ring-b' ) );
+
 // fingerprint(): empty when unclaimed (contributes nothing to a post it does
 // not render); mode + a blob hash when claimed.
 check( 'bricks adapter: fingerprint is empty when not handled', array(), $sysmda_bricks->fingerprint( $sysmda_wp_mode_page ) );
