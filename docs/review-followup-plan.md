@@ -1,20 +1,51 @@
-# External review follow-up — what shipped in `0.50.1` and what is left
+# External review follow-up — the handoff
 
-**Status (10 September 2026): four findings shipped in `0.50.1`, R5 shipped in
-`0.51.0`, and the two measurements this plan made blocking have been taken.**
-B1 is **confirmed** and now needs code; R3's corpus measurement came back empty
-but on corpora too thin to conclude from. R2, PERF1/PERF2 and H1 are unchanged.
-This document is the handoff: it records what was done and why, and gives each
-remaining item a scope, a recommended approach, the alternatives that were
-considered and rejected, and an acceptance list. It is a plan, not a decision to
-build everything in it — one item below closes with "probably decline".
+**Status: 10 September 2026, after `0.51.0`.**
 
-The source is an independent code review of `0.50.0`
-(commit `a5ab171`) that ran the pure suite, PHPCS, and a real WordPress install
-over HTTP. The review document itself lives in the private companion
-repository (`private-security/`), where it was written because it carried the
-reproduction of an unfixed disclosure defect; that defect is R1 below and is now
-fixed, so everything in this file is stated in the open.
+| | |
+|---|---|
+| **Shipped in `0.50.1`** | R1, R4, R6, R7 |
+| **Shipped in `0.51.0`** | R5 (+ the larger validator finding it uncovered), R2, and Phase 2 of the private fidelity plan (table grids) |
+| **Open, ready to build** | **B1** — measured and confirmed, needs code |
+| **Open, blocked on one query** | **R3** — corpus scan came back empty but inconclusive |
+| **Open, small** | **PERF1**, **PERF2** |
+| **Open, recommended decline** | **H1** |
+
+## Pick up here
+
+The next piece of work is **B1** (§1 below). It is measured, confirmed, scoped,
+and independent of everything else in this file. Nothing has to be re-derived
+before starting it — the measurement, its result and the shape of the fix are
+all recorded in §1.
+
+Two things worth doing in the same session, because both are cheap and one of
+them may close an item for free:
+
+1. **Run R3's corpus query on the production reference site** (§4 has the SQL).
+   The three connected installs answered "no occurrences", but none of them
+   holds a single synced pattern, so the denominator is zero and the answer
+   carries no information. One query decides whether R3 is work or a note.
+2. **PERF1** (§5) is two lines and belongs in whatever next touches
+   `serve_markdown()`.
+
+The rest of this file is the reasoning behind what already shipped. It is kept
+because each entry records a measurement or a rejected alternative that would
+otherwise be re-derived — not because any of it is pending.
+
+## Where things live
+
+- The source is an independent code review of `0.50.0` (commit `a5ab171`) that
+  ran the pure suite, PHPCS, and a real WordPress install over HTTP. That
+  document lives in the **private companion repository**
+  (`private-security/code-review-0.50.0-2026-09-07.md`), where it was written
+  because it carried the reproduction of an unfixed disclosure defect. That
+  defect is R1, now fixed, so everything in this file is stated in the open.
+- The table work has its own plan in the private repository
+  (`private-plans/markdown-fidelity-plan.md`), both phases now shipped.
+- Durable decisions from all of this are in `AGENTS.md`; the two public
+  contracts are `docs/output-format.md` and `docs/filters.md`; the
+  real-WordPress checks are in `docs/staging-acceptance.md` and `AGENTS.md`'s
+  *Tests (acceptance)*.
 
 Finding IDs (R2, R3, R5, B1, PERF1, PERF2, H1) are the review's own, kept so the
 two documents can be read side by side.
@@ -42,6 +73,7 @@ pattern is never expanded, anywhere"), with the corollary that generalizes it:
 | R5 | A plugin version change bumps the cache salt, so an upgrade stops date-only revalidation | `AdminSettings::maybe_bump_for_plugin_version()` |
 | — | **`Last-Modified` is withheld whenever the date is not a usable validator** — found while measuring R5, and the reason R5's own fix would otherwise have been a no-op on most hosting | `MarkdownController::advertised_modified_timestamp()` |
 | R2 | A Bricks leaf's span now carries its ancestors' classes, so an exclusion on a container reaches the description fallback and the enriched `/llms.txt` | `BricksAdapter::lineage_classes()` |
+| — | **Table grids** (Phase 2 of the private fidelity plan, not a review finding): a table with no header of its own keeps its first row as data, and `colspan`/`rowspan` are expanded so values stay in their own column | `ContentRenderer::normalize_tables()` |
 
 **The second one was not in the review, and it changes how R5 has to be read.**
 The recommended fix below works by making `date_is_strong_validator()` return
@@ -61,7 +93,17 @@ Generalise it rather than filing it under nginx: **a validator the plugin will
 not honour must not be sent.** Same rule as the weak ETag, applied to the other
 validator.
 
-## Remaining work, in the order it should be done
+Two P2 findings Codex raised on PR #140 were reproduced and fixed in the same
+release, both in the table pass: a header row carrying a `colspan` was emitted
+as a data row (the placeholder cell no longer changes a `<th>` into a `<td>`,
+and the header check now runs before the grid is filled), and `rowspan="0"` —
+valid HTML meaning "the rest of this row group" — was coerced to `1`, which
+reproduced the exact column shift the pass exists to prevent.
+
+## The items in detail
+
+Open items first in intent, but kept in the review's own order so the two
+documents read side by side. Each heading says whether it is shipped or open.
 
 ### 1. B1 — nested Bricks templates: **measured, confirmed, needs code**
 
@@ -366,16 +408,32 @@ it must be the narrow escaper, never `escape_inline()`.
 
 ## Working notes for whoever picks this up
 
-- Branch per item, PR to `main`, the maintainer squash-merges. R5 and R2 are
-  independent and can go in parallel; B1 depends on its own measurement; R3
-  depends on the corpus measurement.
-- Add the failing test first and **watch it fail** on the current commit — every
-  one of the four `0.50.1` fixes was confirmed that way, and R1's own regression
-  test proves it by asserting the description path, not just the cleaner.
-- The pure suite (`php system-markdown-alternate/tests/run-tests.php`) is the
-  fast gate, but R1 and R3 were both invisible to it until a fixture existed for
-  the shape. When a fix concerns WordPress semantics, ask what the stubs are
-  quietly asserting.
-- The protected pattern and the method handling are now in both real-WordPress
-  checklists — `docs/staging-acceptance.md`'s matrix and `AGENTS.md`'s *Tests
-  (acceptance)* items 22 and 23 — so a release pass exercises them.
+- **One branch, PR to `main`, the maintainer squash-merges.** B1 is independent
+  of everything else here and can go on its own.
+- **Add the failing test first and watch it fail.** Every fix in `0.50.1` and
+  `0.51.0` was confirmed that way, and it earned its keep three times in
+  `0.51.0` alone: the table pass reproduced both mistakes the private plan had
+  already recorded, plus a third (a row's width computed as
+  `$column + count($occupied)`, double-counting positions a rowspan had already
+  stepped over). None of the three was visible by re-reading the code.
+- **A control that does not fire is information too.** Reverting the
+  header-check reorder in `normalize_tables()` left its fixture passing, which
+  is how it emerged that the operative fix for that defect was the placeholder
+  mirroring the spanning cell's tag, not the ordering. Both are kept, each on
+  its own merits — but do not claim a guard is load-bearing until a control has
+  actually shown it.
+- **The pure suite is the fast gate and it has blind spots.** R1 and R3 were
+  both invisible to it until a fixture existed for the shape, and until
+  `0.51.0` no test could see an emitted header at all — which is how
+  `Last-Modified` went out on responses whose date the plugin had already
+  judged unusable. `tests/namespaced-stubs.php` now shadows `header()` inside
+  the plugin namespace; use it rather than inferring what a response carried.
+- **Some things only real WordPress can show.** B1's rendering half, R2's live
+  reproduction and the nginx `304` finding all needed a real install. The two
+  staging sites are `instawp_sma` (general) and `sma-bricks-instawp-co` (the
+  only one with Bricks). Assert `home_url()` before writing to either, and
+  remove every fixture afterwards.
+- **The acceptance lists are current.** `docs/staging-acceptance.md` and
+  `AGENTS.md`'s *Tests (acceptance)* now cover the protected pattern, method
+  handling, the validator rules, the upgrade invalidation, table grids and the
+  Bricks container exclusion — so a release pass exercises all of them.

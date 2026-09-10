@@ -649,6 +649,23 @@ class ContentRenderer {
 				continue;
 			}
 
+			// Asked BEFORE the grid is filled: a structural question about the
+			// source table must not depend on a mutation this pass is about to
+			// make. expand_spans() inserts placeholder cells, and asking
+			// afterwards used to see them (Codex, PR #140) — a header row
+			// carrying a `colspan` stopped reading as all-`<th>`, so the table
+			// was judged headerless and its real header was emitted as a data
+			// row under an empty one.
+			//
+			// **Not the operative fix, and the negative control says so.**
+			// Reverting only this ordering leaves the fixture passing, because
+			// expand_spans() now also mirrors the spanning cell's tag; only
+			// reverting BOTH reproduces the defect. Each is independently
+			// sufficient, and each is kept on its own merits — that one for the
+			// markup it emits, this one so detection never depends on what a
+			// later pass did to the DOM.
+			$has_header = self::has_header_row( $table );
+
 			$width = self::expand_spans( $dom, $rows );
 
 			// A table inside another table's cell is flattened into that cell
@@ -657,7 +674,7 @@ class ContentRenderer {
 			// grid is still filled, which keeps the cell counts sane. Measured
 			// both ways: without this the inner table contributed `|  |  |` to
 			// the cell text that today does not carry it.
-			if ( ! self::has_header_row( $table ) && ! self::is_nested_table( $table ) ) {
+			if ( ! $has_header && ! self::is_nested_table( $table ) ) {
 				self::prepend_empty_header( $dom, $table, $width );
 			}
 		}
@@ -729,6 +746,20 @@ class ContentRenderer {
 		$width    = 0;
 		$grid     = array();
 
+		// The last row index of each row's own group, for `rowspan="0"`. A group
+		// is a `<thead>`/`<tbody>`/`<tfoot>`, or the table itself for rows that
+		// are its direct children — which is exactly "same parent node".
+		$group_last = array();
+		$seen_group = array();
+
+		foreach ( $rows as $r => $row ) {
+			$seen_group[ spl_object_id( $row->parentNode ) ] = $r;
+		}
+
+		foreach ( $rows as $r => $row ) {
+			$group_last[ $r ] = $seen_group[ spl_object_id( $row->parentNode ) ];
+		}
+
 		foreach ( $rows as $r => $row ) {
 			$column = 0;
 			$cells  = array();
@@ -746,15 +777,23 @@ class ContentRenderer {
 				}
 
 				$colspan = self::span_value( $cell->getAttribute( 'colspan' ) );
-				$rowspan = self::span_value( $cell->getAttribute( 'rowspan' ) );
+				$rowspan = self::rowspan_value( $cell->getAttribute( 'rowspan' ), $r, $group_last[ $r ] );
 
 				$cell->removeAttribute( 'colspan' );
 				$cell->removeAttribute( 'rowspan' );
 
 				// The cell itself occupies the first covered position; every
 				// other one becomes a real empty cell so the pipe count matches.
+				//
+				// The placeholder mirrors the spanning cell's own tag, and that
+				// is the half the negative control actually pins: filling a
+				// `<th colspan="2">` with a `<td>` turns a header row into a
+				// mixed one, which is both wrong markup and — until the check
+				// above moved — enough to lose the header entirely.
+				$filler = strtolower( $cell->nodeName );
+
 				for ( $c = 1; $c < $colspan; $c++ ) {
-					$row->insertBefore( $dom->createElement( 'td' ), $cell->nextSibling );
+					$row->insertBefore( $dom->createElement( $filler ), $cell->nextSibling );
 				}
 
 				for ( $rr = 1; $rr < $rowspan; $rr++ ) {
@@ -828,6 +867,24 @@ class ContentRenderer {
 	 * of columns wide inside a request that has to stay cheap. Anything
 	 * non-numeric or below 1 reads as 1, which is what the HTML standard says a
 	 * broken span means anyway.
+	 */
+	private static function rowspan_value( string $raw, int $row_index, int $group_last ): int {
+		// `rowspan="0"` is VALID HTML and means "every remaining row of this
+		// row group" — not a broken value. Coercing it to 1 left those rows
+		// without a placeholder at the covered column, which is the exact
+		// column-shift this pass exists to prevent (Codex, PR #140; reproduced
+		// before fixing). `colspan="0"` gets no such treatment on purpose: the
+		// HTML Living Standard requires colspan to be greater than zero, so
+		// there it really is a broken value and reads as 1.
+		if ( '0' === trim( $raw ) ) {
+			return min( max( 1, $group_last - $row_index + 1 ), self::MAX_TABLE_SPAN );
+		}
+
+		return self::span_value( $raw );
+	}
+
+	/**
+	 * A `colspan` (or a non-zero `rowspan`) as a usable count.
 	 */
 	private static function span_value( string $raw ): int {
 		$value = (int) trim( $raw );

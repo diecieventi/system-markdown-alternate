@@ -254,7 +254,19 @@ The v1 scope is done and widely exceeded. Implemented:
       wrong heading. That mistake was made in the plan's own prototype and
       again here, and was caught both times by running the fixture rather than
       re-reading the rule — assert **which column** a value lands in.
-    `has_header_row()` is the other easy-to-get-backwards half: a header exists
+      The placeholder also **mirrors the spanning cell's tag**: filling a
+      `<th colspan="2">` with a `<td>` turns a header row into a mixed one, and
+      that alone was enough to lose the header (Codex, PR #140).
+      And **`rowspan="0"` is valid HTML**, not a broken value: it covers every
+      remaining row of its row group, and coercing it to `1` reproduced the
+      exact column shift this pass exists to prevent. `colspan="0"` gets no
+      such reading, deliberately — the standard requires `colspan` above zero,
+      so there it really is broken. Row groups are "same `parentNode`", which
+      is what a `<thead>`/`<tbody>`/`<tfoot>` (or the table itself, for direct
+      `<tr>` children) already is.
+    `has_header_row()` is the other easy-to-get-backwards half, and it is asked
+    **before the grid is filled** — a structural question about the source must
+    not depend on a mutation this pass is about to make. A header exists
     only for a non-empty `<thead>` or an all-`<th>` first row. "Is there a `<th>`
     anywhere" passes every obvious fixture and reopens the defect for a `<th>`
     used as a **row label** inside a data row, which is a legitimate and common
@@ -1000,8 +1012,13 @@ The v1 scope is done and widely exceeded. Implemented:
     synced pattern, so the denominator is zero. Re-run the query in the plan on
     the production reference site before spending anything.
   **R2 also shipped in `0.51.0`** (the Bricks description fallback losing
-  ancestor exclusions), reproduced live before being fixed.
-  What remains: B1 (above), R3 (parked pending that corpus), and two small
+  ancestor exclusions), reproduced live before being fixed — as did Phase 2 of
+  the private fidelity plan (table grids), which is not a review finding but
+  travelled with it, and two P2 findings Codex raised on that PR: a header row
+  carrying a `colspan` emitted as a data row, and `rowspan="0"` — valid HTML —
+  coerced to `1`.
+  **Pick up at B1**: it is measured, confirmed and independent. What remains
+  after it: R3 (parked pending that one corpus query), and two small
   performance items
   — PERF2 has become "snapshot the fingerprints once per request", since
   `0.51.0` deliberately computes them twice (measured at 0.33 ms on an 18 KB
@@ -2375,7 +2392,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section (designed, not started)
-│   ├── review-followup-plan.md   ← what the 0.50.0 external review found: 4 fixed in 0.50.1, 5 open
+│   ├── review-followup-plan.md   ← THE HANDOFF: what the 0.50.0 review found, what shipped in 0.50.1/0.51.0, and where to pick up
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article

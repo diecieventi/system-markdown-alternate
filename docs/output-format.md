@@ -425,7 +425,16 @@ existing content when they landed:
 - **`colspan` and `rowspan` are expanded into empty cells.** One pipe is
   emitted per cell, so a spanning cell used to leave the row short and every
   later value shifted into the wrong column. The blank cells are placed at the
-  positions the span covers, so values stay under their own heading.
+  positions the span covers, so values stay under their own heading, and each
+  takes the spanning cell's own tag — so a header cell that spans columns
+  leaves the header row intact.
+
+  `rowspan="0"` is honoured as the HTML standard defines it: the cell covers
+  every remaining row of its row group (`<thead>`/`<tbody>`/`<tfoot>`, or the
+  table itself for rows that are its direct children). `colspan="0"` is not
+  given the same reading — the standard requires `colspan` to be greater than
+  zero, so there it is a broken value and counts as one column, like any other
+  unusable span.
 
   Spans are clamped to a maximum of 100, so a malformed or hostile value cannot
   synthesize an enormous table.

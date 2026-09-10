@@ -5183,6 +5183,35 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td rowspan="2">tall</td><td>b1</td></tr><tr><td>b2</td></tr></tbody></table>' )
 	);
 
+	// Caught by Codex on PR #140, and a defect the pass introduced itself: the
+	// header check has to run BEFORE the grid is filled. expand_spans() inserts
+	// placeholder cells, so a header row carrying a colspan stopped being an
+	// all-<th> row the moment it ran — the check then saw a mixed row, decided
+	// there was no header, and emitted the real header as a data row under an
+	// empty one. Reproduced before fixing.
+	check(
+		'tables: a header row that carries a colspan is still a header',
+		"| Location |  | N |\n|---|---|---|\n| Rome | IT | 3 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th colspan="2">Location</th><th>N</th></tr><tr><td>Rome</td><td>IT</td><td>3</td></tr></tbody></table>' )
+	);
+
+	// Also Codex on #140: rowspan="0" is VALID HTML meaning "every remaining
+	// row of this row group", not a broken value. Coercing it to 1 left the
+	// later rows without a placeholder at the covered column — the exact
+	// column-shift this pass exists to prevent. colspan="0" is deliberately NOT
+	// treated the same way: the standard requires colspan to be above zero, so
+	// there it really is broken and reads as 1.
+	check(
+		'tables: rowspan="0" covers the rest of its row group',
+		"| A | B |\n|---|---|\n| tall | b1 |\n|  | b2 |\n|  | b3 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td rowspan="0">tall</td><td>b1</td></tr><tr><td>b2</td></tr><tr><td>b3</td></tr></tbody></table>' )
+	);
+	check(
+		'tables: colspan="0" is a broken value and reads as one column',
+		"|  |  |\n|---|---|\n| a | b |\n",
+		$sysmda_table_md( '<table><tbody><tr><td colspan="0">a</td><td>b</td></tr></tbody></table>' )
+	);
+
 	// A guard is not done until it has been seen to fire: the span attribute is
 	// author-supplied and this pass turns it into real DOM nodes.
 	$sysmda_absurd = $sysmda_table_md( '<table><tbody><tr><td colspan="99999">x</td></tr><tr><td>a</td></tr></tbody></table>' );
