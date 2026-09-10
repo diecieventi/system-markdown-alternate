@@ -487,13 +487,25 @@ brief, a successful Markdown response carries:
   intentionally non-indexable)
 - `Link: <permalink>; rel="canonical"` back to the HTML
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
-- for the anonymous representation, `ETag` + `Last-Modified`, with conditional
+- for the anonymous representation, a weak `ETag`, with conditional
   `304 Not Modified` support
-  (`If-None-Match` takes priority over `If-Modified-Since`). When the
-  `taxonomies:` block is emitted — or the post has any other dependency outside
-  its own row — `If-Modified-Since` is **ignored**: the body can then change
-  without `post_modified_gmt` moving, so only the fingerprinted `ETag` can prove
-  a cached copy is still current. `Last-Modified` is still sent, as information.
+  (`If-None-Match` takes priority over `If-Modified-Since`)
+- `Last-Modified` **only while the modification date determines the whole
+  representation**. When the `taxonomies:` block is emitted, when the post has
+  any dependency outside its own row, or when a site-wide invalidation (a
+  settings save, a permalink or timezone change, a plugin upgrade) is more
+  recent than the post's own date, the body can change without
+  `post_modified_gmt` moving — so `If-Modified-Since` is ignored **and the
+  header is not sent at all**. The `ETag`, which covers every one of those
+  inputs, is then the sole validator.
+
+  Since `0.51.0`; before that the header was sent regardless, as information.
+  It was not harmless: `Last-Modified` is a validator, and an intermediary is
+  entitled to revalidate against it. Measured on an ordinary nginx-in-front-of-
+  PHP stack, nginx's always-on not-modified filter converted a fresh `200` into
+  a bodyless `304` whenever the client echoed the date back — so a client could
+  keep a stale copy of a document the plugin was serving correctly. Withholding
+  the header is what makes the rule enforceable rather than advisory.
 
   Authenticated `.md` requests are rebuilt in the visitor's context, bypass the
   shared body cache and carry neither validator; they are never answered `304`.

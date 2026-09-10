@@ -945,9 +945,10 @@ class MarkdownController {
 	 *
 	 * Before the body, handles conditional requests (If-None-Match /
 	 * If-Modified-Since): if the client already has the current version, returns
-	 * 304 without a body. Otherwise sends the headers (including ETag and
-	 * Last-Modified) and the Markdown. Used by both the .md suffix branch and
-	 * content negotiation so validation logic remains centralized.
+	 * 304 without a body. Otherwise sends the headers (including ETag and, when
+	 * the date is a usable validator, Last-Modified) and the Markdown. Used by
+	 * both the .md suffix branch and content negotiation so validation logic
+	 * remains centralized.
 	 */
 	private function serve_markdown( \WP_Post $post ): void {
 		// Counts 200 and 304 alike (an access is an access), for both the .md
@@ -957,11 +958,26 @@ class MarkdownController {
 
 		$version = $this->cache_version( $post );
 
-		if ( $this->handle_conditional( $post, $version ) ) {
+		// Computed once, here, and handed to both callees: the date this
+		// response ADVERTISES and the date its conditional path would accept
+		// are the same value by construction. They used to be decided
+		// independently — send_headers() always emitted `post_modified_gmt`
+		// while handle_conditional() asked date_is_strong_validator() first —
+		// and that gap is what let an intermediary revalidate against a date
+		// this plugin had already judged unusable. See
+		// advertised_modified_timestamp().
+		//
+		// An unshared representation advertises no validators at all (see
+		// send_headers()), so it does not pay for the decision either.
+		$modified_ts = self::representation_is_shared()
+			? $this->advertised_modified_timestamp( $post )
+			: 0;
+
+		if ( $this->handle_conditional( $post, $version, $modified_ts ) ) {
 			exit; // 304 already sent, no body.
 		}
 
-		$this->send_headers( $post, $version );
+		$this->send_headers( $post, $version, $modified_ts );
 		echo $this->get_markdown( $post, $version ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
 	}
@@ -1000,7 +1016,7 @@ class MarkdownController {
 	 * If-Modified-Since is additionally ignored whenever the date is not a strong
 	 * validator for this representation (see date_is_strong_validator()).
 	 */
-	private function handle_conditional( \WP_Post $post, string $version ): bool {
+	private function handle_conditional( \WP_Post $post, string $version, int $modified_ts ): bool {
 		// Conditional handling belongs to the shared representation, and the
 		// precondition lives here rather than at the call site so no caller can
 		// forget it. The two halves of the anonymous-representation rule have to
@@ -1024,8 +1040,7 @@ class MarkdownController {
 			return false;
 		}
 
-		$etag        = self::etag( $version );
-		$modified_ts = $this->last_modified_timestamp( $post );
+		$etag = self::etag( $version );
 
 		$if_none_match = isset( $_SERVER['HTTP_IF_NONE_MATCH'] )
 			? trim( (string) wp_unslash( $_SERVER['HTTP_IF_NONE_MATCH'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -1048,9 +1063,14 @@ class MarkdownController {
 		// not: assigning or renaming a term changes the body without touching
 		// that date, so honouring the date here would answer 304 with stale
 		// terms for a client that sends no If-None-Match. The ETag does carry
-		// the taxonomy fingerprint, so it stays the reliable validator and the
-		// date is downgraded to informational (still sent in the response).
-		if ( '' !== $if_modified_since && $modified_ts > 0 && $this->date_is_strong_validator( $post ) ) {
+		// the taxonomy fingerprint, so it stays the reliable validator.
+		//
+		// That decision is already folded into `$modified_ts` by the caller —
+		// it is 0 exactly when the date is not a usable validator, which is
+		// also when the response advertises no `Last-Modified` at all. One
+		// value, one decision: a comparison here that the emitted header
+		// contradicted is precisely the defect this shape removes.
+		if ( '' !== $if_modified_since && $modified_ts > 0 ) {
 			$since = strtotime( $if_modified_since );
 			if ( false !== $since && $modified_ts <= $since ) {
 				$this->send_not_modified( $etag, $modified_ts );
@@ -1102,6 +1122,46 @@ class MarkdownController {
 		// `If-Modified-Since` path until its next save, which is nothing next
 		// to answering `304` with an invalidated body indefinitely.
 		return $modified > 0 && self::salt_changed_at() < $modified;
+	}
+
+	/**
+	 * The modification timestamp this response may advertise, or 0 when the
+	 * date is not a usable validator for it.
+	 *
+	 * **A validator this plugin will not honour must not be sent**, and that is
+	 * the whole reason this method exists rather than the response emitting
+	 * `post_modified_gmt` unconditionally. `date_is_strong_validator()` decides
+	 * whether the date knows about every input; until 0.51.0 that decision was
+	 * applied only to the plugin's OWN conditional handling, while the header
+	 * went out regardless. But `Last-Modified` is a validator in the response,
+	 * and any intermediary is entitled to revalidate against it — so the
+	 * decision was not the plugin's to keep to itself.
+	 *
+	 * Measured, not reasoned about: on an ordinary nginx-in-front-of-PHP stack
+	 * the always-on `not_modified` output filter (default `if_modified_since
+	 * exact`) turns the plugin's fresh `200` into a `304` with no body whenever
+	 * the client echoes back the `Last-Modified` it was given. Verified on a
+	 * Bricks page whose out-of-post dependency fingerprint was non-empty, so
+	 * date_is_strong_validator() had already returned false: the plugin built
+	 * and cached the CURRENT body — confirmed by watching the cache entry
+	 * repopulate with the new content — and the anonymous client still received
+	 * a bodyless 304 and kept its stale copy. Every case the guard exists for
+	 * (emitted taxonomies, out-of-post dependencies, a site-wide salt bump, a
+	 * plugin upgrade) was defeated the same way, on the majority of managed
+	 * WordPress hosting.
+	 *
+	 * Withholding the header is what makes the decision enforceable: there is
+	 * then no date to revalidate against, and the weak ETag — which does move
+	 * with every one of those inputs — is the sole validator. Same rule as the
+	 * ETag being weak (0.28.0): do not send a claim this plugin cannot back.
+	 *
+	 * The cost is small and bounded: the responses that lose the header are
+	 * exactly the ones whose date was already being ignored, and they carry
+	 * `max-age=0, must-revalidate`, so no cache was deriving heuristic
+	 * freshness from it either.
+	 */
+	private function advertised_modified_timestamp( \WP_Post $post ): int {
+		return $this->date_is_strong_validator( $post ) ? $this->last_modified_timestamp( $post ) : 0;
 	}
 
 	/**
@@ -1208,6 +1268,11 @@ class MarkdownController {
 
 	/**
 	 * Sends a 304 Not Modified response: validation headers only, no body.
+	 *
+	 * `$modified_ts` is 0 when the date is not a usable validator, and the
+	 * header is then left off here too. Re-advertising it on an ETag-matched
+	 * 304 would hand the client back the very date the next request must not
+	 * revalidate against — see advertised_modified_timestamp().
 	 */
 	private function send_not_modified( string $etag, int $modified_ts ): void {
 		if ( headers_sent() ) {
@@ -1377,10 +1442,14 @@ class MarkdownController {
 	/**
 	 * Sends HTTP headers for the Markdown response.
 	 *
-	 * Always includes ETag and Last-Modified (the same validators used for
-	 * conditional requests) so caches/proxies can store and revalidate them.
+	 * Includes the ETag, and `Last-Modified` only when the date is a validator
+	 * this plugin would itself honour — the caller decides that once and passes
+	 * the result in. See advertised_modified_timestamp() for why sending the
+	 * date regardless was not a harmless extra.
+	 *
+	 * @param int $modified_ts Advertised modification time, or 0 to send none.
 	 */
-	private function send_headers( \WP_Post $post, string $version ): void {
+	private function send_headers( \WP_Post $post, string $version, int $modified_ts ): void {
 		if ( headers_sent() ) {
 			return;
 		}
@@ -1397,7 +1466,6 @@ class MarkdownController {
 		if ( self::representation_is_shared() ) {
 			header( 'ETag: ' . self::etag( $version ) );
 
-			$modified_ts = $this->last_modified_timestamp( $post );
 			if ( $modified_ts > 0 ) {
 				header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified_ts ) . ' GMT' );
 			}

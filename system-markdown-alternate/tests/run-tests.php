@@ -707,6 +707,12 @@ require __DIR__ . '/../src/MarkdownActions.php';
 require __DIR__ . '/../src/AcfIntegration.php';
 require __DIR__ . '/../src/MetaFields.php';
 
+// Declared inside the plugin's namespace, so it shadows the built-in header()
+// for the classes above and makes the emitted response headers assertable.
+require __DIR__ . '/namespaced-stubs.php';
+
+$GLOBALS['sysmda_test_headers'] = array(); // Captured header lines, reset per test.
+
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AcfIntegration;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
@@ -2032,13 +2038,30 @@ check( 'Link cross-relation: a describedby does not satisfy alternate', false, M
 // validator for the representation.
 
 $sysmda_hc_method = sysmda_reflection_method( MarkdownController::class, 'handle_conditional' );
+$sysmda_ad_method = sysmda_reflection_method( MarkdownController::class, 'advertised_modified_timestamp' );
+
+/** The modification timestamp the response would advertise for this post. */
+$sysmda_advertised = function ( $post ) use ( $sysmda_ad_method, $sysmda_controller ) {
+	return (int) $sysmda_ad_method->invoke( $sysmda_controller, $post );
+};
+
+/**
+ * Runs handle_conditional() the way serve_markdown() does: the advertised
+ * modification time is decided ONCE by the caller and handed in, so what the
+ * conditional path compares against is by construction what the response
+ * carries. Calling the method with an independently computed date would test a
+ * wiring the plugin no longer has.
+ */
+$sysmda_hc = function ( $post ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv, $sysmda_advertised ) {
+	return $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ), $sysmda_advertised( $post ) );
+};
 
 /** Runs handle_conditional() with only an If-Modified-Since header set. */
-$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv ) {
+$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc ) {
 	$GLOBALS['sysmda_test_status'] = array();
 	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 	$_SERVER['HTTP_IF_MODIFIED_SINCE'] = $since;
-	$result = $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ) );
+	$result = $sysmda_hc( $post );
 	unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
 	return $result;
 };
@@ -2073,12 +2096,12 @@ unset( $sysmda_saved_genre_terms );
 $GLOBALS['sysmda_test_status'] = array();
 unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"' . $sysmda_cv( $sysmda_cv_post ) . '"';
-check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: matching ETag still yields 304', true, $sysmda_hc( $sysmda_cv_post ) );
 // The tag this version issues comes back in its weak form, and revalidates too.
 $_SERVER['HTTP_IF_NONE_MATCH'] = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
-check( 'conditional: the weak tag we issue yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: the weak tag we issue yields 304', true, $sysmda_hc( $sysmda_cv_post ) );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
-check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: stale ETag yields the full body', false, $sysmda_hc( $sysmda_cv_post ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 
 // A `304` answers a GET/HEAD revalidation. On any other method the same header
@@ -2089,10 +2112,10 @@ unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 // comparing anything, so nothing else could stop the 304.
 $_SERVER['HTTP_IF_NONE_MATCH'] = '*';
 
-$sysmda_hc_with_method = function ( $method ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv, $sysmda_cv_post ) {
+$sysmda_hc_with_method = function ( $method ) use ( $sysmda_hc, $sysmda_cv_post ) {
 	$GLOBALS['sysmda_test_status'] = array();
 	$_SERVER['REQUEST_METHOD']     = $method;
-	$result                        = $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) );
+	$result                        = $sysmda_hc( $sysmda_cv_post );
 	unset( $_SERVER['REQUEST_METHOD'] );
 	return $result;
 };
@@ -2112,7 +2135,7 @@ check( 'conditional: lowercase method still revalidates', true, $sysmda_hc_with_
 // keep behaving like a read, or the endpoint would lose the conditional path
 // outside a request context.
 $GLOBALS['sysmda_test_status'] = array();
-check( 'conditional: a missing method reads as GET', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: a missing method reads as GET', true, $sysmda_hc( $sysmda_cv_post ) );
 
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 check( 'is_read_request: GET', true, sysmda_with_method( 'GET', array( MarkdownController::class, 'is_read_request' ) ) );
@@ -2187,7 +2210,7 @@ $_SERVER['HTTP_IF_NONE_MATCH']    = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
 check(
 	'conditional: an authenticated request is never answered 304',
 	false,
-	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+	$sysmda_hc( $sysmda_cv_post )
 );
 check( 'conditional: no 304 sent to an authenticated visitor', array(), $GLOBALS['sysmda_test_status'] );
 // The very same request, anonymous, still revalidates — the split is the only
@@ -2196,10 +2219,62 @@ $GLOBALS['sysmda_test_logged_in'] = false;
 check(
 	'conditional: the same request anonymous still yields 304',
 	true,
-	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+	$sysmda_hc( $sysmda_cv_post )
 );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 $GLOBALS['sysmda_test_status'] = array();
+
+// ─── A refused date validator is not advertised either ────────────────
+//
+// date_is_strong_validator() decides whether `post_modified_gmt` knows about
+// every input; until 0.51.0 that decision governed only the plugin's OWN
+// conditional handling, while `Last-Modified` went out regardless. It is a
+// validator in the response, so an intermediary may revalidate against it —
+// and one does: measured on an ordinary nginx-in-front-of-PHP stack, the
+// always-on not_modified filter turned this plugin's fresh 200 into a bodyless
+// 304 whenever the client echoed back the date it had been given, on a post
+// whose dependency fingerprint had already switched the date off here. The
+// header is therefore withheld exactly when the plugin would refuse it.
+
+$sysmda_sh_method = sysmda_reflection_method( MarkdownController::class, 'send_headers' );
+
+/** Sends the response headers for a post and returns the Last-Modified value ('' = not sent). */
+$sysmda_last_modified_header = function ( $post ) use ( $sysmda_sh_method, $sysmda_controller, $sysmda_cv, $sysmda_advertised ) {
+	$GLOBALS['sysmda_test_headers'] = array();
+	$sysmda_sh_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ), $sysmda_advertised( $post ) );
+	return \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'Last-Modified' );
+};
+
+// Nothing selected, salt older than the post: the date is a validator, so it is
+// both honoured and advertised. This is the unchanged, ordinary case.
+$GLOBALS['sysmda_test_filters']                      = array();
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-06-01 00:00:00 GMT' ) . '-a1b2c3d4' );
+check( 'headers: Last-Modified is advertised while the date is a validator', true, '' !== $sysmda_last_modified_header( $sysmda_cv_post ) );
+check( 'headers: ETag is always advertised', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+
+// A taxonomy is emitted, so a term change moves the body without moving the
+// date. The plugin already refused the date here; now it stops sending it.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
+check( 'headers: no Last-Modified once taxonomies make the date unusable', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+check( 'headers: the ETag is still sent as the sole validator', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+
+// Same rule for the site-wide half: a salt newer than the post refuses the date.
+$GLOBALS['sysmda_test_filters']                      = array();
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
+check( 'headers: no Last-Modified once the salt is newer than the post', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+
+// And an ETag-matched 304 must not re-advertise it either: handing the date
+// back on the 304 arms the very next request's revalidation against it.
+$GLOBALS['sysmda_test_headers'] = array();
+$GLOBALS['sysmda_test_status']  = array();
+$_SERVER['HTTP_IF_NONE_MATCH']  = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check( 'conditional: the ETag still yields 304 with the date refused', true, $sysmda_hc( $sysmda_cv_post ) );
+check( 'conditional: that 304 carries no Last-Modified', '', \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'Last-Modified' ) );
+check( 'conditional: that 304 still carries the ETag', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+
+$GLOBALS['sysmda_test_headers'] = array();
+unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] );
 
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
@@ -2903,6 +2978,48 @@ $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
 $sysmda_admin->maybe_bump_for_empty_dependency_meta( 1, 61, '_thumbnail_id', 0 );
 $sysmda_admin->flush_cache_salt();
 check( 'salt: emptying the featured-image dependency bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+
+// ─── An upgrade is a site-wide invalidation (0.51.0) ──────────────────────
+//
+// An upgrade can change how existing content converts while no post row moves —
+// 0.50.1 did it twice. `SYSMDA_VERSION` is already inside cache_version(), so
+// the cached bodies and the ETags were invalidated; what was missing is the
+// salt's other consequence, the one date_is_strong_validator() reads. Without
+// it an If-Modified-Since-only client kept the pre-upgrade body against a post
+// date that had not moved.
+$sysmda_version_check = sysmda_reflection_method( AdminSettings::class, 'maybe_bump_for_plugin_version' );
+
+// A site that has never recorded a version (a fresh install, or the upgrade
+// that introduces this) records it and invalidates once.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+unset( $GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] );
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: an unrecorded version bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+check( 'version: the running version is recorded', SYSMDA_VERSION, get_option( AdminSettings::OPTION_VERSION ) );
+
+// The steady state, which is every request after the first: no bump, no write.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: an unchanged version does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// The upgrade itself: a stored version older than the running one.
+$GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] = '0.0.1-previous';
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: a changed version bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+check( 'version: the new version replaces the stored one', SYSMDA_VERSION, get_option( AdminSettings::OPTION_VERSION ) );
+
+// Recording the version must not itself look like a settings change: the option
+// carries the `sysmda_` prefix every panel option has, and updated_option fires
+// for it. Left unexcluded it re-arms the bump on the request that just
+// performed one — harmless today only because the flush has already run, which
+// is precisely the kind of "harmless by accident" this excludes on purpose.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->maybe_bump_cache_salt( AdminSettings::OPTION_VERSION );
+$sysmda_admin->flush_cache_salt();
+check( 'version: recording the version is not a settings change', '0', get_option( 'sysmda_cache_salt' ) );
 
 // ─── Filter registration priorities (0.47.0) ──────────────────────────────
 //

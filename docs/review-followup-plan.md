@@ -1,11 +1,13 @@
 # External review follow-up — what shipped in `0.50.1` and what is left
 
-**Status (7 September 2026): four findings fixed and shipped in `0.50.1`; five
-remain, none of them started.** This document is the handoff: it records what
-was done and why, and gives each remaining item a scope, a recommended
-approach, the alternatives that were considered and rejected, and an acceptance
-list. It is a plan, not a decision to build everything in it — two items below
-close with "measure before writing code" and one closes with "probably decline".
+**Status (10 September 2026): four findings shipped in `0.50.1`, R5 shipped in
+`0.51.0`, and the two measurements this plan made blocking have been taken.**
+B1 is **confirmed** and now needs code; R3's corpus measurement came back empty
+but on corpora too thin to conclude from. R2, PERF1/PERF2 and H1 are unchanged.
+This document is the handoff: it records what was done and why, and gives each
+remaining item a scope, a recommended approach, the alternatives that were
+considered and rejected, and an acceptance list. It is a plan, not a decision to
+build everything in it — one item below closes with "probably decline".
 
 The source is an independent code review of `0.50.0`
 (commit `a5ab171`) that ran the pure suite, PHPCS, and a real WordPress install
@@ -33,9 +35,84 @@ R1 also has a durable decision in `AGENTS.md` ("A password-protected synced
 pattern is never expanded, anywhere"), with the corollary that generalizes it:
 **a referenced object's eligibility is never implied by the referring post's.**
 
+## Shipped in `0.51.0`
+
+| ID | Fix | Where |
+|---|---|---|
+| R5 | A plugin version change bumps the cache salt, so an upgrade stops date-only revalidation | `AdminSettings::maybe_bump_for_plugin_version()` |
+| — | **`Last-Modified` is withheld whenever the date is not a usable validator** — found while measuring R5, and the reason R5's own fix would otherwise have been a no-op on most hosting | `MarkdownController::advertised_modified_timestamp()` |
+
+**The second one was not in the review, and it changes how R5 has to be read.**
+The recommended fix below works by making `date_is_strong_validator()` return
+false. That predicate governs only the plugin's *own* conditional handling,
+while the response went on advertising `Last-Modified` regardless — and any
+intermediary may revalidate against that header without consulting PHP.
+Measured on `sma-bricks.instawp.co` (nginx → Apache): an anonymous
+`If-Modified-Since` on a post whose dependency fingerprint had *already*
+switched the date off here still came back `304` with no body, because nginx's
+always-on `not_modified` filter downgraded the plugin's fresh `200`. Proved to
+be the proxy and not the plugin by emptying the body cache first and watching
+that same request repopulate it **with the new content**. Both durable
+decisions are in `AGENTS.md`; the acceptance check is item 24 there and a new
+row in `docs/staging-acceptance.md`.
+
+Generalise it rather than filing it under nginx: **a validator the plugin will
+not honour must not be sent.** Same rule as the weak ETag, applied to the other
+validator.
+
 ## Remaining work, in the order it should be done
 
-### 1. R5 — a plugin upgrade must invalidate date-only revalidation
+### 1. B1 — nested Bricks templates: **measured, confirmed, needs code**
+
+The measurement this plan made blocking was taken on 10 September 2026, on
+`sma-bricks-instawp-co` (Bricks 2.3.12; `BricksAdapter.php` and
+`MetadataBuilder.php` are byte-identical to the reviewed commit, so the result
+applies to current code). A `page → outer template → inner template` chain was
+built, the `.md` warmed and its `ETag` recorded, then **only the inner
+template** was edited the way a Bricks editor save does (tree meta plus a post
+update moving `post_modified_gmt`).
+
+| | before | after editing only the inner template |
+|---|---|---|
+| Rendered document | `INNER_SENTINEL_V1` | `INNER_SENTINEL_V2_CHANGED` — **changes** |
+| `BricksAdapter::fingerprint()` | `blob 016a5c…` / `templates 65d707…` | **identical** |
+| `post_modified_gmt`, page and outer template | 16:44:25 | unchanged |
+| Body served on `.md` | V1 | **V1 — stale** |
+| `If-None-Match` with the prior `ETag` | — | **304** |
+
+So the answer to the plan's own question — "did the body change while the
+validator did not?" — is **yes**, over anonymous HTTP, and the stale body
+persists for the full cache TTL (86400 s by default) because nothing invalidates
+the page: saving the inner template clears *its* entry, not the page's.
+
+The rendering half is not a surprise once `Element_Template::render()` is read:
+it loads the referenced template's `_bricks_page_content_2` and renders it
+through the `[bricks_template]` shortcode, which walks a nested `template`
+element the same way. The recursion is real, and `referenced_template_fingerprint()`
+walks only the page's own top-level elements.
+
+**Implement** a bounded, deduplicated recursive walk with cycle protection,
+following the shape of the synced-pattern dependency walk in `MetadataBuilder`.
+Measure the added cost: this runs on every request, `304`s included, and the
+existing budget (~0.09 ms on a 60-element tree) is the baseline to compare
+against. Test nested edits, deletion, reassignment, repeated references and
+cycles.
+
+This is **not** the documented `cid` component limitation. Do not close it by
+pointing at that one, and do not widen the fix to components.
+
+**One caveat on the fixture**: the chain was built by writing the Bricks meta
+directly rather than through the real editor, because this environment has no
+browser. The rendering path exercised is Bricks' own, and the fingerprint half
+is pure plugin code, so neither depends on how the tree got there — but a
+future pass through the real editor would close the last gap. The fixture was
+removed from staging afterwards.
+
+### 2. R5 — a plugin upgrade must invalidate date-only revalidation
+
+**Shipped in `0.51.0`** — kept here in full because the reasoning is what the
+durable decision in `AGENTS.md` compresses, and because the second half above
+is only legible against it.
 
 **The defect.** `cache_version()` folds in `SYSMDA_VERSION`, so an upgrade moves
 every `ETag`. `date_is_strong_validator()` does not, so a client sending only
@@ -127,7 +204,7 @@ and same-second invalidations still behave; authenticated and cache-disabled
 requests unchanged. Add the version transition to the pure suite by driving the
 stored option directly.
 
-### 2. R2 — Bricks description fallback loses ancestor exclusions
+### 3. R2 — Bricks description fallback loses ancestor exclusions
 
 **The defect.** `BricksAdapter::leaves_markup()` walks the flat element array and
 wraps each text-bearing element in a span carrying only *its own* classes. Bricks
@@ -154,33 +231,7 @@ excluded leaf; visible siblings; missing and cyclic ancestry; description and
 enriched index agree with the body. `post_content` still never used for a
 builder-handled post.
 
-### 3. B1 — nested Bricks templates: **verify before writing any code**
-
-`BricksAdapter::referenced_template_fingerprint()` records the modification date
-of each `template` element's referenced post, and does not follow templates
-referenced by *those* templates. In a synthetic `page → outer → inner` chain the
-page's fingerprint did not move when the inner template changed.
-
-The review is explicit that the rendering half was never verified: an unchanged
-adapter hash is not proof that the rendered document changes. **So the first step
-is the measurement, not the fix**, and the environment for it exists —
-`sma-bricks-instawp-co`, the only staging with Bricks:
-
-1. build the chain in the real editor;
-2. warm the `.md` and record the `ETag`;
-3. edit only the inner template through Bricks;
-4. re-fetch: did the body change while the validator did not?
-
-If the body does not change, the item closes with a note and no code. If it does,
-implement a bounded, deduplicated recursive walk with cycle protection, following
-the shape of the synced-pattern dependency walk in `MetadataBuilder`. Measure the
-added cost: this runs on every request, `304`s included, and the existing budget
-(~0.09 ms on a 60-element tree) is the baseline to compare against.
-
-This is **not** the documented `cid` component limitation. Do not close it by
-pointing at that one, and do not widen the fix to components.
-
-### 4. R3 — synced-pattern instance overrides — **measure demand first**
+### 4. R3 — synced-pattern instance overrides — **measured, inconclusive**
 
 **The defect.** `BlockCleaner` replaces a `core/block` node with the referenced
 pattern's parsed blocks and drops the reference's own `content` attribute.
@@ -194,9 +245,31 @@ invasive fix of the set, and its audience may be empty on any given site.
 Overrides need WordPress 6.6+ (the plugin's declared minimum is 6.1) and a
 pattern deliberately authored with `core/pattern-overrides` bindings.
 
-**The measurement that decides it**, in the spirit of every other feature in this
-project: look for `<!-- wp:block` carrying a `"content":` attribute in the real
-corpus. No occurrences, no work — record the measurement and move on.
+**The measurement was taken on 10 September 2026, and it does not decide it.**
+Three connected WordPress installs were scanned for `<!-- wp:block` carrying a
+`"content":` attribute, and for `wp_block` posts declaring
+`core/pattern-overrides` bindings:
+
+| Site | Posts scanned | Referencing a pattern | With instance overrides | `wp_block` posts | Patterns declaring overrides |
+|---|---|---|---|---|---|
+| `sma.instawp.co` | 34 | 0 | 0 | **0** | 0 |
+| `sma-bricks.instawp.co` | 34 | 0 | 0 | **0** | 0 |
+| `hvf.instawp.co` | 23 | 0 | 0 | **0** | 0 |
+
+Literally this satisfies "no occurrences, no work". **Do not close it on that
+basis.** None of the three corpora contains a single synced pattern, so the
+denominator is zero and the result cannot distinguish "nobody authors
+overrides" from "these three sites do not use patterns at all". The corpus that
+would settle it is the production reference site, which was not connected for
+this measurement. Re-run there before spending anything:
+
+```sql
+SELECT ID, post_type, post_title FROM wp_posts
+WHERE post_status = 'publish'
+  AND post_content REGEXP '<!--[[:space:]]*wp:block[[:space:]]*\\{[^}]*"content"[[:space:]]*:';
+```
+
+R3 therefore stays **parked, not closed**, at the cost of one query to reopen.
 
 **If it is built.** Core (`wp-includes/blocks/block.php`) attaches the parsed
 pattern blocks as the `core/block` instance's inner blocks and lets its declared
@@ -219,7 +292,7 @@ different; non-overridden fields keep their defaults; nested patterns and severa
 named blocks keep their context; exclusions, code-region masking and the cycle
 guard still hold; behaviour on a WordPress without overrides is unchanged.
 
-### 5. PERF1 / PERF2 — small, and only after R5
+### 5. PERF1 / PERF2 — small, and unblocked now that R5 has shipped
 
 - **PERF1 (HEAD).** `serve_markdown()` renders the body even for `HEAD`, which
   the server then discards. An early exit after the headers is two lines. Do it
@@ -231,9 +304,26 @@ guard still hold; behaviour on a WordPress without overrides is unchanged.
 - **PERF2 (compute once).** The IMS path computes the dependency fingerprints
   in `cache_version()` and again in `date_is_strong_validator()`. The duplication
   is not the cost, it is the *drift* — R5 exists precisely because the two
-  encode the same knowledge and disagreed. Resolve R5 first, then decide whether
-  a request-local snapshot still earns its keep. Filters may be stateful, so a
-  changed evaluation count has to be deliberate.
+  encode the same knowledge and disagreed. **`0.51.0` moved the balance and did
+  not resolve it.** `serve_markdown()` now computes the advertised date once and
+  hands it to both callees, which removes the drift *between the header and the
+  comparison* — the one that mattered — but it also means
+  `date_is_strong_validator()` runs on every request rather than only on the IMS
+  path, so the fingerprints are computed twice per request where they used to be
+  computed once. That was taken deliberately, and **measured rather than waved
+  through**, because `dependencies_fingerprint()` is not the cheap hash it looks
+  like — it runs `parse_blocks()` over the whole `post_content`, and again over
+  every referenced synced pattern. Timed against real WordPress on
+  `sma.instawp.co`: **0.33 ms** on a representative 18 KB article and **1.0 ms**
+  on a deliberately large 60 KB one. So the doubling costs 0.03–0.1% of the
+  ~1000–1200 ms `.md` TTFB the WordPress boot already dominates, `304`s
+  included — small enough to accept for the correctness the single value buys,
+  and large enough that it should not be doubled again without checking. A
+  request-local snapshot of both fingerprints would return it to one and is now
+  the whole of PERF2. Filters may be stateful, so the changed evaluation count
+  has to be deliberate either way — and note that a snapshot *reduces* the
+  count, which `docs/filters.md` already permits by requiring those callbacks to
+  be cheap and side-effect-free.
 
 ### 6. H1 — literal text in the `# Title` — **recommendation: decline, or do it narrowly**
 

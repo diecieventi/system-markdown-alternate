@@ -81,8 +81,10 @@ Two consequences worth knowing:
   representation (`sysmda_markdown_strict_406`, on by default).
 - `Content-Type: text/markdown`, `X-Robots-Tag: noindex, follow`, and a
   `Link: rel="canonical"` back to the HTML.
-- Weak `ETag` + `Last-Modified` with `304` support on the anonymous
-  representation.
+- Weak `ETag` with `304` support on the anonymous representation, plus
+  `Last-Modified` whenever the post's modification date alone determines the
+  document (it is withheld, rather than sent as information, when something
+  outside the post row can change the body).
 
 ### Discovery
 

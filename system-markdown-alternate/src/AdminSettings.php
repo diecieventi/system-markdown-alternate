@@ -37,6 +37,15 @@ class AdminSettings {
 	 */
 	const LEGACY_OPTION_TAXONOMIES = 'sysmda_front_matter_taxonomies';
 
+	/**
+	 * The plugin version this site last ran, so an upgrade is observable.
+	 *
+	 * Autoloaded and read once per request: it exists only to answer "did the
+	 * files change under us since the last request?", which no WordPress hook
+	 * reports reliably across a zip upload, FTP, WP-CLI and a Git deploy alike.
+	 */
+	const OPTION_VERSION = 'sysmda_version';
+
 	/** Exclusion defaults (displayed in the panel for reference only). */
 	/*
 	 * The built-in exclusion lists shown in the panel are read from the classes
@@ -51,6 +60,9 @@ class AdminSettings {
 
 	/** @var bool Whether this request still owes the cache salt a bump. */
 	private $salt_bump_pending = false;
+
+	/** @var string Plugin version to record at shutdown ('' = nothing to record). */
+	private $version_write_pending = '';
 
 	/** @var string[]|null Saved extra meta keys, memoized (null = not read yet). */
 	private $extra_meta_keys = null;
@@ -153,6 +165,10 @@ class AdminSettings {
 		// flush_cache_salt().
 		add_action( 'shutdown', array( $this, 'flush_cache_salt' ) );
 
+		// An upgrade can change how content converts without touching a single
+		// post, so it is a site-wide invalidation like the ones above.
+		$this->maybe_bump_for_plugin_version();
+
 		// After init, so taxonomies registered by themes/plugins are all visible.
 		add_action( 'wp_loaded', array( $this, 'maybe_migrate_legacy_taxonomies' ) );
 
@@ -172,10 +188,50 @@ class AdminSettings {
 	 */
 	public function maybe_bump_cache_salt( $option ): void {
 		if ( ! is_string( $option ) || 0 !== strpos( $option, 'sysmda_' )
-			|| 'sysmda_cache_salt' === $option || HitCounter::OPTION === $option ) {
+			|| 'sysmda_cache_salt' === $option || HitCounter::OPTION === $option
+			|| self::OPTION_VERSION === $option ) {
 			return;
 		}
 
+		$this->bump_cache_salt();
+	}
+
+	/**
+	 * Records a plugin upgrade as a site-wide invalidation.
+	 *
+	 * An upgrade can change how existing content converts while no post row
+	 * moves — 0.50.1 did exactly that, twice (dot segments in a query, and
+	 * div-grouped definition lists). `SYSMDA_VERSION` is already inside
+	 * MarkdownController::cache_version(), so every cached body and every ETag
+	 * is invalidated by an upgrade already; what was missing is the salt's
+	 * other consequence, the one date_is_strong_validator() reads. Without it
+	 * an `If-Modified-Since`-only client keeps the pre-upgrade body against an
+	 * unmoved post date.
+	 *
+	 * The salt is the right mechanism precisely because it is already defined
+	 * as "something site-wide and rare changed the output of posts whose own
+	 * date did not move". And it costs nothing extra in cache terms: those
+	 * bodies were being rebuilt on the next request regardless.
+	 *
+	 * Deliberately NOT hung off `upgrader_process_complete`: that fires for the
+	 * WordPress updater and for nothing else, so a zip upload, an FTP sync,
+	 * WP-CLI or a Git deploy would all miss it. Comparing a stored value on the
+	 * first request that sees the new files covers every path identically, at
+	 * the cost of one autoloaded option read.
+	 *
+	 * Two concurrent requests immediately after an upgrade may both mark the
+	 * bump. That is harmless — one extra invalidation of an already-invalidated
+	 * cache — and must NOT be "fixed" with a lock, which can outlive the
+	 * upgrade and suppress the bump entirely.
+	 */
+	private function maybe_bump_for_plugin_version(): void {
+		$stored = (string) get_option( self::OPTION_VERSION, '' );
+
+		if ( SYSMDA_VERSION === $stored ) {
+			return;
+		}
+
+		$this->version_write_pending = SYSMDA_VERSION;
 		$this->bump_cache_salt();
 	}
 
@@ -215,13 +271,22 @@ class AdminSettings {
 	 * validator, so keep the `<unix ts>-<random>` shape.
 	 */
 	public function flush_cache_salt(): void {
-		if ( ! $this->salt_bump_pending ) {
-			return;
+		$version                     = $this->version_write_pending;
+		$this->version_write_pending = '';
+
+		if ( $this->salt_bump_pending ) {
+			$this->salt_bump_pending = false;
+
+			update_option( 'sysmda_cache_salt', time() . '-' . bin2hex( random_bytes( 4 ) ) );
 		}
 
-		$this->salt_bump_pending = false;
-
-		update_option( 'sysmda_cache_salt', time() . '-' . bin2hex( random_bytes( 4 ) ) );
+		// Recorded AFTER the salt, and the order is the point: if the request
+		// dies between the two writes, the next one sees the old version and
+		// bumps again — an extra invalidation. The reverse order would record
+		// the upgrade while losing its invalidation, permanently.
+		if ( '' !== $version ) {
+			update_option( self::OPTION_VERSION, $version );
+		}
 	}
 
 	/**

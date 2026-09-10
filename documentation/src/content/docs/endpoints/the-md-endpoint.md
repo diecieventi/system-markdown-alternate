@@ -48,10 +48,21 @@ link: <https://example.com/my-post.md>; rel="alternate"; type="text/markdown"
 | `Content-Type` | `text/markdown; charset=utf-8` |
 | `X-Robots-Tag` | `noindex, follow` |
 | `Link` | the HTML permalink, `rel="canonical"` |
-| `ETag` / `Last-Modified` | validators for conditional requests |
+| `ETag` | the validator for conditional requests, always sent |
+| `Last-Modified` | sent **only when the post's modification date alone determines the document** — see below |
 | `Cache-Control` | `public, max-age=0, must-revalidate` on `.md` URLs |
 
 The two `noindex`/`canonical` headers together tell search engines exactly one thing: index the HTML page, not this. That is why the plugin creates no SEO risk, and why it deliberately ships no sitemap of `.md` URLs.
+
+### Why `Last-Modified` is sometimes missing
+
+Not a fault, and nothing you need to configure. Some things change what a `.md` contains without touching the post's own "last modified" date: a category or tag rename when you emit custom taxonomies, a change to a synced pattern the post reuses, a new featured image, a settings save, or a plugin update.
+
+When any of those apply, the date can no longer prove a cached copy is current — so the plugin stops sending it, and the `ETag` (which does account for all of them) becomes the only validator. Caches and crawlers handle this normally; it simply means they revalidate against the `ETag` instead of the date.
+
+Sending the date anyway would not be harmless: a web server or CDN sitting in front of WordPress may answer a revalidation from that header itself, before the plugin ever runs — which would hand a reader an outdated copy of a document the plugin was serving correctly. Withholding it is what prevents that.
+
+A post with none of those dependencies keeps its `Last-Modified` exactly as before.
 
 ### If you are logged in, you will see something else
 
