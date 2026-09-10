@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.50.1
+Stable tag: 0.51.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,14 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.51.0 =
+
+* Fixed: a **plugin update** did not stop date-only revalidation. An update can change how existing content converts without touching a single post — `0.50.1` did it twice — and a client that revalidates with `If-Modified-Since` alone was still told "not modified", keeping the pre-update version. A version change now invalidates the same way a settings save does.
+* Fixed, and larger than it looks: `Last-Modified` was sent on every Markdown response, including the ones where the plugin had already decided the date could not prove a copy was current (a post with custom taxonomies, a synced pattern, a featured image, or after any site-wide change). That decision only governed the plugin's own answer, while the header invited **everything else** to revalidate against the date — and a web server in front of WordPress will: measured on an ordinary nginx stack, a fresh response was converted into an empty "not modified" before it left the server, handing the reader a stale copy. The header is now sent only when the date really does determine the document; the `ETag`, which accounts for all of those inputs, is the validator in every other case.
+* Fixed: on a **Bricks** page, marking a container or section `md-exclude` removed its content from the Markdown body but not from the front-matter `description` or the page's `/llms.txt` entry, which are built from a cheaper reading of the stored layout. That reading now accounts for the elements a piece of text sits inside, so an exclusion anywhere above it applies everywhere — which is what the setting has always promised.
+* Fixed: **tables**. Markdown requires a table to have a header row, and the block editor writes one only when you switch its header section on — which is off by default. So an ordinary table published its first row of *data* as the column headings, turning values into labels. A table with no header of its own now gets an empty one and keeps every row as a row; a table that does have a header row is unchanged.
+* Fixed: merged table cells (`colspan` / `rowspan`) produced rows with the wrong number of columns, which quietly shifted every following value under the wrong heading. The grid is now filled out so each value stays in its own column.
+
 = 0.50.1 =
 
 * Fixed: a **password-protected synced pattern** was expanded into the Markdown of every post that used it. WordPress refuses to render such a pattern on the HTML page, so its text was reaching the `.md`, the front-matter `description` and the enriched `/llms.txt` while the page itself showed nothing. A password on a pattern now keeps it out of all of them, for everyone.
@@ -201,14 +209,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 * Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. The new default reaches new installations — and the one unusual case of a site whose content types come from the `sysmda_markdown_supported_post_types` filter alone, with the settings page never saved: there the endpoint stops answering until you tick the box.
 
-= 0.49.4 =
-
-* Fixed image `alt`/`title` and link `title`/destination interpolation in the Markdown body, which was previously placed into the output with no escaping at all — a value containing `]`, `"` or a backslash could corrupt the surrounding Markdown syntax, and a destination containing a space or a parenthesis was never wrapped in angle brackets.
-* `Tested up to: 7.1`.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.51.0 =
+Recommended for every site. A plugin update now correctly invalidates cached Markdown for clients that revalidate by date, and the Last-Modified header is no longer sent when the plugin cannot back it — which stops a web server or CDN in front of WordPress from answering a revalidation with an outdated copy on its own.
 
 = 0.50.1 =
 Recommended for every site. A password on a synced pattern no longer leaks that pattern's text into the Markdown of the posts using it. Also fixes relative links carrying ../ inside a query or fragment, and definition lists whose pairs are wrapped in div elements (previously dropped from the output entirely).

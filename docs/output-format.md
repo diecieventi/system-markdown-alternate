@@ -212,7 +212,8 @@ is byte-identical to a site that never had it.
    - ATX headings (`# Heading`);
    - `-` list markers;
    - fenced code blocks;
-   - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells;
+   - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells; the
+     grid is normalized first (since `0.51.0`), see below;
    - `script` / `style` / `iframe` nodes removed;
    - `strip_tags => true` — see the note below;
    - **content-sized code delimiters** (since `0.38.0`) — see below.
@@ -234,7 +235,7 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 
 | Source | Emitted as |
 |---|---|
-| `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table; a `<caption>` becomes a line above it |
+| `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table with a filled-in grid; a `<caption>` becomes a line above it — see *Table grids* below |
 | `<dl>` / `<dt>` / `<dd>` | `**Term**` as its own paragraph, each definition as a following paragraph — including the standard shape that wraps each pair in a `<div>` child of the list (since `0.50.1`) |
 | `<figure>` around an image | paragraph (so images and captions get blank-line separation) |
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
@@ -395,6 +396,53 @@ Removed **unconditionally**, whatever the filters and the panel say:
   links and icons are interface chrome, never article content, so the entire
   shortcode is removed before the Markdown conversion.
 
+### Table grids
+
+Since `0.51.0` a table is normalized in the DOM before it is converted, so the
+emitted grid matches the source table. Two rules, and both changed the bytes of
+existing content when they landed:
+
+- **A table with no header row of its own gets an empty header row**, rather
+  than having its first row of data promoted to column headings. GFM requires a
+  delimiter row, and the converter emits it after the first row it sees —
+  while WordPress's own `core/table` block writes `<thead>` only when the
+  header section is populated, and that toggle is off by default. So an
+  ordinary table used to publish its first row of values as headings:
+
+  ```
+  | Rome | 3 |        |  |  |
+  |---|---|     →     |---|---|
+  | Milan | 5 |       | Rome | 3 |
+                      | Milan | 5 |
+  ```
+
+  A header is recognised when a non-empty `<thead>` is present, or when the
+  table's own first row consists entirely of `<th>` cells. Both of those come
+  out byte-identical to before. A `<th>` used as a **row label** inside a data
+  row is not a header, and such a table gets the empty header row like any
+  other.
+
+- **`colspan` and `rowspan` are expanded into empty cells.** One pipe is
+  emitted per cell, so a spanning cell used to leave the row short and every
+  later value shifted into the wrong column. The blank cells are placed at the
+  positions the span covers, so values stay under their own heading, and each
+  takes the spanning cell's own tag — so a header cell that spans columns
+  leaves the header row intact.
+
+  `rowspan="0"` is honoured as the HTML standard defines it: the cell covers
+  every remaining row of its row group (`<thead>`/`<tbody>`/`<tfoot>`, or the
+  table itself for rows that are its direct children). `colspan="0"` is not
+  given the same reading — the standard requires `colspan` to be greater than
+  zero, so there it is a broken value and counts as one column, like any other
+  unusable span.
+
+  Spans are clamped to a maximum of 100, so a malformed or hostile value cannot
+  synthesize an enormous table.
+
+Nested tables are unchanged: GFM cannot express one, so an inner table is still
+flattened into its cell by the converter and does not receive a header row of
+its own.
+
 ### Unknown HTML tags are not a stable surface
 
 Because the converter runs with `strip_tags => true`, any HTML tag it does not
@@ -487,13 +535,25 @@ brief, a successful Markdown response carries:
   intentionally non-indexable)
 - `Link: <permalink>; rel="canonical"` back to the HTML
 - `Vary: Accept` on negotiable URLs (appended, never overwritten)
-- for the anonymous representation, `ETag` + `Last-Modified`, with conditional
+- for the anonymous representation, a weak `ETag`, with conditional
   `304 Not Modified` support
-  (`If-None-Match` takes priority over `If-Modified-Since`). When the
-  `taxonomies:` block is emitted — or the post has any other dependency outside
-  its own row — `If-Modified-Since` is **ignored**: the body can then change
-  without `post_modified_gmt` moving, so only the fingerprinted `ETag` can prove
-  a cached copy is still current. `Last-Modified` is still sent, as information.
+  (`If-None-Match` takes priority over `If-Modified-Since`)
+- `Last-Modified` **only while the modification date determines the whole
+  representation**. When the `taxonomies:` block is emitted, when the post has
+  any dependency outside its own row, or when a site-wide invalidation (a
+  settings save, a permalink or timezone change, a plugin upgrade) is more
+  recent than the post's own date, the body can change without
+  `post_modified_gmt` moving — so `If-Modified-Since` is ignored **and the
+  header is not sent at all**. The `ETag`, which covers every one of those
+  inputs, is then the sole validator.
+
+  Since `0.51.0`; before that the header was sent regardless, as information.
+  It was not harmless: `Last-Modified` is a validator, and an intermediary is
+  entitled to revalidate against it. Measured on an ordinary nginx-in-front-of-
+  PHP stack, nginx's always-on not-modified filter converted a fresh `200` into
+  a bodyless `304` whenever the client echoed the date back — so a client could
+  keep a stale copy of a document the plugin was serving correctly. Withholding
+  the header is what makes the rule enforceable rather than advisory.
 
   Authenticated `.md` requests are rebuilt in the visitor's context, bypass the
   shared body cache and carry neither validator; they are never answered `304`.

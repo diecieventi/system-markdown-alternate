@@ -707,6 +707,12 @@ require __DIR__ . '/../src/MarkdownActions.php';
 require __DIR__ . '/../src/AcfIntegration.php';
 require __DIR__ . '/../src/MetaFields.php';
 
+// Declared inside the plugin's namespace, so it shadows the built-in header()
+// for the classes above and makes the emitted response headers assertable.
+require __DIR__ . '/namespaced-stubs.php';
+
+$GLOBALS['sysmda_test_headers'] = array(); // Captured header lines, reset per test.
+
 use Diecieventi\SystemMarkdownAlternate\AcceptNegotiator;
 use Diecieventi\SystemMarkdownAlternate\AcfIntegration;
 use Diecieventi\SystemMarkdownAlternate\AdminSettings;
@@ -2032,13 +2038,30 @@ check( 'Link cross-relation: a describedby does not satisfy alternate', false, M
 // validator for the representation.
 
 $sysmda_hc_method = sysmda_reflection_method( MarkdownController::class, 'handle_conditional' );
+$sysmda_ad_method = sysmda_reflection_method( MarkdownController::class, 'advertised_modified_timestamp' );
+
+/** The modification timestamp the response would advertise for this post. */
+$sysmda_advertised = function ( $post ) use ( $sysmda_ad_method, $sysmda_controller ) {
+	return (int) $sysmda_ad_method->invoke( $sysmda_controller, $post );
+};
+
+/**
+ * Runs handle_conditional() the way serve_markdown() does: the advertised
+ * modification time is decided ONCE by the caller and handed in, so what the
+ * conditional path compares against is by construction what the response
+ * carries. Calling the method with an independently computed date would test a
+ * wiring the plugin no longer has.
+ */
+$sysmda_hc = function ( $post ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv, $sysmda_advertised ) {
+	return $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ), $sysmda_advertised( $post ) );
+};
 
 /** Runs handle_conditional() with only an If-Modified-Since header set. */
-$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv ) {
+$sysmda_ims = function ( $post, $since ) use ( $sysmda_hc ) {
 	$GLOBALS['sysmda_test_status'] = array();
 	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 	$_SERVER['HTTP_IF_MODIFIED_SINCE'] = $since;
-	$result = $sysmda_hc_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ) );
+	$result = $sysmda_hc( $post );
 	unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
 	return $result;
 };
@@ -2073,12 +2096,12 @@ unset( $sysmda_saved_genre_terms );
 $GLOBALS['sysmda_test_status'] = array();
 unset( $_SERVER['HTTP_IF_MODIFIED_SINCE'] );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"' . $sysmda_cv( $sysmda_cv_post ) . '"';
-check( 'conditional: matching ETag still yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: matching ETag still yields 304', true, $sysmda_hc( $sysmda_cv_post ) );
 // The tag this version issues comes back in its weak form, and revalidates too.
 $_SERVER['HTTP_IF_NONE_MATCH'] = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
-check( 'conditional: the weak tag we issue yields 304', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: the weak tag we issue yields 304', true, $sysmda_hc( $sysmda_cv_post ) );
 $_SERVER['HTTP_IF_NONE_MATCH'] = '"stale-validator"';
-check( 'conditional: stale ETag yields the full body', false, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: stale ETag yields the full body', false, $sysmda_hc( $sysmda_cv_post ) );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 
 // A `304` answers a GET/HEAD revalidation. On any other method the same header
@@ -2089,10 +2112,10 @@ unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 // comparing anything, so nothing else could stop the 304.
 $_SERVER['HTTP_IF_NONE_MATCH'] = '*';
 
-$sysmda_hc_with_method = function ( $method ) use ( $sysmda_hc_method, $sysmda_controller, $sysmda_cv, $sysmda_cv_post ) {
+$sysmda_hc_with_method = function ( $method ) use ( $sysmda_hc, $sysmda_cv_post ) {
 	$GLOBALS['sysmda_test_status'] = array();
 	$_SERVER['REQUEST_METHOD']     = $method;
-	$result                        = $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) );
+	$result                        = $sysmda_hc( $sysmda_cv_post );
 	unset( $_SERVER['REQUEST_METHOD'] );
 	return $result;
 };
@@ -2112,7 +2135,7 @@ check( 'conditional: lowercase method still revalidates', true, $sysmda_hc_with_
 // keep behaving like a read, or the endpoint would lose the conditional path
 // outside a request context.
 $GLOBALS['sysmda_test_status'] = array();
-check( 'conditional: a missing method reads as GET', true, $sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) ) );
+check( 'conditional: a missing method reads as GET', true, $sysmda_hc( $sysmda_cv_post ) );
 
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 check( 'is_read_request: GET', true, sysmda_with_method( 'GET', array( MarkdownController::class, 'is_read_request' ) ) );
@@ -2187,7 +2210,7 @@ $_SERVER['HTTP_IF_NONE_MATCH']    = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
 check(
 	'conditional: an authenticated request is never answered 304',
 	false,
-	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+	$sysmda_hc( $sysmda_cv_post )
 );
 check( 'conditional: no 304 sent to an authenticated visitor', array(), $GLOBALS['sysmda_test_status'] );
 // The very same request, anonymous, still revalidates — the split is the only
@@ -2196,10 +2219,62 @@ $GLOBALS['sysmda_test_logged_in'] = false;
 check(
 	'conditional: the same request anonymous still yields 304',
 	true,
-	$sysmda_hc_method->invoke( $sysmda_controller, $sysmda_cv_post, $sysmda_cv( $sysmda_cv_post ) )
+	$sysmda_hc( $sysmda_cv_post )
 );
 unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
 $GLOBALS['sysmda_test_status'] = array();
+
+// ─── A refused date validator is not advertised either ────────────────
+//
+// date_is_strong_validator() decides whether `post_modified_gmt` knows about
+// every input; until 0.51.0 that decision governed only the plugin's OWN
+// conditional handling, while `Last-Modified` went out regardless. It is a
+// validator in the response, so an intermediary may revalidate against it —
+// and one does: measured on an ordinary nginx-in-front-of-PHP stack, the
+// always-on not_modified filter turned this plugin's fresh 200 into a bodyless
+// 304 whenever the client echoed back the date it had been given, on a post
+// whose dependency fingerprint had already switched the date off here. The
+// header is therefore withheld exactly when the plugin would refuse it.
+
+$sysmda_sh_method = sysmda_reflection_method( MarkdownController::class, 'send_headers' );
+
+/** Sends the response headers for a post and returns the Last-Modified value ('' = not sent). */
+$sysmda_last_modified_header = function ( $post ) use ( $sysmda_sh_method, $sysmda_controller, $sysmda_cv, $sysmda_advertised ) {
+	$GLOBALS['sysmda_test_headers'] = array();
+	$sysmda_sh_method->invoke( $sysmda_controller, $post, $sysmda_cv( $post ), $sysmda_advertised( $post ) );
+	return \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'Last-Modified' );
+};
+
+// Nothing selected, salt older than the post: the date is a validator, so it is
+// both honoured and advertised. This is the unchanged, ordinary case.
+$GLOBALS['sysmda_test_filters']                      = array();
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-06-01 00:00:00 GMT' ) . '-a1b2c3d4' );
+check( 'headers: Last-Modified is advertised while the date is a validator', true, '' !== $sysmda_last_modified_header( $sysmda_cv_post ) );
+check( 'headers: ETag is always advertised', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+
+// A taxonomy is emitted, so a term change moves the body without moving the
+// date. The plugin already refused the date here; now it stops sending it.
+$GLOBALS['sysmda_test_filters']['sysmda_front_matter_taxonomy_slugs'] = array( 'genre' );
+check( 'headers: no Last-Modified once taxonomies make the date unusable', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+check( 'headers: the ETag is still sent as the sole validator', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+
+// Same rule for the site-wide half: a salt newer than the post refuses the date.
+$GLOBALS['sysmda_test_filters']                      = array();
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
+check( 'headers: no Last-Modified once the salt is newer than the post', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+
+// And an ETag-matched 304 must not re-advertise it either: handing the date
+// back on the 304 arms the very next request's revalidation against it.
+$GLOBALS['sysmda_test_headers'] = array();
+$GLOBALS['sysmda_test_status']  = array();
+$_SERVER['HTTP_IF_NONE_MATCH']  = 'W/"' . $sysmda_cv( $sysmda_cv_post ) . '"';
+check( 'conditional: the ETag still yields 304 with the date refused', true, $sysmda_hc( $sysmda_cv_post ) );
+check( 'conditional: that 304 carries no Last-Modified', '', \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'Last-Modified' ) );
+check( 'conditional: that 304 still carries the ETag', true, '' !== \Diecieventi\SystemMarkdownAlternate\sysmda_test_header( 'ETag' ) );
+unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
+
+$GLOBALS['sysmda_test_headers'] = array();
+unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] );
 
 // Back to the default state so later assertions are unaffected.
 $GLOBALS['sysmda_test_filters'] = array();
@@ -2904,6 +2979,48 @@ $sysmda_admin->maybe_bump_for_empty_dependency_meta( 1, 61, '_thumbnail_id', 0 )
 $sysmda_admin->flush_cache_salt();
 check( 'salt: emptying the featured-image dependency bumps', true, '0' !== get_option( 'sysmda_cache_salt' ) );
 
+// ─── An upgrade is a site-wide invalidation (0.51.0) ──────────────────────
+//
+// An upgrade can change how existing content converts while no post row moves —
+// 0.50.1 did it twice. `SYSMDA_VERSION` is already inside cache_version(), so
+// the cached bodies and the ETags were invalidated; what was missing is the
+// salt's other consequence, the one date_is_strong_validator() reads. Without
+// it an If-Modified-Since-only client kept the pre-upgrade body against a post
+// date that had not moved.
+$sysmda_version_check = sysmda_reflection_method( AdminSettings::class, 'maybe_bump_for_plugin_version' );
+
+// A site that has never recorded a version (a fresh install, or the upgrade
+// that introduces this) records it and invalidates once.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+unset( $GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] );
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: an unrecorded version bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+check( 'version: the running version is recorded', SYSMDA_VERSION, get_option( AdminSettings::OPTION_VERSION ) );
+
+// The steady state, which is every request after the first: no bump, no write.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: an unchanged version does not bump', '0', get_option( 'sysmda_cache_salt' ) );
+
+// The upgrade itself: a stored version older than the running one.
+$GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] = '0.0.1-previous';
+$sysmda_version_check->invoke( $sysmda_admin );
+$sysmda_admin->flush_cache_salt();
+check( 'version: a changed version bumps the salt', true, '0' !== get_option( 'sysmda_cache_salt' ) );
+check( 'version: the new version replaces the stored one', SYSMDA_VERSION, get_option( AdminSettings::OPTION_VERSION ) );
+
+// Recording the version must not itself look like a settings change: the option
+// carries the `sysmda_` prefix every panel option has, and updated_option fires
+// for it. Left unexcluded it re-arms the bump on the request that just
+// performed one — harmless today only because the flush has already run, which
+// is precisely the kind of "harmless by accident" this excludes on purpose.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = '0';
+$sysmda_admin->maybe_bump_cache_salt( AdminSettings::OPTION_VERSION );
+$sysmda_admin->flush_cache_salt();
+check( 'version: recording the version is not a settings change', '0', get_option( 'sysmda_cache_salt' ) );
+
 // ─── Filter registration priorities (0.47.0) ──────────────────────────────
 //
 // hook_filters() is private and inert (the closures read their options only when
@@ -3049,9 +3166,12 @@ unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_classes'] );
 // Figures become paragraphs (blank-line separation around images), EXCEPT when
 // they hold a block element: a <table> inside a <p> is invalid nesting.
 check( 'dom: image figure unwrapped to p', '<p><img src="https://example.com/a.png" alt="x"></p>', $sysmda_dom( '<figure class="wp-block-image"><img src="/a.png" alt="x"/></figure>' ) );
+// The empty <thead> is normalize_tables() doing its job on a table with no
+// header of its own: what this case asserts is the FIGURE, which still is not
+// rewritten to a <p> because it holds a block element.
 check(
 	'dom: table figure left alone',
-	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>',
+	'<figure class="wp-block-table"><table><thead><tr><th></th></tr></thead><tr><td>c</td></tr></table></figure>',
 	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>' )
 );
 
@@ -3066,7 +3186,7 @@ check(
 );
 check(
 	'dom: table caption promoted out of the figure',
-	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure><p>Cap</p>',
+	'<figure class="wp-block-table"><table><thead><tr><th></th></tr></thead><tr><td>c</td></tr></table></figure><p>Cap</p>',
 	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table><figcaption>Cap</figcaption></figure>' )
 );
 check(
@@ -3979,6 +4099,97 @@ check(
 	$sysmda_bricks->source_text( $sysmda_bricks_page )
 );
 check( 'bricks adapter: source_text is empty for a post it does not handle', '', $sysmda_bricks->source_text( $sysmda_wp_mode_page ) );
+
+// ─── R2: an exclusion on an ancestor reaches the leaf ────────────────
+//
+// Bricks stores a FLAT element array with parent/children links, so a container
+// marked md-exclude is a separate entry from the text inside it. Wrapping each
+// leaf in its own classes alone left the exclusion pass nothing to match on:
+// the body correctly dropped the subtree while the front-matter description and
+// the enriched /llms.txt entry kept its text. What the body excludes is
+// excluded everywhere.
+$sysmda_bricks_nested = $sysmda_bricks_post(
+	array(
+		array(
+			'id'       => 'sec',
+			'name'     => 'section',
+			'parent'   => 0,
+			'settings' => array( '_cssClasses' => 'md-exclude' ),
+		),
+		array(
+			'id'       => 'box',
+			'name'     => 'container',
+			'parent'   => 'sec',
+			'settings' => array(),
+		),
+		// Two levels below the exclusion: the case a parent-only walk misses.
+		array(
+			'id'       => 'deep',
+			'name'     => 'text-basic',
+			'parent'   => 'box',
+			'settings' => array( 'text' => 'EXCLUDED_GRANDCHILD' ),
+		),
+		array(
+			'id'       => 'ok',
+			'name'     => 'text-basic',
+			'parent'   => 0,
+			'settings' => array( 'text' => 'Public text' ),
+		),
+	),
+	'bricks',
+	960
+);
+
+$sysmda_nested_markup = $sysmda_bricks->source_text( $sysmda_bricks_nested );
+check( 'bricks R2: an excluded ancestor class reaches the leaf span', true, false !== strpos( $sysmda_nested_markup, 'md-exclude' ) );
+check( 'bricks R2: the ancestor element class is carried too', true, false !== strpos( $sysmda_nested_markup, 'brxe-section' ) );
+check( 'bricks R2: a visible sibling keeps only its own classes', true, false !== strpos( $sysmda_nested_markup, '<span class="brxe-text-basic">Public text</span>' ) );
+
+// The point of carrying the classes at all: the SHARED exclusion pass, not a
+// second implementation, must now drop the subtree.
+$sysmda_bricks_stripper = new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner(), array() );
+$sysmda_nested_stripped = $sysmda_bricks_stripper->strip_excluded_content( $sysmda_nested_markup );
+check( 'bricks R2: the excluded grandchild is stripped from the description source', false, false !== strpos( $sysmda_nested_stripped, 'EXCLUDED_GRANDCHILD' ) );
+check( 'bricks R2: the visible sibling survives the strip', true, false !== strpos( $sysmda_nested_stripped, 'Public text' ) );
+
+// Malformed ancestry is stored data, not an invariant. A parent naming an
+// element that is not in the tree, and a cycle, must both end the walk rather
+// than loop — the leaf simply keeps what could be resolved.
+$sysmda_bricks_broken = $sysmda_bricks_post(
+	array(
+		array(
+			'id'       => 'orphan',
+			'name'     => 'text-basic',
+			'parent'   => 'does-not-exist',
+			'settings' => array( 'text' => 'Orphan text' ),
+		),
+		array(
+			'id'       => 'a',
+			'name'     => 'container',
+			'parent'   => 'b',
+			'settings' => array( '_cssClasses' => 'ring-a' ),
+		),
+		array(
+			'id'       => 'b',
+			'name'     => 'container',
+			'parent'   => 'a',
+			'settings' => array( '_cssClasses' => 'ring-b' ),
+		),
+		array(
+			'id'       => 'inring',
+			'name'     => 'text-basic',
+			'parent'   => 'a',
+			'settings' => array( 'text' => 'Text inside the cycle' ),
+		),
+	),
+	'bricks',
+	961
+);
+
+$sysmda_broken_markup = $sysmda_bricks->source_text( $sysmda_bricks_broken );
+check( 'bricks R2: a missing parent does not lose the leaf', true, false !== strpos( $sysmda_broken_markup, 'Orphan text' ) );
+check( 'bricks R2: a cyclic ancestry terminates and keeps the leaf', true, false !== strpos( $sysmda_broken_markup, 'Text inside the cycle' ) );
+check( 'bricks R2: the cycle contributes each ancestor once', 1, substr_count( $sysmda_broken_markup, 'ring-b' ) );
 
 // fingerprint(): empty when unclaimed (contributes nothing to a post it does
 // not render); mode + a blob hash when claimed.
@@ -4900,10 +5111,125 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		"| Name | Price |\n|---|---|\n| Coffee | 2 |\n| Tea | 3 |\n",
 		$sysmda_conv->convert( '<table><thead><tr><th>Name</th><th>Price</th></tr></thead><tbody><tr><td>Coffee</td><td>2</td></tr><tr><td>Tea</td><td>3</td></tr></tbody></table>' )
 	);
+	// The library alone still promotes the first row it sees, which is what
+	// ContentRenderer::normalize_tables() exists to prevent BEFORE the converter
+	// ever runs — see the end-to-end block below. This asserts the converter's
+	// own unchanged behaviour, not the output a post gets.
 	check(
 		'convert: headerless table still tabular',
 		"| a | b |\n|---|---|\n| c | d |\n",
 		$sysmda_conv->convert( '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>' )
+	);
+
+	// ─── Tables end to end: the DOM pass plus the converter ──────────
+	//
+	// The library converts bottom-up, so a `table` converter sees rows and cells
+	// that are already strings: colspan, rowspan and the existence of a header
+	// are gone before it is called. Both defects are therefore fixed in the DOM,
+	// and both are only visible in the finished Markdown — which is what these
+	// assert. Each was reproduced against this exact library version first.
+	$sysmda_table_md = static function ( $html ) use ( $sysmda_dom, $sysmda_conv ) {
+		return $sysmda_conv->convert( $sysmda_dom( $html ) );
+	};
+
+	// WordPress's core/table block writes <thead> only when the header section
+	// is populated, and that toggle is off by default — so an ordinary table
+	// arrives as <tbody> alone and its first row of DATA was published as the
+	// column headings. Rome/3 are values, not headers.
+	check(
+		'tables: a headerless table keeps its first row as data',
+		"|  |  |\n|---|---|\n| Rome | 3 |\n| Milan | 5 |\n",
+		$sysmda_table_md( '<table><tbody><tr><td>Rome</td><td>3</td></tr><tr><td>Milan</td><td>5</td></tr></tbody></table>' )
+	);
+
+	// The two shapes that already state their header correctly must come out
+	// byte-identical to before the pass existed. These are the regression half.
+	check(
+		'tables: a real thead is untouched',
+		"| City | N |\n|---|---|\n| Rome | 3 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>City</th><th>N</th></tr></thead><tbody><tr><td>Rome</td><td>3</td></tr></tbody></table>' )
+	);
+	check(
+		'tables: an all-th first row without thead is a header',
+		"| City | N |\n|---|---|\n| Rome | 3 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th>City</th><th>N</th></tr><tr><td>Rome</td><td>3</td></tr></tbody></table>' )
+	);
+
+	// The case a naive "is there a <th> anywhere" test gets wrong, and the
+	// reason has_header_row() reads the table's own first row instead: a <th>
+	// used as a ROW LABEL is not a header, and such a table has none at all.
+	// This fixture is owed by anyone who touches that predicate.
+	check(
+		'tables: a th used as a row label is not a header row',
+		"|  |  |\n|---|---|\n| Rome | 3 |\n| Milan | 5 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th>Rome</th><td>3</td></tr><tr><th>Milan</th><td>5</td></tr></tbody></table>' )
+	);
+
+	// A colspan produced a row one column short: every later value slid left,
+	// under the wrong heading.
+	check(
+		'tables: a colspan is filled out to the full width',
+		"| A | B | C |\n|---|---|---|\n| wide |  | c |\n| a | b | c |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th><th>C</th></tr></thead><tbody><tr><td colspan="2">wide</td><td>c</td></tr><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>' )
+	);
+
+	// The fixture that matters most, and the one an earlier prototype got wrong
+	// by APPENDING the blank cell instead of inserting it at the covered index:
+	// the row came out the right width with b2 in column A. Assert the column,
+	// never just the width.
+	check(
+		'tables: a rowspan leaves the next row value in its own column',
+		"| A | B |\n|---|---|\n| tall | b1 |\n|  | b2 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td rowspan="2">tall</td><td>b1</td></tr><tr><td>b2</td></tr></tbody></table>' )
+	);
+
+	// Caught by Codex on PR #140, and a defect the pass introduced itself: the
+	// header check has to run BEFORE the grid is filled. expand_spans() inserts
+	// placeholder cells, so a header row carrying a colspan stopped being an
+	// all-<th> row the moment it ran — the check then saw a mixed row, decided
+	// there was no header, and emitted the real header as a data row under an
+	// empty one. Reproduced before fixing.
+	check(
+		'tables: a header row that carries a colspan is still a header',
+		"| Location |  | N |\n|---|---|---|\n| Rome | IT | 3 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th colspan="2">Location</th><th>N</th></tr><tr><td>Rome</td><td>IT</td><td>3</td></tr></tbody></table>' )
+	);
+
+	// Also Codex on #140: rowspan="0" is VALID HTML meaning "every remaining
+	// row of this row group", not a broken value. Coercing it to 1 left the
+	// later rows without a placeholder at the covered column — the exact
+	// column-shift this pass exists to prevent. colspan="0" is deliberately NOT
+	// treated the same way: the standard requires colspan to be above zero, so
+	// there it really is broken and reads as 1.
+	check(
+		'tables: rowspan="0" covers the rest of its row group',
+		"| A | B |\n|---|---|\n| tall | b1 |\n|  | b2 |\n|  | b3 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td rowspan="0">tall</td><td>b1</td></tr><tr><td>b2</td></tr><tr><td>b3</td></tr></tbody></table>' )
+	);
+	check(
+		'tables: colspan="0" is a broken value and reads as one column',
+		"|  |  |\n|---|---|\n| a | b |\n",
+		$sysmda_table_md( '<table><tbody><tr><td colspan="0">a</td><td>b</td></tr></tbody></table>' )
+	);
+
+	// A guard is not done until it has been seen to fire: the span attribute is
+	// author-supplied and this pass turns it into real DOM nodes.
+	$sysmda_absurd = $sysmda_table_md( '<table><tbody><tr><td colspan="99999">x</td></tr><tr><td>a</td></tr></tbody></table>' );
+	check(
+		'tables: an absurd colspan is clamped',
+		ContentRenderer::MAX_TABLE_SPAN,
+		substr_count( explode( "\n", trim( $sysmda_absurd ) )[0], '|' ) - 1
+	);
+	check( 'tables: the clamped row still carries its value', true, false !== strpos( $sysmda_absurd, '| x |' ) );
+
+	// A .//tr query would pull a nested table's rows into its parent's grid.
+	// GFM cannot express a nested table at all, so the inner one is flattened
+	// into the cell either way — what must hold is that the OUTER table's own
+	// first row is still recognised as data.
+	check(
+		'tables: a nested table does not join its parent grid',
+		"|  |  |\n|---|---|\n| outer\\| inner1 \\| inner2 \\| | right |\n|---|---|\n",
+		$sysmda_table_md( '<table><tbody><tr><td>outer<table><tbody><tr><td>inner1</td><td>inner2</td></tr></tbody></table></td><td>right</td></tr></tbody></table>' )
 	);
 	check(
 		'convert: pipe inside a cell escaped',

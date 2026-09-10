@@ -1,18 +1,51 @@
-# External review follow-up — what shipped in `0.50.1` and what is left
+# External review follow-up — the handoff
 
-**Status (7 September 2026): four findings fixed and shipped in `0.50.1`; five
-remain, none of them started.** This document is the handoff: it records what
-was done and why, and gives each remaining item a scope, a recommended
-approach, the alternatives that were considered and rejected, and an acceptance
-list. It is a plan, not a decision to build everything in it — two items below
-close with "measure before writing code" and one closes with "probably decline".
+**Status: 10 September 2026, after `0.51.0`.**
 
-The source is an independent code review of `0.50.0`
-(commit `a5ab171`) that ran the pure suite, PHPCS, and a real WordPress install
-over HTTP. The review document itself lives in the private companion
-repository (`private-security/`), where it was written because it carried the
-reproduction of an unfixed disclosure defect; that defect is R1 below and is now
-fixed, so everything in this file is stated in the open.
+| | |
+|---|---|
+| **Shipped in `0.50.1`** | R1, R4, R6, R7 |
+| **Shipped in `0.51.0`** | R5 (+ the larger validator finding it uncovered), R2, and Phase 2 of the private fidelity plan (table grids) |
+| **Open, ready to build** | **B1** — measured and confirmed, needs code |
+| **Open, blocked on one query** | **R3** — corpus scan came back empty but inconclusive |
+| **Open, small** | **PERF1**, **PERF2** |
+| **Open, recommended decline** | **H1** |
+
+## Pick up here
+
+The next piece of work is **B1** (§1 below). It is measured, confirmed, scoped,
+and independent of everything else in this file. Nothing has to be re-derived
+before starting it — the measurement, its result and the shape of the fix are
+all recorded in §1.
+
+Two things worth doing in the same session, because both are cheap and one of
+them may close an item for free:
+
+1. **Run R3's corpus query on the production reference site** (§4 has the SQL).
+   The three connected installs answered "no occurrences", but none of them
+   holds a single synced pattern, so the denominator is zero and the answer
+   carries no information. One query decides whether R3 is work or a note.
+2. **PERF1** (§5) is two lines and belongs in whatever next touches
+   `serve_markdown()`.
+
+The rest of this file is the reasoning behind what already shipped. It is kept
+because each entry records a measurement or a rejected alternative that would
+otherwise be re-derived — not because any of it is pending.
+
+## Where things live
+
+- The source is an independent code review of `0.50.0` (commit `a5ab171`) that
+  ran the pure suite, PHPCS, and a real WordPress install over HTTP. That
+  document lives in the **private companion repository**
+  (`private-security/code-review-0.50.0-2026-09-07.md`), where it was written
+  because it carried the reproduction of an unfixed disclosure defect. That
+  defect is R1, now fixed, so everything in this file is stated in the open.
+- The table work has its own plan in the private repository
+  (`private-plans/markdown-fidelity-plan.md`), both phases now shipped.
+- Durable decisions from all of this are in `AGENTS.md`; the two public
+  contracts are `docs/output-format.md` and `docs/filters.md`; the
+  real-WordPress checks are in `docs/staging-acceptance.md` and `AGENTS.md`'s
+  *Tests (acceptance)*.
 
 Finding IDs (R2, R3, R5, B1, PERF1, PERF2, H1) are the review's own, kept so the
 two documents can be read side by side.
@@ -33,9 +66,96 @@ R1 also has a durable decision in `AGENTS.md` ("A password-protected synced
 pattern is never expanded, anywhere"), with the corollary that generalizes it:
 **a referenced object's eligibility is never implied by the referring post's.**
 
-## Remaining work, in the order it should be done
+## Shipped in `0.51.0`
 
-### 1. R5 — a plugin upgrade must invalidate date-only revalidation
+| ID | Fix | Where |
+|---|---|---|
+| R5 | A plugin version change bumps the cache salt, so an upgrade stops date-only revalidation | `AdminSettings::maybe_bump_for_plugin_version()` |
+| — | **`Last-Modified` is withheld whenever the date is not a usable validator** — found while measuring R5, and the reason R5's own fix would otherwise have been a no-op on most hosting | `MarkdownController::advertised_modified_timestamp()` |
+| R2 | A Bricks leaf's span now carries its ancestors' classes, so an exclusion on a container reaches the description fallback and the enriched `/llms.txt` | `BricksAdapter::lineage_classes()` |
+| — | **Table grids** (Phase 2 of the private fidelity plan, not a review finding): a table with no header of its own keeps its first row as data, and `colspan`/`rowspan` are expanded so values stay in their own column | `ContentRenderer::normalize_tables()` |
+
+**The second one was not in the review, and it changes how R5 has to be read.**
+The recommended fix below works by making `date_is_strong_validator()` return
+false. That predicate governs only the plugin's *own* conditional handling,
+while the response went on advertising `Last-Modified` regardless — and any
+intermediary may revalidate against that header without consulting PHP.
+Measured on `sma-bricks.instawp.co` (nginx → Apache): an anonymous
+`If-Modified-Since` on a post whose dependency fingerprint had *already*
+switched the date off here still came back `304` with no body, because nginx's
+always-on `not_modified` filter downgraded the plugin's fresh `200`. Proved to
+be the proxy and not the plugin by emptying the body cache first and watching
+that same request repopulate it **with the new content**. Both durable
+decisions are in `AGENTS.md`; the acceptance check is item 24 there and a new
+row in `docs/staging-acceptance.md`.
+
+Generalise it rather than filing it under nginx: **a validator the plugin will
+not honour must not be sent.** Same rule as the weak ETag, applied to the other
+validator.
+
+Two P2 findings Codex raised on PR #140 were reproduced and fixed in the same
+release, both in the table pass: a header row carrying a `colspan` was emitted
+as a data row (the placeholder cell no longer changes a `<th>` into a `<td>`,
+and the header check now runs before the grid is filled), and `rowspan="0"` —
+valid HTML meaning "the rest of this row group" — was coerced to `1`, which
+reproduced the exact column shift the pass exists to prevent.
+
+## The items in detail
+
+Open items first in intent, but kept in the review's own order so the two
+documents read side by side. Each heading says whether it is shipped or open.
+
+### 1. B1 — nested Bricks templates: **measured, confirmed, needs code**
+
+The measurement this plan made blocking was taken on 10 September 2026, on
+`sma-bricks-instawp-co` (Bricks 2.3.12; `BricksAdapter.php` and
+`MetadataBuilder.php` are byte-identical to the reviewed commit, so the result
+applies to current code). A `page → outer template → inner template` chain was
+built, the `.md` warmed and its `ETag` recorded, then **only the inner
+template** was edited the way a Bricks editor save does (tree meta plus a post
+update moving `post_modified_gmt`).
+
+| | before | after editing only the inner template |
+|---|---|---|
+| Rendered document | `INNER_SENTINEL_V1` | `INNER_SENTINEL_V2_CHANGED` — **changes** |
+| `BricksAdapter::fingerprint()` | `blob 016a5c…` / `templates 65d707…` | **identical** |
+| `post_modified_gmt`, page and outer template | 16:44:25 | unchanged |
+| Body served on `.md` | V1 | **V1 — stale** |
+| `If-None-Match` with the prior `ETag` | — | **304** |
+
+So the answer to the plan's own question — "did the body change while the
+validator did not?" — is **yes**, over anonymous HTTP, and the stale body
+persists for the full cache TTL (86400 s by default) because nothing invalidates
+the page: saving the inner template clears *its* entry, not the page's.
+
+The rendering half is not a surprise once `Element_Template::render()` is read:
+it loads the referenced template's `_bricks_page_content_2` and renders it
+through the `[bricks_template]` shortcode, which walks a nested `template`
+element the same way. The recursion is real, and `referenced_template_fingerprint()`
+walks only the page's own top-level elements.
+
+**Implement** a bounded, deduplicated recursive walk with cycle protection,
+following the shape of the synced-pattern dependency walk in `MetadataBuilder`.
+Measure the added cost: this runs on every request, `304`s included, and the
+existing budget (~0.09 ms on a 60-element tree) is the baseline to compare
+against. Test nested edits, deletion, reassignment, repeated references and
+cycles.
+
+This is **not** the documented `cid` component limitation. Do not close it by
+pointing at that one, and do not widen the fix to components.
+
+**One caveat on the fixture**: the chain was built by writing the Bricks meta
+directly rather than through the real editor, because this environment has no
+browser. The rendering path exercised is Bricks' own, and the fingerprint half
+is pure plugin code, so neither depends on how the tree got there — but a
+future pass through the real editor would close the last gap. The fixture was
+removed from staging afterwards.
+
+### 2. R5 — a plugin upgrade must invalidate date-only revalidation
+
+**Shipped in `0.51.0`** — kept here in full because the reasoning is what the
+durable decision in `AGENTS.md` compresses, and because the second half above
+is only legible against it.
 
 **The defect.** `cache_version()` folds in `SYSMDA_VERSION`, so an upgrade moves
 every `ETag`. `date_is_strong_validator()` does not, so a client sending only
@@ -127,60 +247,46 @@ and same-second invalidations still behave; authenticated and cache-disabled
 requests unchanged. Add the version transition to the pure suite by driving the
 stored option directly.
 
-### 2. R2 — Bricks description fallback loses ancestor exclusions
+### 3. R2 — Bricks description fallback loses ancestor exclusions — **shipped in `0.51.0`**
 
-**The defect.** `BricksAdapter::leaves_markup()` walks the flat element array and
-wraps each text-bearing element in a span carrying only *its own* classes. Bricks
-stores `parent`/`children` relationships, so a container marked `md-exclude`
-never reaches its text child, and `ContentRenderer::strip_excluded_content()`
-has nothing to match on. The excluded subtree survives in the front-matter
-`description` and in the enriched `/llms.txt`, while the body correctly drops it.
+**The defect.** `BricksAdapter::leaves_markup()` walked the flat element array
+and wrapped each text-bearing element in a span carrying only *its own* classes.
+Bricks stores `parent`/`children` relationships, so a container marked
+`md-exclude` never reached its text child, and
+`ContentRenderer::strip_excluded_content()` had nothing to match on.
 
-Scope: the fallback tier only — no Rank Math description and no excerpt. It is an
-exclusion-contract inconsistency, not an authorization defect.
+**Reproduced live before fixing**, on the staging page's real tree (Bricks
+2.3.12, plugin 0.49.3 as installed), with `md-exclude` moved onto the container
+that holds the text leaves:
 
-**Recommended fix.** Build a parent map once, then give each leaf's span the
-classes of its ancestors as well as its own. Concatenating is enough because the
-exclusion pass matches any element carrying the class; nesting real spans would
-also work and costs more. Guard against a missing parent and a cycle with a
-depth cap, and do not re-scan the tree per leaf.
+| | result |
+|---|---|
+| `md-exclude` present on the rendered wrapper Bricks emits | yes |
+| Body, after `strip_excluded_content()` | sentinel **absent** — correct |
+| Description source, after the same pass | sentinel **present** — the defect |
 
-**Do not:** duplicate a hardcoded exclusion list inside the adapter, or render
-posts through Bricks to obtain a description (`/llms.txt` builds N of these).
+The tree was restored immediately afterwards.
 
-**Acceptance.** Parent and grandparent exclusions; each built-in exclusion class;
-a class added through the filters; excluded builder-element classes; a directly
-excluded leaf; visible siblings; missing and cyclic ancestry; description and
-enriched index agree with the body. `post_content` still never used for a
+**The fix.** `lineage_classes()` builds a parent map once per tree and gives
+each leaf's span its ancestors' classes as well as its own. Concatenating is
+enough because the exclusion pass matches any element carrying the class;
+rebuilding real nesting would cost more and decide nothing extra. A missing
+parent, a cycle and a `MAX_ANCESTOR_DEPTH` backstop all end the walk rather
+than loop, and a truncated lineage degrades to the old behaviour for that one
+leaf. `element_class()` no longer emits a bare `brxe-` token for an ancestor
+with no usable name.
+
+Seen to fire: reverting `lineage_classes()` to the leaf's own classes flips
+four assertions, including the end-to-end one that runs the produced markup
+through the shared exclusion pass.
+
+**Still true, and deliberately unchanged:** no hardcoded exclusion list inside
+the adapter, and no rendering of posts through Bricks to obtain a description
+(`/llms.txt` builds N of these). `post_content` is still never used for a
 builder-handled post.
 
-### 3. B1 — nested Bricks templates: **verify before writing any code**
 
-`BricksAdapter::referenced_template_fingerprint()` records the modification date
-of each `template` element's referenced post, and does not follow templates
-referenced by *those* templates. In a synthetic `page → outer → inner` chain the
-page's fingerprint did not move when the inner template changed.
-
-The review is explicit that the rendering half was never verified: an unchanged
-adapter hash is not proof that the rendered document changes. **So the first step
-is the measurement, not the fix**, and the environment for it exists —
-`sma-bricks-instawp-co`, the only staging with Bricks:
-
-1. build the chain in the real editor;
-2. warm the `.md` and record the `ETag`;
-3. edit only the inner template through Bricks;
-4. re-fetch: did the body change while the validator did not?
-
-If the body does not change, the item closes with a note and no code. If it does,
-implement a bounded, deduplicated recursive walk with cycle protection, following
-the shape of the synced-pattern dependency walk in `MetadataBuilder`. Measure the
-added cost: this runs on every request, `304`s included, and the existing budget
-(~0.09 ms on a 60-element tree) is the baseline to compare against.
-
-This is **not** the documented `cid` component limitation. Do not close it by
-pointing at that one, and do not widen the fix to components.
-
-### 4. R3 — synced-pattern instance overrides — **measure demand first**
+### 4. R3 — synced-pattern instance overrides — **measured, inconclusive**
 
 **The defect.** `BlockCleaner` replaces a `core/block` node with the referenced
 pattern's parsed blocks and drops the reference's own `content` attribute.
@@ -194,9 +300,31 @@ invasive fix of the set, and its audience may be empty on any given site.
 Overrides need WordPress 6.6+ (the plugin's declared minimum is 6.1) and a
 pattern deliberately authored with `core/pattern-overrides` bindings.
 
-**The measurement that decides it**, in the spirit of every other feature in this
-project: look for `<!-- wp:block` carrying a `"content":` attribute in the real
-corpus. No occurrences, no work — record the measurement and move on.
+**The measurement was taken on 10 September 2026, and it does not decide it.**
+Three connected WordPress installs were scanned for `<!-- wp:block` carrying a
+`"content":` attribute, and for `wp_block` posts declaring
+`core/pattern-overrides` bindings:
+
+| Site | Posts scanned | Referencing a pattern | With instance overrides | `wp_block` posts | Patterns declaring overrides |
+|---|---|---|---|---|---|
+| `sma.instawp.co` | 34 | 0 | 0 | **0** | 0 |
+| `sma-bricks.instawp.co` | 34 | 0 | 0 | **0** | 0 |
+| `hvf.instawp.co` | 23 | 0 | 0 | **0** | 0 |
+
+Literally this satisfies "no occurrences, no work". **Do not close it on that
+basis.** None of the three corpora contains a single synced pattern, so the
+denominator is zero and the result cannot distinguish "nobody authors
+overrides" from "these three sites do not use patterns at all". The corpus that
+would settle it is the production reference site, which was not connected for
+this measurement. Re-run there before spending anything:
+
+```sql
+SELECT ID, post_type, post_title FROM wp_posts
+WHERE post_status = 'publish'
+  AND post_content REGEXP '<!--[[:space:]]*wp:block[[:space:]]*\\{[^}]*"content"[[:space:]]*:';
+```
+
+R3 therefore stays **parked, not closed**, at the cost of one query to reopen.
 
 **If it is built.** Core (`wp-includes/blocks/block.php`) attaches the parsed
 pattern blocks as the `core/block` instance's inner blocks and lets its declared
@@ -219,7 +347,7 @@ different; non-overridden fields keep their defaults; nested patterns and severa
 named blocks keep their context; exclusions, code-region masking and the cycle
 guard still hold; behaviour on a WordPress without overrides is unchanged.
 
-### 5. PERF1 / PERF2 — small, and only after R5
+### 5. PERF1 / PERF2 — small, and unblocked now that R5 has shipped
 
 - **PERF1 (HEAD).** `serve_markdown()` renders the body even for `HEAD`, which
   the server then discards. An early exit after the headers is two lines. Do it
@@ -231,9 +359,26 @@ guard still hold; behaviour on a WordPress without overrides is unchanged.
 - **PERF2 (compute once).** The IMS path computes the dependency fingerprints
   in `cache_version()` and again in `date_is_strong_validator()`. The duplication
   is not the cost, it is the *drift* — R5 exists precisely because the two
-  encode the same knowledge and disagreed. Resolve R5 first, then decide whether
-  a request-local snapshot still earns its keep. Filters may be stateful, so a
-  changed evaluation count has to be deliberate.
+  encode the same knowledge and disagreed. **`0.51.0` moved the balance and did
+  not resolve it.** `serve_markdown()` now computes the advertised date once and
+  hands it to both callees, which removes the drift *between the header and the
+  comparison* — the one that mattered — but it also means
+  `date_is_strong_validator()` runs on every request rather than only on the IMS
+  path, so the fingerprints are computed twice per request where they used to be
+  computed once. That was taken deliberately, and **measured rather than waved
+  through**, because `dependencies_fingerprint()` is not the cheap hash it looks
+  like — it runs `parse_blocks()` over the whole `post_content`, and again over
+  every referenced synced pattern. Timed against real WordPress on
+  `sma.instawp.co`: **0.33 ms** on a representative 18 KB article and **1.0 ms**
+  on a deliberately large 60 KB one. So the doubling costs 0.03–0.1% of the
+  ~1000–1200 ms `.md` TTFB the WordPress boot already dominates, `304`s
+  included — small enough to accept for the correctness the single value buys,
+  and large enough that it should not be doubled again without checking. A
+  request-local snapshot of both fingerprints would return it to one and is now
+  the whole of PERF2. Filters may be stateful, so the changed evaluation count
+  has to be deliberate either way — and note that a snapshot *reduces* the
+  count, which `docs/filters.md` already permits by requiring those callbacks to
+  be cheap and side-effect-free.
 
 ### 6. H1 — literal text in the `# Title` — **recommendation: decline, or do it narrowly**
 
@@ -263,16 +408,32 @@ it must be the narrow escaper, never `escape_inline()`.
 
 ## Working notes for whoever picks this up
 
-- Branch per item, PR to `main`, the maintainer squash-merges. R5 and R2 are
-  independent and can go in parallel; B1 depends on its own measurement; R3
-  depends on the corpus measurement.
-- Add the failing test first and **watch it fail** on the current commit — every
-  one of the four `0.50.1` fixes was confirmed that way, and R1's own regression
-  test proves it by asserting the description path, not just the cleaner.
-- The pure suite (`php system-markdown-alternate/tests/run-tests.php`) is the
-  fast gate, but R1 and R3 were both invisible to it until a fixture existed for
-  the shape. When a fix concerns WordPress semantics, ask what the stubs are
-  quietly asserting.
-- The protected pattern and the method handling are now in both real-WordPress
-  checklists — `docs/staging-acceptance.md`'s matrix and `AGENTS.md`'s *Tests
-  (acceptance)* items 22 and 23 — so a release pass exercises them.
+- **One branch, PR to `main`, the maintainer squash-merges.** B1 is independent
+  of everything else here and can go on its own.
+- **Add the failing test first and watch it fail.** Every fix in `0.50.1` and
+  `0.51.0` was confirmed that way, and it earned its keep three times in
+  `0.51.0` alone: the table pass reproduced both mistakes the private plan had
+  already recorded, plus a third (a row's width computed as
+  `$column + count($occupied)`, double-counting positions a rowspan had already
+  stepped over). None of the three was visible by re-reading the code.
+- **A control that does not fire is information too.** Reverting the
+  header-check reorder in `normalize_tables()` left its fixture passing, which
+  is how it emerged that the operative fix for that defect was the placeholder
+  mirroring the spanning cell's tag, not the ordering. Both are kept, each on
+  its own merits — but do not claim a guard is load-bearing until a control has
+  actually shown it.
+- **The pure suite is the fast gate and it has blind spots.** R1 and R3 were
+  both invisible to it until a fixture existed for the shape, and until
+  `0.51.0` no test could see an emitted header at all — which is how
+  `Last-Modified` went out on responses whose date the plugin had already
+  judged unusable. `tests/namespaced-stubs.php` now shadows `header()` inside
+  the plugin namespace; use it rather than inferring what a response carried.
+- **Some things only real WordPress can show.** B1's rendering half, R2's live
+  reproduction and the nginx `304` finding all needed a real install. The two
+  staging sites are `instawp_sma` (general) and `sma-bricks-instawp-co` (the
+  only one with Bricks). Assert `home_url()` before writing to either, and
+  remove every fixture afterwards.
+- **The acceptance lists are current.** `docs/staging-acceptance.md` and
+  `AGENTS.md`'s *Tests (acceptance)* now cover the protected pattern, method
+  handling, the validator rules, the upgrade invalidation, table grids and the
+  Bricks container exclusion — so a release pass exercises all of them.

@@ -56,6 +56,16 @@ class BricksAdapter implements BuilderAdapter {
 	 */
 	const CONTENT_ELEMENT = 'post-content';
 
+	/**
+	 * How far `lineage_classes()` walks up before giving up.
+	 *
+	 * A backstop, not a limit on real layouts: Bricks nesting is a handful of
+	 * levels, and this only has to stop a malformed `parent` chain the `$seen`
+	 * set cannot describe. Truncating costs one leaf its outermost ancestors,
+	 * which is the pre-0.51.0 behaviour for that leaf and nothing worse.
+	 */
+	const MAX_ANCESTOR_DEPTH = 50;
+
 	public function is_active(): bool {
 		return class_exists( '\Bricks\Frontend' ) && class_exists( '\Bricks\Database' );
 	}
@@ -153,7 +163,9 @@ class BricksAdapter implements BuilderAdapter {
 	 * tree instead of calling into Bricks, reading each element's own `text`
 	 * setting (confirmed for heading/text-basic/button/text-link elements) and
 	 * wrapping it in a span carrying the same `brxe-{name}` class Bricks itself
-	 * emits, plus the element's own custom class if set. That is what lets the
+	 * emits, the element's own custom class if set, **and the same two for every
+	 * ancestor** — see leaves_markup(), where the ancestors are the part that
+	 * was missing. That is what lets the
 	 * caller run this through the SAME exclusion pass
 	 * (ContentRenderer::strip_excluded_content()) the rendered body goes
 	 * through, rather than reimplementing exclusion for raw text.
@@ -213,9 +225,35 @@ class BricksAdapter implements BuilderAdapter {
 
 	/**
 	 * Text-bearing leaves of the tree, each wrapped in a span carrying its
-	 * element's class(es), joined with a single space.
+	 * element's class(es) **and its ancestors'**, joined with a single space.
+	 *
+	 * The ancestors are the whole point, and leaving them out was a real defect
+	 * (R2 of the 0.50.0 external review). Bricks stores a flat element array
+	 * with `parent`/`children` links, so a container marked `md-exclude` is a
+	 * separate entry from the text element inside it. Wrapping each leaf in its
+	 * OWN classes alone therefore produced a span the exclusion pass had nothing
+	 * to match on: the body correctly dropped the excluded subtree while the
+	 * front-matter `description` and the enriched `/llms.txt` entry kept its
+	 * text. What the body excludes is excluded everywhere — the same rule the
+	 * `description` fallback already owes `post_content`, one builder over.
+	 *
+	 * Concatenating the ancestors' tokens onto the leaf's own span is enough
+	 * because `strip_excluded_content()` matches any element carrying an
+	 * excluded class; rebuilding the real nesting with wrapper elements would
+	 * cost more and decide nothing extra.
 	 */
 	private function leaves_markup( array $tree ): string {
+		// Built once for the whole tree: resolving each leaf's ancestry by
+		// re-scanning the array would be quadratic, and this runs once per
+		// listed post while /llms.txt is assembled.
+		$by_id = array();
+
+		foreach ( $tree as $element ) {
+			if ( is_array( $element ) && isset( $element['id'] ) && is_scalar( $element['id'] ) ) {
+				$by_id[ (string) $element['id'] ] = $element;
+			}
+		}
+
 		$out = array();
 
 		foreach ( $tree as $element ) {
@@ -230,10 +268,56 @@ class BricksAdapter implements BuilderAdapter {
 				continue;
 			}
 
-			$out[] = '<span class="' . esc_attr( self::element_class( $element['name'], $settings ) ) . '">' . esc_html( $text ) . '</span>';
+			$out[] = '<span class="' . esc_attr( self::lineage_classes( $element, $by_id ) ) . '">' . esc_html( $text ) . '</span>';
 		}
 
 		return implode( ' ', $out );
+	}
+
+	/**
+	 * An element's own class tokens followed by every ancestor's, nearest first.
+	 *
+	 * Malformed ancestry is a stored-data question, not an invariant: a
+	 * `parent` may name an element that no longer exists, and a hand-edited or
+	 * partially migrated tree can contain a cycle. Both end the walk instead of
+	 * looping — a `$seen` set for the cycle, and MAX_ANCESTOR_DEPTH as the
+	 * backstop for anything the set cannot describe. A truncated lineage
+	 * degrades to the previous behaviour for that one leaf; it never hangs.
+	 *
+	 * @param array<string, mixed>                $element The leaf element.
+	 * @param array<string, array<string, mixed>> $by_id   Every element of the tree, keyed by id.
+	 */
+	private static function lineage_classes( array $element, array $by_id ): string {
+		$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+		$own      = self::element_class( $element['name'], $settings );
+		$classes  = '' !== $own ? array( $own ) : array();
+
+		$seen    = array();
+		$current = $element;
+
+		for ( $depth = 0; $depth < self::MAX_ANCESTOR_DEPTH; $depth++ ) {
+			$parent_id = isset( $current['parent'] ) && is_scalar( $current['parent'] ) ? (string) $current['parent'] : '';
+
+			// Bricks writes `0` for a root-level element.
+			if ( '' === $parent_id || '0' === $parent_id
+				|| ! isset( $by_id[ $parent_id ] ) || isset( $seen[ $parent_id ] ) ) {
+				break;
+			}
+
+			$seen[ $parent_id ] = true;
+			$current            = $by_id[ $parent_id ];
+
+			$parent_settings = isset( $current['settings'] ) && is_array( $current['settings'] ) ? $current['settings'] : array();
+			$parent_name     = isset( $current['name'] ) && is_string( $current['name'] ) ? $current['name'] : '';
+
+			$ancestor = self::element_class( $parent_name, $parent_settings );
+
+			if ( '' !== $ancestor ) {
+				$classes[] = $ancestor;
+			}
+		}
+
+		return implode( ' ', $classes );
 	}
 
 	/**
@@ -242,13 +326,17 @@ class BricksAdapter implements BuilderAdapter {
 	 * which is where an author-applied `md-exclude` lives.
 	 */
 	private static function element_class( string $name, array $settings ): string {
-		$class = 'brxe-' . preg_replace( '/[^a-z0-9-]/', '', strtolower( $name ) );
+		$slug = (string) preg_replace( '/[^a-z0-9-]/', '', strtolower( $name ) );
+
+		// An ancestor read out of the tree may carry no usable name; emitting a
+		// bare `brxe-` would be a token that matches nothing and reads as a bug.
+		$class = '' !== $slug ? 'brxe-' . $slug : '';
 
 		if ( isset( $settings['_cssClasses'] ) && is_string( $settings['_cssClasses'] ) ) {
 			$custom = trim( (string) preg_replace( '/[^A-Za-z0-9_ -]/', ' ', $settings['_cssClasses'] ) );
 
 			if ( '' !== $custom ) {
-				$class .= ' ' . $custom;
+				$class = '' !== $class ? $class . ' ' . $custom : $custom;
 			}
 		}
 

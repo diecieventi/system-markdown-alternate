@@ -169,8 +169,10 @@ The v1 scope is done and widely exceeded. Implemented:
 - **HTTP headers**: Markdown responses carry `Content-Type: text/markdown;
   charset=utf-8`, `X-Robots-Tag: noindex, follow` and `Link: <permalink>;
   rel="canonical"`; negotiable canonical HTML responses carry the alternate
-  Link field above plus `Vary: Accept`. Markdown responses also carry **`ETag` +
-  `Last-Modified`**. Negotiated
+  Link field above plus `Vary: Accept`. Markdown responses also carry a weak
+  **`ETag`**, and **`Last-Modified` only while the date is a usable validator**
+  (`0.51.0`, `advertised_modified_timestamp()` — see the decision below).
+  Negotiated
   Markdown and `406` responses additionally send
   `Cache-Control: no-cache, no-store, must-revalidate, private` (server-agnostic
   no-cache invariant — see "Product decisions"); the `.md` URLs send
@@ -198,10 +200,15 @@ The v1 scope is done and widely exceeded. Implemented:
   deliberately NOT method-restricted beyond the conditional shortcut — that URL
   serves nothing else, so a `POST` to it keeps getting the document rather than
   the `404` WordPress would produce if the route stopped intercepting.
-  `If-Modified-Since` is honoured **only while the date is a strong validator**:
-  when the taxonomy block is emitted the body can change without
-  `post_modified_gmt` moving, so the date check is skipped and the (taxonomy-aware)
-  `ETag` is the sole validator. The `ETag` itself is **weak** (`W/"…"`, since
+  `If-Modified-Since` is honoured **only while the date is a strong validator**,
+  and since `0.51.0` the header is **not sent at all** when it is not: when the
+  taxonomy block is emitted the body can change without `post_modified_gmt`
+  moving, so the date check is skipped, the header is withheld and the
+  (taxonomy-aware) `ETag` is the sole validator. One value decides both
+  (`advertised_modified_timestamp()`, computed once in `serve_markdown()`),
+  because deciding them separately is what let an intermediary revalidate
+  against a date the plugin had already refused — see the decision below.
+  The `ETag` itself is **weak** (`W/"…"`, since
   `0.28.0` — see the decision below) and `If-None-Match` is compared with the
   weak comparison RFC 9110 requires: the `W/` flag is ignored on both sides, and
   so is the `-gzip`/`-br` suffix Apache appends inside the quotes when it
@@ -225,6 +232,49 @@ The v1 scope is done and widely exceeded. Implemented:
     environment; without it `strip_tags` glued every cell together). `<figure>`
     holding a block element (`BLOCK_TAGS`) is therefore **not** rewritten to `<p>`.
     `<dl>` is flattened to a bold term plus paragraphs.
+  - **the table GRID is normalized in the DOM, never in a converter**
+    (`0.51.0`, `normalize_tables()`, Phase 2 of the private fidelity plan). The
+    library converts **bottom-up**, so by the time a `table` converter runs its
+    rows and cells are already converted strings — `colspan`, `rowspan` and the
+    existence of a header section are gone before it is called, and
+    `PreConverterInterface` can read the element but exposes no node-insertion
+    API (checked against the pinned `5.1.1`). Two rules, both of which changed
+    the bytes of existing content:
+    - **A headerless table gets an EMPTY header row**, rather than having its
+      first row of data promoted. `TableConverter` emits the delimiter row after
+      the first `<tr>` it sees, and core's `core/table` writes `<thead>` only
+      when the header section is populated — a toggle that is off by default —
+      so every ordinary WordPress table published its first row of values as
+      column headings. Inventing column names would be the guesswork this
+      project refuses one level up; an empty header keeps every value a value.
+    - **Spans are expanded into real empty cells**, clamped to
+      `MAX_TABLE_SPAN`, and the placeholder goes **at the covered index**.
+      Appending it instead is worse than the ragged row it replaces: the table
+      then merely *looks* well-formed while every later value sits under the
+      wrong heading. That mistake was made in the plan's own prototype and
+      again here, and was caught both times by running the fixture rather than
+      re-reading the rule — assert **which column** a value lands in.
+      The placeholder also **mirrors the spanning cell's tag**: filling a
+      `<th colspan="2">` with a `<td>` turns a header row into a mixed one, and
+      that alone was enough to lose the header (Codex, PR #140).
+      And **`rowspan="0"` is valid HTML**, not a broken value: it covers every
+      remaining row of its row group, and coercing it to `1` reproduced the
+      exact column shift this pass exists to prevent. `colspan="0"` gets no
+      such reading, deliberately — the standard requires `colspan` above zero,
+      so there it really is broken. Row groups are "same `parentNode`", which
+      is what a `<thead>`/`<tbody>`/`<tfoot>` (or the table itself, for direct
+      `<tr>` children) already is.
+    `has_header_row()` is the other easy-to-get-backwards half, and it is asked
+    **before the grid is filled** — a structural question about the source must
+    not depend on a mutation this pass is about to make. A header exists
+    only for a non-empty `<thead>` or an all-`<th>` first row. "Is there a `<th>`
+    anywhere" passes every obvious fixture and reopens the defect for a `<th>`
+    used as a **row label** inside a data row, which is a legitimate and common
+    shape. Both that predicate and `table_rows()` read direct children only,
+    never `.//tr`, so a nested table's rows can never answer for its parent's.
+    A nested table gets its grid filled but no header row: GFM cannot express
+    one, so the inner table is flattened into its cell either way and a header
+    there is only noise (measured both ways).
   - **whitespace normalization skips fenced code**: trailing spaces and blank-line
     runs are meaningful inside a fence (Markdown hard breaks, transcripts, diffs).
   - **no Markdown delimiter is ever chosen without looking at what it wraps**
@@ -946,17 +996,34 @@ The v1 scope is done and widely exceeded. Implemented:
 - **External review follow-up** (`docs/review-followup-plan.md`): an independent
   review of `0.50.0` found eight defects. **Four shipped in `0.50.1`** (the
   protected-pattern disclosure, dot segments inside a query or fragment,
-  `div`-grouped definition lists being deleted, and `304` on any HTTP method);
-  **five remain, none started**. In the order the plan recommends: a plugin
-  upgrade must invalidate date-only revalidation (the fix is a salt bump on a
-  version change, not a policy change — the mechanism already exists); the
-  Bricks description fallback loses ancestor exclusions; nested Bricks
-  templates may not move the fingerprint (**measure on the Bricks staging
-  before writing code** — the rendering half was never verified); synced-pattern
-  instance overrides are discarded (**measure the corpus first**: it needs WP
-  6.6+ and a pattern deliberately authored with overrides); and two small
-  performance items. A sixth, escaping Markdown syntax in the `# Title`, is
-  written up with a recommendation to decline — the obvious remedy
+  `div`-grouped definition lists being deleted, and `304` on any HTTP method)
+  and **R5 in `0.51.0`**, together with the larger finding that came out of
+  measuring it (a validator the plugin refuses is no longer advertised — see the
+  two durable decisions). Both measurements the plan made blocking have now been
+  taken, on 10 September 2026:
+  - **B1 is confirmed and needs code.** On the Bricks staging, editing only a
+    nested template changed the rendered document while
+    `BricksAdapter::fingerprint()` stayed byte-identical, the `.md` went on
+    serving the old body for the full TTL, and a conditional request was
+    answered `304`. The fix is a bounded, deduplicated recursive walk with a
+    cycle guard; measure its cost against the existing budget.
+  - **R3's corpus measurement is empty but inconclusive**, and must not be
+    read as a close: none of the three connected installs contains a single
+    synced pattern, so the denominator is zero. Re-run the query in the plan on
+    the production reference site before spending anything.
+  **R2 also shipped in `0.51.0`** (the Bricks description fallback losing
+  ancestor exclusions), reproduced live before being fixed — as did Phase 2 of
+  the private fidelity plan (table grids), which is not a review finding but
+  travelled with it, and two P2 findings Codex raised on that PR: a header row
+  carrying a `colspan` emitted as a data row, and `rowspan="0"` — valid HTML —
+  coerced to `1`.
+  **Pick up at B1**: it is measured, confirmed and independent. What remains
+  after it: R3 (parked pending that one corpus query), and two small
+  performance items
+  — PERF2 has become "snapshot the fingerprints once per request", since
+  `0.51.0` deliberately computes them twice (measured at 0.33 ms on an 18 KB
+  article, against a ~1000 ms TTFB). A sixth, escaping Markdown syntax in the
+  `# Title`, is written up with a recommendation to decline — the obvious remedy
   (`escape_inline()`) was measured and puts `&amp;` in the H1 of every title
   containing an ampersand.
 - Once live on wordpress.org: translate the strings into Italian on
@@ -1447,6 +1514,21 @@ The v1 scope is done and widely exceeded. Implemented:
     wrapped in a span carrying the element's own class so the same exclusion
     pass applies) is the one honest source there — empty when it finds
     nothing, never stale.
+    **The span carries the ANCESTORS' classes too** (`0.51.0`,
+    `lineage_classes()`, R2 of the `0.50.0` review). Bricks stores a flat
+    element array with `parent`/`children` links, so a container marked
+    `md-exclude` is a separate entry from the text inside it: wrapping each
+    leaf in its own classes alone left `strip_excluded_content()` nothing to
+    match on. Reproduced live on Bricks 2.3.12 against the staging page's real
+    tree — with `md-exclude` on the container, Bricks emits it on the rendered
+    wrapper so the **body** correctly dropped the sentinel, while the
+    description source kept it. The exclusion contract is "what the body
+    excludes is excluded everywhere", and this was the one place it did not
+    hold. The classes are concatenated onto the leaf's own span rather than
+    rebuilt as real nesting, because the pass matches any element carrying an
+    excluded class; the parent map is built once per tree (a per-leaf rescan
+    would be quadratic, and `/llms.txt` runs this once per listed post), and a
+    missing parent or a cycle ends the walk instead of looping.
   - **Suppressing foreign `the_content` filters around Bricks' Post Content
     element is implemented, but as a maintainer-reversible default, not a
     settled answer** (closes `docs/page-builders-plan.md` §10's open
@@ -1693,6 +1775,69 @@ The v1 scope is done and widely exceeded. Implemented:
   a strong tag: it would be a promise the plugin cannot keep. Corollary in
   `etag_matches()`: compare with the `W/` flag ignored **on both sides**, and
   ignore Apache's `-gzip`/`-br` suffix as well.
+- **A validator the plugin will not honour is not sent** (decided September
+  2026, `0.51.0`, `MarkdownController::advertised_modified_timestamp()` — the
+  same rule as the weak ETag, applied to the other validator). `Last-Modified`
+  used to go out on every anonymous `.md` response, described in
+  `docs/output-format.md` as "still sent, as information", while
+  `date_is_strong_validator()` refused it for the plugin's own conditional
+  handling. **Information is not what a validator is.** Any intermediary may
+  revalidate against it, and the plugin's private decision reaches none of them.
+  **Measured, and it is not a corner case.** On `sma-bricks.instawp.co`
+  (nginx → Apache, the ordinary managed-WordPress shape) an anonymous
+  `If-Modified-Since` on a Bricks page — a post whose dependency fingerprint is
+  never empty, so the date was *already* refused here — came back `304` with no
+  body. The plugin had not sent it: the request was proved to have reached PHP
+  and produced a full `200`, by emptying the body cache first and watching it
+  repopulate **with the new content** on that very request. nginx's always-on
+  `not_modified` output filter had converted the fresh `200` into a `304` and
+  discarded the body. Its default `if_modified_since exact` is what makes the
+  case sharp: `IMS` = 2020 → `200`, `IMS` = 2099 → `200`, `IMS` = the exact
+  advertised date → `304` — i.e. it fires precisely for the client that was
+  given the header. `/llms.txt`, which sends no `Last-Modified` at all, could
+  not be downgraded the same way, which is the control.
+  So every case `date_is_strong_validator()` exists for — emitted taxonomies,
+  out-of-post dependencies, a site-wide salt bump, and the plugin upgrade the
+  decision below adds — was defeated by a standard reverse proxy, on the
+  majority of hosting this plugin runs on. Withholding the header is the only
+  thing that makes the rule enforceable: there is then no date to revalidate
+  against, and the weak ETag (which covers all of those inputs) is the sole
+  validator. Do NOT "restore" it as information, and do not decide the header
+  and the comparison in two places — `serve_markdown()` computes the value once
+  and hands it to both `handle_conditional()` and `send_headers()` precisely so
+  they cannot disagree again. `send_not_modified()` withholds it too: handing
+  the date back on an ETag-matched `304` re-arms the next request against it.
+  The cost is bounded and was checked before taking it: the responses that lose
+  the header are exactly the ones whose date was already being ignored, and they
+  carry `max-age=0, must-revalidate`, so nothing was deriving heuristic
+  freshness from it either.
+- **A plugin upgrade bumps the cache salt** (decided September 2026, `0.51.0`,
+  `AdminSettings::maybe_bump_for_plugin_version()`, closes R5 of the `0.50.0`
+  external review). An upgrade can change how existing content converts while no
+  post row moves — `0.50.1` did it twice (dot segments inside a query, and
+  `div`-grouped definition lists). `SYSMDA_VERSION` is already inside
+  `cache_version()`, so the cached bodies and every ETag were invalidated
+  already; what was missing is the salt's *other* consequence, the one
+  `date_is_strong_validator()` reads, so an `If-Modified-Since`-only client kept
+  the pre-upgrade body against a date that had not moved. The salt is the right
+  mechanism because its contract is exactly this shape — site-wide, rare, and
+  affecting posts whose own date did not change — and it costs nothing extra in
+  cache terms, since those bodies were being rebuilt on the next request anyway.
+  Three things not to redo: it is **not** hung off `upgrader_process_complete`,
+  which fires for the WordPress updater and misses a zip upload, FTP, WP-CLI and
+  a Git deploy — comparing a stored `sysmda_version` option on the first request
+  that sees the new files covers all of them for one autoloaded read; the option
+  is **excluded from `maybe_bump_cache_salt()`** like `sysmda_cache_salt` and the
+  hit-counter buckets, because it carries the `sysmda_` prefix and would
+  otherwise re-arm the bump it just performed; and the salt is written **before**
+  the version in `flush_cache_salt()`, so a request dying between the two writes
+  loses an invalidation it will redo, never records the upgrade while dropping
+  it. Two concurrent requests may both bump — harmless, and not to be "fixed"
+  with a lock that can outlive the upgrade.
+  **This fix alone would have been a no-op on a real host**, which is why it
+  shipped together with the decision above: it works by making
+  `date_is_strong_validator()` return false, and nginx was overriding that from
+  outside PHP.
 - **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
   (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
   `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
@@ -2247,7 +2392,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
 │   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section (designed, not started)
-│   ├── review-followup-plan.md   ← what the 0.50.0 external review found: 4 fixed in 0.50.1, 5 open
+│   ├── review-followup-plan.md   ← THE HANDOFF: what the 0.50.0 review found, what shipped in 0.50.1/0.51.0, and where to pick up
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
@@ -2641,7 +2786,16 @@ not exist as far as the public API is concerned.
    otherwise keep answering `304` with a body the salt had already invalidated,
    for every post older than the change. It becomes usable again for a post the
    next time that post is saved — which is exactly when the date starts telling
-   the truth again.
+   the truth again. Since `0.51.0` a **plugin version change** marks that same
+   bump (`maybe_bump_for_plugin_version()`), so an upgrade that changes how
+   content converts stops the date path for every post older than it.
+   **And the refusal now withholds the `Last-Modified` header itself**
+   (`advertised_modified_timestamp()`): the decision is worthless while the
+   response still advertises the date, because a reverse proxy will revalidate
+   against it without asking PHP — measured, see the durable decision. So the
+   rule that "every input added to `cache_version()` must be reflected in
+   `date_is_strong_validator()`" now has a third clause: whatever that predicate
+   refuses, the response does not advertise.
 7. **i18n**: **English** is the source language for runtime strings, code
    comments, DocBlocks, tests, build tooling and workflow messages. The whole
    repository is English-only. Strings with inline HTML (`<code>`, `<strong>`, …)
@@ -2860,7 +3014,11 @@ Test posts:
 6. Post with a **non-standard post format** (aside/status/quote/…) → **404**, no
    `rel="alternate"` link, absent from `/llms.txt`, empty shortcode/dynamic tag.
 7. Post with a **table** and a **definition list** → GFM pipe table, `**Term**` +
-   paragraphs (not glued text).
+   paragraphs (not glued text). Add a table with **no header row** (the block
+   editor's default) and confirm its first row stays data under an empty
+   header; a table **with** a header row must be byte-identical to before
+   `0.51.0`. Add merged cells and confirm each value stays under its own
+   column — check the column, not just the row width.
 8. Post whose content carries an **unbalanced `</div>`** (Custom HTML block) →
    nothing after it is lost.
 9. `/my-post/feed/` with `Accept: text/markdown` (and `?format=markdown`) → the
@@ -2987,6 +3145,19 @@ Test posts:
     with a matching validator still answer `304` with no body. A `POST` to the
     canonical permalink with `Accept: text/markdown` → whatever WordPress does
     with that request, never Markdown and never `406`.
+
+24. **Validators.** A plain post (no selected taxonomy, no featured image, no
+    Rank Math description, no configured meta key, saved after the last
+    settings change) → the `.md` carries `Last-Modified`. A post with any of
+    those — a Bricks page is the easiest fixture — → **no `Last-Modified` at
+    all**, while the `ETag` is present and still answers `304` to a matching
+    `If-None-Match`. Saving the panel removes the header from the plain post
+    too; re-saving that post brings it back. Then the half that only real HTTP
+    can show: send `If-Modified-Since` equal to the advertised `Last-Modified`
+    and confirm a `200` **with a body** — a `304` there means something between
+    PHP and the client is revalidating on its own. Finally, keep a plain post's
+    `Last-Modified`, update the plugin, and confirm that same
+    `If-Modified-Since` is answered `200`.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

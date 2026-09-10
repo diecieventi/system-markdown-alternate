@@ -477,8 +477,8 @@ body at all. The filters they read are reached with them:
 The header filters are not alike, and the difference is the `304`:
 
 - `sysmda_markdown_robots_header` and `sysmda_markdown_canonical_url` are
-  applied in `send_headers()`, on the `200` path only. A `304` sends `ETag` and
-  `Last-Modified` and nothing filtered, so neither is reached.
+  applied in `send_headers()`, on the `200` path only. A `304` sends the
+  validators and nothing filtered, so neither is reached.
 - `sysmda_cache_control` is sent before the body on the `.md` route, so the
   conditional `304` carries the same policy as the `200` and the filter is
   reached by both. The negotiated permalink does not use it at all: that route

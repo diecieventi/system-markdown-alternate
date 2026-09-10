@@ -121,6 +121,45 @@ the server.
   (use a post with no SEO description and no excerpt, so the fallback runs) or
   its enriched `/llms.txt` entry — matching the HTML page, which core already
   renders without it. Removing the password puts the content back in all three.
+- **Table grids** (since `0.51.0`). Add a table built with the block editor's
+  **default** settings — header section off — and confirm the `.md` shows an
+  empty header row with the first row of data intact below it, not that row
+  promoted to headings. Then switch the header section on and confirm that
+  table is byte-identical to a pre-`0.51.0` capture. Then merge cells
+  horizontally and vertically and confirm each value stays under its own
+  column: check the column a value lands in, not only the row's width. Worth
+  doing here specifically because it is the block editor's own markup that
+  decides whether a `<thead>` is written at all.
+- **`Last-Modified` is sent only when the date is a usable validator** (since
+  `0.51.0`). `curl -sI` a plain post with no selected taxonomy, no featured
+  image, no Rank Math description and no configured meta key, saved after the
+  last settings change: the header is present. Then `curl -sI` a post that has
+  one of those — a **Bricks page is the easy fixture**, since a builder-handled
+  post always carries a dependency fingerprint — and confirm the header is
+  **absent** while the `ETag` is still there and still answers `304` to a
+  matching `If-None-Match`. Save the panel (bumping the salt) and confirm the
+  first post loses the header too, then re-save that post and confirm it comes
+  back.
+  **Do this over real HTTP and not in-process**, because the defect it guards
+  against lives between PHP and the client: on a stack whose front end performs
+  its own conditional handling (nginx's always-on not-modified filter, default
+  `if_modified_since exact`), a response still carrying the header is answered
+  `304` by the proxy even when the plugin is serving a fresh body. The check
+  that proves it: send `If-Modified-Since` equal to the `Last-Modified` the
+  response advertises, and confirm a `200` with a body.
+- **A plugin upgrade invalidates date-only revalidation** (since `0.51.0`).
+  Before updating, `curl -sI` a plain post and keep its `Last-Modified`. Update
+  the plugin, then re-request it with that `If-Modified-Since`: the response
+  must be a `200`, not a `304`. Saving that post afterwards restores the date
+  path for it.
+- **An exclusion on a Bricks container reaches the description** (since
+  `0.51.0`). Put `md-exclude` in the *CSS Classes* field of a Bricks **container
+  or section**, not of the text element itself, and give the page no Rank Math
+  description and no excerpt so the fallback runs. The text inside it must be
+  absent from the `.md` body **and** from the front-matter `description:` and
+  the page's enriched `/llms.txt` entry. Before `0.51.0` the body was right and
+  the other two kept the text, which is the whole point of the fixture: an
+  exclusion applied to the leaf directly always worked and proves nothing here.
 - A `POST` carrying `If-None-Match: *` to a `.md` URL and to `/llms.txt`
   returns the full response, never `304`, while `GET`/`HEAD` with a matching
   validator still return `304` with no body. A `POST` to a canonical permalink

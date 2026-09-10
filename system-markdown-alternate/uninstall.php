@@ -37,6 +37,7 @@ $sysmda_options = array(
 	'sysmda_md_hits',
 	'sysmda_md_hits_enabled',
 	'sysmda_cache_salt',
+	'sysmda_version',
 	'sysmda_dynamic_tag_enabled', // Legacy option (Dynamic Tag toggle removed in 0.8.0).
 	'sysmda_md_button_position', // Legacy option (button auto-insert removed in 0.32.0).
 	'sysmda_md_button_items', // Legacy option (Markdown button removed in 0.34.0).

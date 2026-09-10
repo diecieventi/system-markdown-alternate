@@ -53,7 +53,9 @@ Two consequences worth knowing:
   sample, which is shown verbatim rather than executed or stripped.
 - Excluded blocks, shortcodes and CSS classes, with defaults for contact forms
   and tables of contents that the panel adds to.
-- Code fences sized to their content, GFM tables, definition lists, and URLs
+- Code fences sized to their content, GFM tables with a normalized grid
+  (a table with no header of its own keeps its first row as data, and
+  `colspan`/`rowspan` are filled out), definition lists, and URLs
   made absolute against the post's own permalink.
 - Embeds always leave a usable address: the element becomes a link to what it
   embeds, or just its player frame does when the embed shows text of its own.
@@ -81,8 +83,10 @@ Two consequences worth knowing:
   representation (`sysmda_markdown_strict_406`, on by default).
 - `Content-Type: text/markdown`, `X-Robots-Tag: noindex, follow`, and a
   `Link: rel="canonical"` back to the HTML.
-- Weak `ETag` + `Last-Modified` with `304` support on the anonymous
-  representation.
+- Weak `ETag` with `304` support on the anonymous representation, plus
+  `Last-Modified` whenever the post's modification date alone determines the
+  document (it is withheld, rather than sent as information, when something
+  outside the post row can change the body).
 
 ### Discovery
 

@@ -27,6 +27,16 @@ class ContentRenderer {
 	const ROOT_TAG = 'sysmda-root';
 
 	/**
+	 * Upper bound for a `colspan`/`rowspan` when the grid is filled in.
+	 *
+	 * The attribute is author-supplied and the pass turns it into real DOM
+	 * nodes, so an unbounded value — hostile, or a typo — would build a table
+	 * thousands of columns wide inside a request that has to stay cheap. Far
+	 * past any real editorial table; the HTML standard's own cap is 1000.
+	 */
+	const MAX_TABLE_SPAN = 100;
+
+	/**
 	 * Tags that may not be nested inside a `<p>`, so a `<figure>` containing one
 	 * is never rewritten into a paragraph (see unwrap_figures()).
 	 */
@@ -405,6 +415,11 @@ class ContentRenderer {
 
 		$excluded = array_merge( $this->excluded_classes(), $this->excluded_builder_elements() );
 		$removed  = $this->remove_excluded_nodes( $dom, $excluded );
+		// Before the exclusion-sensitive passes below only in the sense that it
+		// runs early; it inserts empty cells and never reads or rewrites cell
+		// content, so an excluded cell is still excluded and links inside cells
+		// are still absolutised afterwards.
+		$this->normalize_tables( $dom );
 		$this->flatten_definition_lists( $dom );
 		$this->flatten_disclosures( $dom );
 		$this->promote_figcaptions( $dom );
@@ -584,6 +599,403 @@ class ContentRenderer {
 	 * is always better than dropping content, so the removal is now reserved for
 	 * a list that carries no text at all.
 	 */
+	/**
+	 * Normalizes tables so the library's unmodified `TableConverter` produces a
+	 * correct GFM grid from them.
+	 *
+	 * Two defects, one pass, and neither is fixable in a converter: the library
+	 * converts **bottom-up**, so by the time a `table` converter runs its rows
+	 * and cells are already converted strings — `colspan`, `rowspan` and the
+	 * existence of a header section are gone before it is called. The
+	 * `PreConverterInterface` hook does run first but exposes no node-insertion
+	 * API (checked against the pinned `5.1.1`), so blank cells cannot be added
+	 * from there either. The DOM, before conversion, is the only seam that has
+	 * the information and can act on it.
+	 *
+	 * 1. **Fill the grid.** `TableConverter` emits one pipe per cell, so a
+	 *    `colspan="2"` cell produced a row one column short and a `rowspan`
+	 *    left the following row missing its first cell — ragged rows that
+	 *    silently move every later value into the wrong column. Spans are
+	 *    expanded into real empty cells and the attributes removed.
+	 * 2. **Give a headerless table an empty header.** GFM requires a delimiter
+	 *    row, and the library emits it after the **first `<tr>` it sees**,
+	 *    whatever that row is. WordPress's own `core/table` block writes
+	 *    `<thead>` only when the header section is populated, and its toggle is
+	 *    off by default — so an ordinary table arrives as `<tbody>` alone and
+	 *    its first row of DATA was published as column headings. An empty
+	 *    header row keeps every value a value; inventing column names would be
+	 *    the same guesswork one level up.
+	 *
+	 * A table that already states its header correctly — a real `<thead>`, or a
+	 * genuine all-`<th>` first row — comes out byte-identical to before, and
+	 * that is asserted rather than assumed.
+	 */
+	private function normalize_tables( \DOMDocument $dom ): void {
+		$tables = $dom->getElementsByTagName( 'table' );
+
+		// Cheap when there is nothing to do: no table, no work at all.
+		if ( 0 === $tables->length ) {
+			return;
+		}
+
+		foreach ( iterator_to_array( $tables ) as $table ) {
+			if ( ! $table->parentNode ) {
+				continue;
+			}
+
+			$rows = self::table_rows( $table );
+
+			if ( empty( $rows ) ) {
+				continue;
+			}
+
+			// Asked BEFORE the grid is filled: a structural question about the
+			// source table must not depend on a mutation this pass is about to
+			// make. expand_spans() inserts placeholder cells, and asking
+			// afterwards used to see them (Codex, PR #140) — a header row
+			// carrying a `colspan` stopped reading as all-`<th>`, so the table
+			// was judged headerless and its real header was emitted as a data
+			// row under an empty one.
+			//
+			// **Not the operative fix, and the negative control says so.**
+			// Reverting only this ordering leaves the fixture passing, because
+			// expand_spans() now also mirrors the spanning cell's tag; only
+			// reverting BOTH reproduces the defect. Each is independently
+			// sufficient, and each is kept on its own merits — that one for the
+			// markup it emits, this one so detection never depends on what a
+			// later pass did to the DOM.
+			$has_header = self::has_header_row( $table );
+
+			$width = self::expand_spans( $dom, $rows );
+
+			// A table inside another table's cell is flattened into that cell
+			// by the converter — GFM has no nested tables — so a header row is
+			// meaningless there and only adds empty pipes to the noise. Its
+			// grid is still filled, which keeps the cell counts sane. Measured
+			// both ways: without this the inner table contributed `|  |  |` to
+			// the cell text that today does not carry it.
+			if ( ! $has_header && ! self::is_nested_table( $table ) ) {
+				self::prepend_empty_header( $dom, $table, $width );
+			}
+		}
+	}
+
+	/**
+	 * Whether this table sits inside another table.
+	 */
+	private static function is_nested_table( \DOMElement $table ): bool {
+		for ( $node = $table->parentNode; $node instanceof \DOMElement; $node = $node->parentNode ) {
+			if ( 'table' === strtolower( $node->nodeName ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Every `<tr>` belonging to this table and **not** to a nested one.
+	 *
+	 * A `.//tr` query would reach a nested table's rows and mix two grids into
+	 * one, so rows are collected through direct children only: the table's own
+	 * `<tr>`, plus those of its own `<thead>`/`<tbody>`/`<tfoot>` sections.
+	 *
+	 * @return \DOMElement[]
+	 */
+	private static function table_rows( \DOMElement $table ): array {
+		$rows = array();
+
+		foreach ( $table->childNodes as $child ) {
+			if ( ! $child instanceof \DOMElement ) {
+				continue;
+			}
+
+			$name = strtolower( $child->nodeName );
+
+			if ( 'tr' === $name ) {
+				$rows[] = $child;
+				continue;
+			}
+
+			if ( in_array( $name, array( 'thead', 'tbody', 'tfoot' ), true ) ) {
+				foreach ( $child->childNodes as $row ) {
+					if ( $row instanceof \DOMElement && 'tr' === strtolower( $row->nodeName ) ) {
+						$rows[] = $row;
+					}
+				}
+			}
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Replaces `colspan`/`rowspan` with real empty cells and pads short rows.
+	 *
+	 * The blank cells are **inserted at the covered index**, never appended.
+	 * Appending was the first version and it is worse than the bug: the row
+	 * comes out the right width, so the table looks well-formed, while the
+	 * value sits under the wrong heading. Whoever changes this owes a fixture
+	 * that checks *which column* a value lands in.
+	 *
+	 * @param \DOMElement[] $rows Rows of one table, in document order.
+	 * @return int The table's full width in columns.
+	 */
+	private static function expand_spans( \DOMDocument $dom, array $rows ): int {
+		$occupied = array(); // row index => [ column index => true ], from rowspans.
+		$width    = 0;
+		$grid     = array();
+
+		// The last row index of each row's own group, for `rowspan="0"`. A group
+		// is a `<thead>`/`<tbody>`/`<tfoot>`, or the table itself for rows that
+		// are its direct children — which is exactly "same parent node".
+		$group_last = array();
+		$seen_group = array();
+
+		foreach ( $rows as $r => $row ) {
+			$seen_group[ spl_object_id( $row->parentNode ) ] = $r;
+		}
+
+		foreach ( $rows as $r => $row ) {
+			$group_last[ $r ] = $seen_group[ spl_object_id( $row->parentNode ) ];
+		}
+
+		foreach ( $rows as $r => $row ) {
+			$column = 0;
+			$cells  = array();
+
+			foreach ( $row->childNodes as $cell ) {
+				if ( $cell instanceof \DOMElement && in_array( strtolower( $cell->nodeName ), array( 'td', 'th' ), true ) ) {
+					$cells[] = $cell;
+				}
+			}
+
+			foreach ( $cells as $cell ) {
+				// Skip past columns a rowspan above already claimed.
+				while ( isset( $occupied[ $r ][ $column ] ) ) {
+					++$column;
+				}
+
+				$colspan = self::span_value( $cell->getAttribute( 'colspan' ) );
+				$rowspan = self::rowspan_value( $cell->getAttribute( 'rowspan' ), $r, $group_last[ $r ] );
+
+				$cell->removeAttribute( 'colspan' );
+				$cell->removeAttribute( 'rowspan' );
+
+				// The cell itself occupies the first covered position; every
+				// other one becomes a real empty cell so the pipe count matches.
+				//
+				// The placeholder mirrors the spanning cell's own tag, and that
+				// is the half the negative control actually pins: filling a
+				// `<th colspan="2">` with a `<td>` turns a header row into a
+				// mixed one, which is both wrong markup and — until the check
+				// above moved — enough to lose the header entirely.
+				$filler = strtolower( $cell->nodeName );
+
+				for ( $c = 1; $c < $colspan; $c++ ) {
+					$row->insertBefore( $dom->createElement( $filler ), $cell->nextSibling );
+				}
+
+				for ( $rr = 1; $rr < $rowspan; $rr++ ) {
+					for ( $c = 0; $c < $colspan; $c++ ) {
+						$occupied[ $r + $rr ][ $column + $c ] = true;
+					}
+				}
+
+				$column += $colspan;
+			}
+
+			// The row's logical width is the cells it now HAS plus the positions
+			// a rowspan above claimed in it. Deliberately not `$column`, which
+			// has already stepped over those claimed positions — adding them to
+			// it counts each one twice, and the rowspan fixture came out one
+			// column too wide until that was measured rather than reasoned about.
+			$grid[ $r ] = count( self::row_cells( $row ) ) + count( isset( $occupied[ $r ] ) ? $occupied[ $r ] : array() );
+			$width      = max( $width, $grid[ $r ] );
+		}
+
+		foreach ( $rows as $r => $row ) {
+			// A rowspan claims a position in a later row that has no cell of
+			// its own there. The placeholder goes AT that index — appending it
+			// instead leaves the row the right width and every later value
+			// under the wrong heading, which is worse than the ragged row it
+			// replaces because the table then merely looks well-formed.
+			if ( isset( $occupied[ $r ] ) ) {
+				$indexes = array_keys( $occupied[ $r ] );
+				sort( $indexes );
+
+				foreach ( $indexes as $index ) {
+					$row->insertBefore( $dom->createElement( 'td' ), self::nth_cell( $row, $index ) );
+				}
+			}
+
+			// A malformed table can also simply be short.
+			for ( $c = $grid[ $r ]; $c < $width; $c++ ) {
+				$row->appendChild( $dom->createElement( 'td' ) );
+			}
+		}
+
+		return $width;
+	}
+
+	/**
+	 * The cell at a given index in a row, or null when the row is shorter.
+	 */
+	private static function nth_cell( \DOMElement $row, int $index ): ?\DOMElement {
+		$seen = 0;
+
+		foreach ( $row->childNodes as $cell ) {
+			if ( ! $cell instanceof \DOMElement || ! in_array( strtolower( $cell->nodeName ), array( 'td', 'th' ), true ) ) {
+				continue;
+			}
+
+			if ( $seen === $index ) {
+				return $cell;
+			}
+
+			++$seen;
+		}
+
+		return null;
+	}
+
+	/**
+	 * A span attribute as a usable count.
+	 *
+	 * Clamped, because the value is author-supplied and a `colspan="99999"` —
+	 * hostile, or simply a typo — would otherwise synthesise a table thousands
+	 * of columns wide inside a request that has to stay cheap. Anything
+	 * non-numeric or below 1 reads as 1, which is what the HTML standard says a
+	 * broken span means anyway.
+	 */
+	private static function rowspan_value( string $raw, int $row_index, int $group_last ): int {
+		// `rowspan="0"` is VALID HTML and means "every remaining row of this
+		// row group" — not a broken value. Coercing it to 1 left those rows
+		// without a placeholder at the covered column, which is the exact
+		// column-shift this pass exists to prevent (Codex, PR #140; reproduced
+		// before fixing). `colspan="0"` gets no such treatment on purpose: the
+		// HTML Living Standard requires colspan to be greater than zero, so
+		// there it really is a broken value and reads as 1.
+		if ( '0' === trim( $raw ) ) {
+			return min( max( 1, $group_last - $row_index + 1 ), self::MAX_TABLE_SPAN );
+		}
+
+		return self::span_value( $raw );
+	}
+
+	/**
+	 * A `colspan` (or a non-zero `rowspan`) as a usable count.
+	 */
+	private static function span_value( string $raw ): int {
+		$value = (int) trim( $raw );
+
+		if ( $value < 1 ) {
+			return 1;
+		}
+
+		return min( $value, self::MAX_TABLE_SPAN );
+	}
+
+	/**
+	 * Whether the table states a header row of its own.
+	 *
+	 * **Not "is there a `<th>` anywhere"**, which is the test that looks right
+	 * and reopens the defect: a `<th>` is legitimately used as a ROW LABEL
+	 * inside a data row (`<tr><th>Rome</th><td>3</td></tr>`), and such a table
+	 * has no header row at all — so the naive test stays silent and the
+	 * library goes on promoting that first row of data to column headings.
+	 *
+	 * A header exists only when a non-empty `<thead>` is present, or the
+	 * table's OWN first row is made entirely of `<th>` cells. Both queries walk
+	 * direct children, never `.//`, so a nested table's first row can never
+	 * answer for its parent's.
+	 */
+	private static function has_header_row( \DOMElement $table ): bool {
+		foreach ( $table->childNodes as $child ) {
+			if ( $child instanceof \DOMElement && 'thead' === strtolower( $child->nodeName )
+				&& array() !== self::row_cells_of( $child ) ) {
+				return true;
+			}
+		}
+
+		$rows = self::table_rows( $table );
+
+		if ( empty( $rows ) ) {
+			return false;
+		}
+
+		$cells = self::row_cells( $rows[0] );
+
+		if ( empty( $cells ) ) {
+			return false;
+		}
+
+		foreach ( $cells as $cell ) {
+			if ( 'th' !== strtolower( $cell->nodeName ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * The `td`/`th` children of a row.
+	 *
+	 * @return \DOMElement[]
+	 */
+	private static function row_cells( \DOMElement $row ): array {
+		$cells = array();
+
+		foreach ( $row->childNodes as $cell ) {
+			if ( $cell instanceof \DOMElement && in_array( strtolower( $cell->nodeName ), array( 'td', 'th' ), true ) ) {
+				$cells[] = $cell;
+			}
+		}
+
+		return $cells;
+	}
+
+	/**
+	 * The cells of a section's first row (used to tell an empty `<thead>` from
+	 * a populated one).
+	 *
+	 * @return \DOMElement[]
+	 */
+	private static function row_cells_of( \DOMElement $section ): array {
+		foreach ( $section->childNodes as $row ) {
+			if ( $row instanceof \DOMElement && 'tr' === strtolower( $row->nodeName ) ) {
+				$cells = self::row_cells( $row );
+
+				if ( ! empty( $cells ) ) {
+					return $cells;
+				}
+			}
+		}
+
+		return array();
+	}
+
+	/**
+	 * Prepends a `<thead>` of empty cells, so the delimiter row GFM requires
+	 * lands above the data instead of consuming its first row.
+	 */
+	private static function prepend_empty_header( \DOMDocument $dom, \DOMElement $table, int $width ): void {
+		if ( $width < 1 ) {
+			return;
+		}
+
+		$head = $dom->createElement( 'thead' );
+		$row  = $dom->createElement( 'tr' );
+
+		for ( $c = 0; $c < $width; $c++ ) {
+			$row->appendChild( $dom->createElement( 'th' ) );
+		}
+
+		$head->appendChild( $row );
+		$table->insertBefore( $head, $table->firstChild );
+	}
+
 	private function flatten_definition_lists( \DOMDocument $dom ): void {
 		foreach ( iterator_to_array( $dom->getElementsByTagName( 'dl' ) ) as $list ) {
 			if ( ! $list->parentNode ) {
