@@ -121,6 +121,15 @@ the server.
   (use a post with no SEO description and no excerpt, so the fallback runs) or
   its enriched `/llms.txt` entry — matching the HTML page, which core already
   renders without it. Removing the password puts the content back in all three.
+- **Table grids** (since `0.51.0`). Add a table built with the block editor's
+  **default** settings — header section off — and confirm the `.md` shows an
+  empty header row with the first row of data intact below it, not that row
+  promoted to headings. Then switch the header section on and confirm that
+  table is byte-identical to a pre-`0.51.0` capture. Then merge cells
+  horizontally and vertically and confirm each value stays under its own
+  column: check the column a value lands in, not only the row's width. Worth
+  doing here specifically because it is the block editor's own markup that
+  decides whether a `<thead>` is written at all.
 - **`Last-Modified` is sent only when the date is a usable validator** (since
   `0.51.0`). `curl -sI` a plain post with no selected taxonomy, no featured
   image, no Rank Math description and no configured meta key, saved after the

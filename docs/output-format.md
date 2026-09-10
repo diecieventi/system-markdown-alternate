@@ -212,7 +212,8 @@ is byte-identical to a site that never had it.
    - ATX headings (`# Heading`);
    - `-` list markers;
    - fenced code blocks;
-   - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells;
+   - **GFM pipe tables** (since `0.26.0`) — `|` is escaped inside cells; the
+     grid is normalized first (since `0.51.0`), see below;
    - `script` / `style` / `iframe` nodes removed;
    - `strip_tags => true` — see the note below;
    - **content-sized code delimiters** (since `0.38.0`) — see below.
@@ -234,7 +235,7 @@ Since `0.26.0` these are part of the documented output rather than incidental:
 
 | Source | Emitted as |
 |---|---|
-| `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table; a `<caption>` becomes a line above it |
+| `<table>` (including the core table block, with or without `<thead>`) | GFM pipe table with a filled-in grid; a `<caption>` becomes a line above it — see *Table grids* below |
 | `<dl>` / `<dt>` / `<dd>` | `**Term**` as its own paragraph, each definition as a following paragraph — including the standard shape that wraps each pair in a `<div>` child of the list (since `0.50.1`) |
 | `<figure>` around an image | paragraph (so images and captions get blank-line separation) |
 | `<figure>` around a block element (table, `<pre>`, list, …) | left as-is; the inner element converts on its own |
@@ -394,6 +395,44 @@ Removed **unconditionally**, whatever the filters and the panel say:
 - **`[sysmda_md_actions]`**, the current opt-in reader control. Its buttons,
   links and icons are interface chrome, never article content, so the entire
   shortcode is removed before the Markdown conversion.
+
+### Table grids
+
+Since `0.51.0` a table is normalized in the DOM before it is converted, so the
+emitted grid matches the source table. Two rules, and both changed the bytes of
+existing content when they landed:
+
+- **A table with no header row of its own gets an empty header row**, rather
+  than having its first row of data promoted to column headings. GFM requires a
+  delimiter row, and the converter emits it after the first row it sees —
+  while WordPress's own `core/table` block writes `<thead>` only when the
+  header section is populated, and that toggle is off by default. So an
+  ordinary table used to publish its first row of values as headings:
+
+  ```
+  | Rome | 3 |        |  |  |
+  |---|---|     →     |---|---|
+  | Milan | 5 |       | Rome | 3 |
+                      | Milan | 5 |
+  ```
+
+  A header is recognised when a non-empty `<thead>` is present, or when the
+  table's own first row consists entirely of `<th>` cells. Both of those come
+  out byte-identical to before. A `<th>` used as a **row label** inside a data
+  row is not a header, and such a table gets the empty header row like any
+  other.
+
+- **`colspan` and `rowspan` are expanded into empty cells.** One pipe is
+  emitted per cell, so a spanning cell used to leave the row short and every
+  later value shifted into the wrong column. The blank cells are placed at the
+  positions the span covers, so values stay under their own heading.
+
+  Spans are clamped to a maximum of 100, so a malformed or hostile value cannot
+  synthesize an enormous table.
+
+Nested tables are unchanged: GFM cannot express one, so an inner table is still
+flattened into its cell by the converter and does not receive a header row of
+its own.
 
 ### Unknown HTML tags are not a stable surface
 

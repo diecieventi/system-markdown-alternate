@@ -232,6 +232,37 @@ The v1 scope is done and widely exceeded. Implemented:
     environment; without it `strip_tags` glued every cell together). `<figure>`
     holding a block element (`BLOCK_TAGS`) is therefore **not** rewritten to `<p>`.
     `<dl>` is flattened to a bold term plus paragraphs.
+  - **the table GRID is normalized in the DOM, never in a converter**
+    (`0.51.0`, `normalize_tables()`, Phase 2 of the private fidelity plan). The
+    library converts **bottom-up**, so by the time a `table` converter runs its
+    rows and cells are already converted strings — `colspan`, `rowspan` and the
+    existence of a header section are gone before it is called, and
+    `PreConverterInterface` can read the element but exposes no node-insertion
+    API (checked against the pinned `5.1.1`). Two rules, both of which changed
+    the bytes of existing content:
+    - **A headerless table gets an EMPTY header row**, rather than having its
+      first row of data promoted. `TableConverter` emits the delimiter row after
+      the first `<tr>` it sees, and core's `core/table` writes `<thead>` only
+      when the header section is populated — a toggle that is off by default —
+      so every ordinary WordPress table published its first row of values as
+      column headings. Inventing column names would be the guesswork this
+      project refuses one level up; an empty header keeps every value a value.
+    - **Spans are expanded into real empty cells**, clamped to
+      `MAX_TABLE_SPAN`, and the placeholder goes **at the covered index**.
+      Appending it instead is worse than the ragged row it replaces: the table
+      then merely *looks* well-formed while every later value sits under the
+      wrong heading. That mistake was made in the plan's own prototype and
+      again here, and was caught both times by running the fixture rather than
+      re-reading the rule — assert **which column** a value lands in.
+    `has_header_row()` is the other easy-to-get-backwards half: a header exists
+    only for a non-empty `<thead>` or an all-`<th>` first row. "Is there a `<th>`
+    anywhere" passes every obvious fixture and reopens the defect for a `<th>`
+    used as a **row label** inside a data row, which is a legitimate and common
+    shape. Both that predicate and `table_rows()` read direct children only,
+    never `.//tr`, so a nested table's rows can never answer for its parent's.
+    A nested table gets its grid filled but no header row: GFM cannot express
+    one, so the inner table is flattened into its cell either way and a header
+    there is only noise (measured both ways).
   - **whitespace normalization skips fenced code**: trailing spaces and blank-line
     runs are meaningful inside a fence (Markdown hard breaks, transcripts, diffs).
   - **no Markdown delimiter is ever chosen without looking at what it wraps**
@@ -2966,7 +2997,11 @@ Test posts:
 6. Post with a **non-standard post format** (aside/status/quote/…) → **404**, no
    `rel="alternate"` link, absent from `/llms.txt`, empty shortcode/dynamic tag.
 7. Post with a **table** and a **definition list** → GFM pipe table, `**Term**` +
-   paragraphs (not glued text).
+   paragraphs (not glued text). Add a table with **no header row** (the block
+   editor's default) and confirm its first row stays data under an empty
+   header; a table **with** a header row must be byte-identical to before
+   `0.51.0`. Add merged cells and confirm each value stays under its own
+   column — check the column, not just the row width.
 8. Post whose content carries an **unbalanced `</div>`** (Custom HTML block) →
    nothing after it is lost.
 9. `/my-post/feed/` with `Accept: text/markdown` (and `?format=markdown`) → the

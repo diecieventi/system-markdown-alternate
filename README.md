@@ -53,7 +53,9 @@ Two consequences worth knowing:
   sample, which is shown verbatim rather than executed or stripped.
 - Excluded blocks, shortcodes and CSS classes, with defaults for contact forms
   and tables of contents that the panel adds to.
-- Code fences sized to their content, GFM tables, definition lists, and URLs
+- Code fences sized to their content, GFM tables with a normalized grid
+  (a table with no header of its own keeps its first row as data, and
+  `colspan`/`rowspan` are filled out), definition lists, and URLs
   made absolute against the post's own permalink.
 - Embeds always leave a usable address: the element becomes a link to what it
   embeds, or just its player frame does when the embed shows text of its own.

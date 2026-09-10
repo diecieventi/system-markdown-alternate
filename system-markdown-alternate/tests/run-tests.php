@@ -3166,9 +3166,12 @@ unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_excluded_classes'] );
 // Figures become paragraphs (blank-line separation around images), EXCEPT when
 // they hold a block element: a <table> inside a <p> is invalid nesting.
 check( 'dom: image figure unwrapped to p', '<p><img src="https://example.com/a.png" alt="x"></p>', $sysmda_dom( '<figure class="wp-block-image"><img src="/a.png" alt="x"/></figure>' ) );
+// The empty <thead> is normalize_tables() doing its job on a table with no
+// header of its own: what this case asserts is the FIGURE, which still is not
+// rewritten to a <p> because it holds a block element.
 check(
 	'dom: table figure left alone',
-	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>',
+	'<figure class="wp-block-table"><table><thead><tr><th></th></tr></thead><tr><td>c</td></tr></table></figure>',
 	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure>' )
 );
 
@@ -3183,7 +3186,7 @@ check(
 );
 check(
 	'dom: table caption promoted out of the figure',
-	'<figure class="wp-block-table"><table><tr><td>c</td></tr></table></figure><p>Cap</p>',
+	'<figure class="wp-block-table"><table><thead><tr><th></th></tr></thead><tr><td>c</td></tr></table></figure><p>Cap</p>',
 	$sysmda_dom( '<figure class="wp-block-table"><table><tr><td>c</td></tr></table><figcaption>Cap</figcaption></figure>' )
 );
 check(
@@ -5108,10 +5111,96 @@ if ( ! $GLOBALS['sysmda_has_vendor'] ) {
 		"| Name | Price |\n|---|---|\n| Coffee | 2 |\n| Tea | 3 |\n",
 		$sysmda_conv->convert( '<table><thead><tr><th>Name</th><th>Price</th></tr></thead><tbody><tr><td>Coffee</td><td>2</td></tr><tr><td>Tea</td><td>3</td></tr></tbody></table>' )
 	);
+	// The library alone still promotes the first row it sees, which is what
+	// ContentRenderer::normalize_tables() exists to prevent BEFORE the converter
+	// ever runs — see the end-to-end block below. This asserts the converter's
+	// own unchanged behaviour, not the output a post gets.
 	check(
 		'convert: headerless table still tabular',
 		"| a | b |\n|---|---|\n| c | d |\n",
 		$sysmda_conv->convert( '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>' )
+	);
+
+	// ─── Tables end to end: the DOM pass plus the converter ──────────
+	//
+	// The library converts bottom-up, so a `table` converter sees rows and cells
+	// that are already strings: colspan, rowspan and the existence of a header
+	// are gone before it is called. Both defects are therefore fixed in the DOM,
+	// and both are only visible in the finished Markdown — which is what these
+	// assert. Each was reproduced against this exact library version first.
+	$sysmda_table_md = static function ( $html ) use ( $sysmda_dom, $sysmda_conv ) {
+		return $sysmda_conv->convert( $sysmda_dom( $html ) );
+	};
+
+	// WordPress's core/table block writes <thead> only when the header section
+	// is populated, and that toggle is off by default — so an ordinary table
+	// arrives as <tbody> alone and its first row of DATA was published as the
+	// column headings. Rome/3 are values, not headers.
+	check(
+		'tables: a headerless table keeps its first row as data',
+		"|  |  |\n|---|---|\n| Rome | 3 |\n| Milan | 5 |\n",
+		$sysmda_table_md( '<table><tbody><tr><td>Rome</td><td>3</td></tr><tr><td>Milan</td><td>5</td></tr></tbody></table>' )
+	);
+
+	// The two shapes that already state their header correctly must come out
+	// byte-identical to before the pass existed. These are the regression half.
+	check(
+		'tables: a real thead is untouched',
+		"| City | N |\n|---|---|\n| Rome | 3 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>City</th><th>N</th></tr></thead><tbody><tr><td>Rome</td><td>3</td></tr></tbody></table>' )
+	);
+	check(
+		'tables: an all-th first row without thead is a header',
+		"| City | N |\n|---|---|\n| Rome | 3 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th>City</th><th>N</th></tr><tr><td>Rome</td><td>3</td></tr></tbody></table>' )
+	);
+
+	// The case a naive "is there a <th> anywhere" test gets wrong, and the
+	// reason has_header_row() reads the table's own first row instead: a <th>
+	// used as a ROW LABEL is not a header, and such a table has none at all.
+	// This fixture is owed by anyone who touches that predicate.
+	check(
+		'tables: a th used as a row label is not a header row',
+		"|  |  |\n|---|---|\n| Rome | 3 |\n| Milan | 5 |\n",
+		$sysmda_table_md( '<table><tbody><tr><th>Rome</th><td>3</td></tr><tr><th>Milan</th><td>5</td></tr></tbody></table>' )
+	);
+
+	// A colspan produced a row one column short: every later value slid left,
+	// under the wrong heading.
+	check(
+		'tables: a colspan is filled out to the full width',
+		"| A | B | C |\n|---|---|---|\n| wide |  | c |\n| a | b | c |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th><th>C</th></tr></thead><tbody><tr><td colspan="2">wide</td><td>c</td></tr><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>' )
+	);
+
+	// The fixture that matters most, and the one an earlier prototype got wrong
+	// by APPENDING the blank cell instead of inserting it at the covered index:
+	// the row came out the right width with b2 in column A. Assert the column,
+	// never just the width.
+	check(
+		'tables: a rowspan leaves the next row value in its own column',
+		"| A | B |\n|---|---|\n| tall | b1 |\n|  | b2 |\n",
+		$sysmda_table_md( '<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td rowspan="2">tall</td><td>b1</td></tr><tr><td>b2</td></tr></tbody></table>' )
+	);
+
+	// A guard is not done until it has been seen to fire: the span attribute is
+	// author-supplied and this pass turns it into real DOM nodes.
+	$sysmda_absurd = $sysmda_table_md( '<table><tbody><tr><td colspan="99999">x</td></tr><tr><td>a</td></tr></tbody></table>' );
+	check(
+		'tables: an absurd colspan is clamped',
+		ContentRenderer::MAX_TABLE_SPAN,
+		substr_count( explode( "\n", trim( $sysmda_absurd ) )[0], '|' ) - 1
+	);
+	check( 'tables: the clamped row still carries its value', true, false !== strpos( $sysmda_absurd, '| x |' ) );
+
+	// A .//tr query would pull a nested table's rows into its parent's grid.
+	// GFM cannot express a nested table at all, so the inner one is flattened
+	// into the cell either way — what must hold is that the OUTER table's own
+	// first row is still recognised as data.
+	check(
+		'tables: a nested table does not join its parent grid',
+		"|  |  |\n|---|---|\n| outer\\| inner1 \\| inner2 \\| | right |\n|---|---|\n",
+		$sysmda_table_md( '<table><tbody><tr><td>outer<table><tbody><tr><td>inner1</td><td>inner2</td></tr></tbody></table></td><td>right</td></tr></tbody></table>' )
 	);
 	check(
 		'convert: pipe inside a cell escaped',
