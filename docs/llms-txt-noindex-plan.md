@@ -1,8 +1,9 @@
 # noindex-aware `/llms.txt`, and a `## Sitemaps` section
 
-> Implementation plan. Status: **designed, not started.** Scope was fixed with
-> the maintainer in August 2026 and is deliberately narrow. Written against
-> `main @ 0.49.3`.
+> Implementation plan. **The status of this work lives in
+> [`STATUS.md`](STATUS.md), not here** — one place, so the two cannot disagree.
+> Scope was fixed with the maintainer in August 2026 and is deliberately
+> narrow. Written against `main @ 0.49.3`.
 >
 > **The `.md` endpoint does not change.** Not one rule of `is_servable()` moves,
 > and no `.md` that resolves today stops resolving. The whole feature lives in

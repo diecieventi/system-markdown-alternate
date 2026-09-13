@@ -1,9 +1,11 @@
 # Page builders — Bricks first, a veto for the rest
 
-> Implementation plan. Status: **Phases 1, 1b, 0 and 2 are all shipped**
-> (`0.46.0`) — `bricks` has left `BuilderDetector::AWAITING_ADAPTER` and a
-> Bricks-mode post now produces a real `.md` through `BricksAdapter`. Written
-> against `main @ 0.45.1`, updated through `0.46.0`.
+> Implementation plan. **The status of this work lives in
+> [`STATUS.md`](STATUS.md), not here** — one place, so the two cannot disagree.
+> In short: Phases 1, 1b, 0 and 2 all shipped in `0.46.0`, `bricks` has left
+> `BuilderDetector::AWAITING_ADAPTER`, and Elementor is the only open item
+> this plan still has. Written against `main @ 0.45.1`, updated through
+> `0.46.0`; the nested-template dependency walk followed in `0.52.0`.
 >
 > Scope was fixed with the maintainer in August 2026 and is deliberately narrow:
 > **Bricks is the one builder to support.** Elementor is parked. Divi, WPBakery,
