@@ -14,7 +14,6 @@ Add these from a theme's `functions.php` or, better, a small site plugin.
 - [The conversion pipeline](#the-conversion-pipeline)
 - [Front matter](#front-matter)
 - [ACF integration](#acf-integration)
-- [`/llms.txt`](#llmstxt)
 - [Hit counter](#hit-counter)
 - [Default exclusions](#default-exclusions)
 - [Examples](#examples)
@@ -40,7 +39,7 @@ implementation behind a hook while its input and output stay the same are all
 compatible changes, and ship without ceremony. A callback registered with the
 arity it was written for keeps working across all three.
 
-Most of these are stable for free rather than by sacrifice: fourteen of them are
+Most of these are stable for free rather than by sacrifice: twelve of them are
 the mechanism by which a saved setting reaches the code — `AdminSettings` feeds
 the stored option in as the filter's own value — so they last exactly as long as
 the checkbox does, and keeping them costs no design freedom at all.
@@ -49,7 +48,7 @@ the checkbox does, and keeping them costs no design freedom at all.
 
 Anchored to a **stage of the current implementation**: where the conversion
 pipeline happens to cut, how ACF fields are read, how the hit counter classifies
-a request, how `/llms.txt` is laid out. Supported, documented and not changed
+a request. Supported, documented and not changed
 without reason — but they may evolve while the plugin is pre-1.0, and a future
 conversion engine (a block-native pipeline, a different converter) is allowed to
 move them. Changes stay deliberate and documented; they are simply not treated
@@ -104,14 +103,6 @@ compatibility promise of any kind.
 | `sysmda_acf_field_keys` | Advanced |
 | `sysmda_acf_subtitle_key` | Stable |
 | `sysmda_acf_tldr_key` | Stable |
-| `sysmda_llms_txt_cache_ttl` | Stable |
-| `sysmda_llms_txt_enriched` | Stable |
-| `sysmda_llms_txt_lastmod` | Stable |
-| `sysmda_llms_txt_summary` | Stable |
-| `sysmda_llms_txt_key_content` | Stable |
-| `sysmda_llms_txt_max_posts` | Advanced |
-| `sysmda_llms_txt_main_posts` | Advanced |
-| `sysmda_llms_txt_footer` | Advanced |
 | `sysmda_md_hits_bot_patterns` | Advanced |
 | `sysmda_md_hits_named_bot_patterns` | Advanced |
 | `sysmda_md_hits_retention_days` | Advanced |
@@ -137,18 +128,18 @@ apply_filters( 'sysmda_markdown_excluded_post_formats', $formats, $post );
 Non-standard post formats that never expose a `.md`. Defaults to all nine
 (aside, audio, chat, gallery, image, link, quote, status, video); return an
 empty array to serve every format. The rule lives in `is_servable()`, so it
-applies to the `.md` route, negotiation, `rel="alternate"`, `/llms.txt`, the
+applies to the `.md` route, negotiation, `rel="alternate"`, the
 shortcodes and the dynamic tag at once.
 
 ```php
 apply_filters( 'sysmda_markdown_unsupported_builders', $builders, $post );
 ```
 Page builders whose posts have **no Markdown representation**. Defaults to every
-builder the plugin can detect — `bricks`, `elementor`, `divi`, `wpbakery`,
-`oxygen`, `beaver-builder`, `breakdance` — because none of them has an adapter
-yet. A post rendered by one of these is denied everywhere `is_servable()`
+builder the plugin can detect except `bricks`, which has an adapter:
+`elementor`, `divi`, `wpbakery`, `oxygen`, `beaver-builder`, `breakdance`. A
+post rendered by one of these is denied everywhere `is_servable()`
 reaches: the `.md` URL returns 404, no `alternate` link or `Link:` header is
-advertised, the post leaves `/llms.txt`, and the shortcodes and the dynamic tag
+advertised, and the shortcodes and the dynamic tag
 render nothing.
 
 Detection is **per post** and reads the builder's own render-mode meta, so
@@ -165,8 +156,8 @@ the plugin cannot detect has no effect; use `sysmda_post_is_servable` to deny
 posts built with something else.
 
 Two notes. The list is **not** a supported-builders roster that shrinks as
-adapters ship on your site — it shrinks in the plugin, and `bricks` leaving it
-in a future version is a feature addition, not a breaking change. And the
+adapters ship on your site — it shrinks in the plugin, which is what `bricks`
+leaving it in `0.46.0` was: a feature addition, not a breaking change. And the
 settings panel's per-type breakdown describes the **built-in** list: it is
 rendered without a post, so it cannot evaluate this filter.
 
@@ -210,7 +201,7 @@ and **neither reaches this endpoint**: it runs at `template_redirect` priority
 `0` and exits, so later callbacks never run, and it renders cleaned blocks
 instead of `the_content` by design. Return `false` here to deny a post
 everywhere at once (the `.md` route, negotiation, `rel="alternate"`,
-`/llms.txt`, both shortcodes and the dynamic tag).
+both shortcodes and the dynamic tag).
 
 Veto only: it is consulted **just when the built-in rules already said yes**,
 so returning `true` can never publish a draft, a password-protected post or a
@@ -252,7 +243,7 @@ sent.
 apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' );
 ```
 `Cache-Control` on the URLs the plugin owns (the `.md` endpoint and
-`/llms.txt`). `''` sends no header at all, WordPress's own included.
+`.md`). `''` sends no header at all, WordPress's own included.
 
 It does **not** apply to Markdown negotiated on the canonical permalink: that
 representation shares its URL with the HTML page, so it is always sent
@@ -434,7 +425,7 @@ and one on a different endpoint entirely. Known call sites:
 
 | Filter | Called from |
 |--------|-------------|
-| `sysmda_markdown_excluded_shortcodes` | the post body; rendered preamble fragments; expanded synced patterns (`core/block`); the front-matter description fallback, which runs **before** the source-content hook; and `/llms.txt`, for entries that carry a description |
+| `sysmda_markdown_excluded_shortcodes` | the post body; rendered preamble fragments; expanded synced patterns (`core/block`); and the front-matter description fallback, which runs **before** the source-content hook |
 | `sysmda_markdown_excluded_block_names` | block cleaning — only when the post has blocks |
 | `sysmda_markdown_excluded_classes` | block cleaning (blocks only); every DOM pass, body and fragments alike, unless the HTML is empty or fails to parse |
 | `sysmda_markdown_excluded_builder_elements` | the same DOM pass as `sysmda_markdown_excluded_classes` (merged into one removal), applied to page-builder-rendered content; and the description fallback's exclusion pass, against the synthetic markup a builder adapter's `source_text()` produces |
@@ -447,7 +438,7 @@ What is guaranteed instead is the shape of the callback. Write these filters as
 **pure, cheap functions of their input**: same list every time, no accumulated
 state, no counting of invocations, no side effects, no expensive work. A
 callback that assumes a single invocation will be wrong on a post with synced
-patterns, and a slow one is paid again for every entry `/llms.txt` describes.
+patterns.
 
 ### None of them run on a cache hit
 
@@ -561,8 +552,7 @@ repeater has a structure this plugin has no brief to invent a rendering for.
 
 The list **replaces** rather than accumulates, unlike the three exclusion
 filters. There are no built-in defaults to preserve, and a curated inclusion list
-is the caller's whole answer — the same semantics as
-`sysmda_llms_txt_key_content`.
+is the caller's whole answer.
 
 ```php
 // Pull two fields into every post's Markdown.
@@ -609,41 +599,6 @@ exist.
 The validator read is on the
 [every-request path](#filters-on-the-every-request-path). Return a field name,
 not the result of looking one up.
-
-## `/llms.txt`
-
-```php
-apply_filters( 'sysmda_llms_txt_max_posts', 500, $post_type );
-apply_filters( 'sysmda_llms_txt_cache_ttl', DAY_IN_SECONDS );
-```
-Maximum posts listed per type, and the shared anonymous body-cache TTL in
-seconds (`0` = off). Authenticated requests always bypass that body cache.
-`sysmda_llms_txt_max_posts` is **[Advanced](#advanced)**: it describes how the
-index is assembled, and the llms.txt layout follows a spec that is still moving.
-
-```php
-apply_filters( 'sysmda_llms_txt_enriched', false );
-apply_filters( 'sysmda_llms_txt_lastmod', false );
-```
-Enable the enriched output, and append `(updated: YYYY-MM-DD)` to every entry.
-Both default to `false`, and off means the base output is unchanged.
-
-```php
-apply_filters( 'sysmda_llms_txt_summary', '' );
-apply_filters( 'sysmda_llms_txt_key_content', array() );
-apply_filters( 'sysmda_llms_txt_main_posts', 25, $post_type );
-apply_filters( 'sysmda_llms_txt_footer', '' );
-```
-Enriched mode only: the site summary paragraph, the featured content (post IDs
-or URLs), how many posts per type appear in the main section before the
-overflow moves under `## Optional`, and a free-form trailing block — the hook
-for policy or LLM signals.
-
-`sysmda_llms_txt_main_posts` and `sysmda_llms_txt_footer` are
-**[Advanced](#advanced)**: both describe the *shape* of the generated file (the
-main/`## Optional` split, and a trailing block whose eventual content depends on
-an LLM-signals spec that has not settled). The two toggles and the summary above
-them are Stable — they are panel settings.
 
 ## Hit counter
 
@@ -725,8 +680,6 @@ add_filter( 'sysmda_markdown_excluded_post_formats', '__return_empty_array' );
 // Serve the body without the YAML front matter.
 add_filter( 'sysmda_front_matter_enabled', '__return_false' );
 
-// Enable the enriched /llms.txt output.
-add_filter( 'sysmda_llms_txt_enriched', '__return_true' );
 
 // Declare an out-of-post dependency so the ETag changes when it does.
 add_filter( 'sysmda_markdown_cache_dependencies', function ( $deps, $post ) {

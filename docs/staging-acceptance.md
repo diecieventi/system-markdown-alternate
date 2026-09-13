@@ -13,7 +13,7 @@ the server.
 
 1. Confirm the staging URL, WordPress/PHP versions, active plugin version and
    active integrations.
-2. Check the homepage, one canonical post, its `.md` URL and `/llms.txt`.
+2. Check the homepage, one canonical post and its `.md` URL.
 3. Create a rollback archive outside the plugin directory and record its size
    and SHA-256.
 4. Verify the local distributable's size and SHA-256 before transfer.
@@ -31,36 +31,21 @@ the server.
   forwards the validator.
 - Password-protected and non-standard-format posts remain unavailable as
   Markdown.
-- **`/llms.txt` discovery (`rel="describedby"`, since `0.49.0`)**: a servable
-  canonical post carries the relation in both the HTML head and the `Link:`
-  header, alongside the Markdown alternate, and any pre-existing Link relation
-  survives. It is absent wherever the alternate is absent (`.md`, negotiated
-  Markdown, `406`, feed, embed, trackback, paged comments, sub-pages). Turning
-  `/llms.txt` off removes it while the alternate stays — the two are gated
-  independently and nothing else exercises that. **Run the unconfigured cases
-  first**: a fresh install has `/llms.txt` off, so no `describedby` may appear
-  anywhere; then tick the toggle with no content type selected yet — the case
-  where a naive gate advertises a 404 — and confirm it stays silent there too.
-  On a subdirectory install, confirm the advertised target is the endpoint's
-  real path under `home_url()` and that it resolves.
-- Excluded shortcodes are absent from prose but survive literally inside inline
-  and fenced code examples.
-- Embed blocks leave a usable address: a video embed becomes a link to it,
-  a captioned one keeps its caption as the following paragraph, and an embed
-  showing text of its own (a quoted post) keeps that text as well as its link.
-  Worth doing here specifically: whether the player is already resolved when
-  the pipeline sees it varies per provider and per caching setup, and only one
-  of the two shapes can be reproduced offline.
-- A clickable link card — a link-preview or related-posts block, whichever the
-  site actually uses — converts to a link carrying the card's name rather than
-  `[](url "Name")`. Worth doing here specifically: whether such a card renders
-  as an overlay anchor with sibling text, or nests its title inside the link,
-  is the plugin's own choice and only the real one can settle it.
+- **`/llms.txt` is gone (since `0.53.0`)**. On a site upgraded from `0.52.0`
+  with the endpoint previously enabled: `/llms.txt` must return whatever the
+  site would serve without this plugin — a WordPress 404, or another plugin's
+  index if one is active — and never this plugin's output. No `describedby`
+  relation appears in any HTML head or `Link:` header, while the Markdown
+  `alternate` is unchanged in both forms. The settings page shows no llms.txt
+  tab and no status aside, saves without notices, and every other setting keeps
+  its value across that save. Deleting the plugin removes the five
+  `sysmda_llms_txt_*` options. Worth doing on the upgraded site specifically:
+  a fresh install cannot show that the old options are cleaned up or that the
+  URL is genuinely released.
 - Posts rendered by an unsupported page builder (Elementor, Divi, WPBakery,
   Oxygen, Beaver Builder, Breakdance) stay unavailable as Markdown: the `.md`
   returns 404, the HTML page advertises no `alternate` link or `Link:` header,
-  the post is absent from `/llms.txt`, and all three shortcodes and the
-  dynamic tag render nothing.
+  and all three shortcodes and the dynamic tag render nothing.
 - **Bricks pages now produce a real `.md`** (Phase 2, since `0.46.0`): a
   Bricks-mode page serves `text/markdown` built through `\Bricks\Frontend::render_data()`,
   with real image `src`/`srcset` values (never a `data:image/svg+xml`
@@ -104,8 +89,8 @@ the server.
   verified on `instawp_sma` with a simulated fixture rather than a real
   WooCommerce install: three ordinary pages created, WooCommerce's own
   `woocommerce_{cart,checkout,myaccount}_page_id` options pointed at them by
-  hand, `PostSupport::is_servable()` and a real `/llms.txt` HTTP round-trip
-  both confirmed all three excluded and an unrelated page unaffected, the
+  hand, `PostSupport::is_servable()` confirmed all three excluded and an
+  unrelated page unaffected, the
   filter both re-included and narrowed the exclusion, and the
   `wc_get_page_id()`-active branch (WooCommerce genuinely installed) was
   checked in-process with a request-scoped shim, since the function cannot
@@ -115,12 +100,11 @@ the server.
   itself does to `wc_get_page_id()`'s filter beyond the raw option — install
   WooCommerce for real on a future pass to close that gap, the same way the
   ACF fixture above is still owed a real field group.
-- `/llms.txt` is healthy and excludes ineligible content.
 - A **password-protected synced pattern** referenced by a public post
   contributes nothing to that post's `.md`, its front-matter `description`
-  (use a post with no SEO description and no excerpt, so the fallback runs) or
-  its enriched `/llms.txt` entry — matching the HTML page, which core already
-  renders without it. Removing the password puts the content back in all three.
+  (use a post with no SEO description and no excerpt, so the fallback runs) —
+  matching the HTML page, which core already renders without it. Removing the
+  password puts the content back in both.
 - **Table grids** (since `0.51.0`). Add a table built with the block editor's
   **default** settings — header section off — and confirm the `.md` shows an
   empty header row with the first row of data intact below it, not that row
@@ -156,9 +140,9 @@ the server.
   `0.51.0`). Put `md-exclude` in the *CSS Classes* field of a Bricks **container
   or section**, not of the text element itself, and give the page no Rank Math
   description and no excerpt so the fallback runs. The text inside it must be
-  absent from the `.md` body **and** from the front-matter `description:` and
-  the page's enriched `/llms.txt` entry. Before `0.51.0` the body was right and
-  the other two kept the text, which is the whole point of the fixture: an
+  absent from the `.md` body **and** from the front-matter `description:`.
+  Before `0.51.0` the body was right and the description kept the text, which
+  is the whole point of the fixture: an
   exclusion applied to the leaf directly always worked and proves nothing here.
 - **A nested Bricks template is a dependency** (since `0.52.0`). Build a
   `page -> outer template -> inner template` chain: the page holds a `template`
@@ -178,8 +162,8 @@ the server.
   following `GET` is the request that populates it. Not directly observable from
   outside, so check the cache entry itself rather than inferring it from
   response time.
-- A `POST` carrying `If-None-Match: *` to a `.md` URL and to `/llms.txt`
-  returns the full response, never `304`, while `GET`/`HEAD` with a matching
+- A `POST` carrying `If-None-Match: *` to a `.md` URL returns the full
+  response, never `304`, while `GET`/`HEAD` with a matching
   validator still return `304` with no body. A `POST` to a canonical permalink
   with `Accept: text/markdown` is handled by WordPress, not answered with
   Markdown or a `406`.

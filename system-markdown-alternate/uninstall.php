@@ -28,11 +28,6 @@ $sysmda_options = array(
 	'sysmda_front_matter_taxonomy_slugs',
 	'sysmda_acf_subtitle_key',
 	'sysmda_acf_tldr_key',
-	'sysmda_llms_txt_enabled',
-	'sysmda_llms_txt_enriched',
-	'sysmda_llms_txt_lastmod',
-	'sysmda_llms_txt_summary',
-	'sysmda_llms_txt_key_content',
 	'sysmda_litespeed_htaccess',
 	'sysmda_md_hits',
 	'sysmda_md_hits_enabled',
@@ -42,6 +37,11 @@ $sysmda_options = array(
 	'sysmda_md_button_position', // Legacy option (button auto-insert removed in 0.32.0).
 	'sysmda_md_button_items', // Legacy option (Markdown button removed in 0.34.0).
 	'sysmda_front_matter_taxonomies', // Legacy option (checkbox replaced by the taxonomy selection in 0.25.0).
+	'sysmda_llms_txt_enabled', // Legacy option (/llms.txt endpoint removed in 0.53.0).
+	'sysmda_llms_txt_enriched', // Legacy option (/llms.txt endpoint removed in 0.53.0).
+	'sysmda_llms_txt_lastmod', // Legacy option (/llms.txt endpoint removed in 0.53.0).
+	'sysmda_llms_txt_summary', // Legacy option (/llms.txt endpoint removed in 0.53.0).
+	'sysmda_llms_txt_key_content', // Legacy option (/llms.txt endpoint removed in 0.53.0).
 );
 
 /**
@@ -65,6 +65,8 @@ $sysmda_clean_site = static function ( array $options ) use ( $wpdb ) {
 		    OR option_name LIKE '\_transient\_timeout\_sysmda\_md\_%'
 		    OR option_name LIKE '\_transient\_sysmda\_llms\_%'
 		    OR option_name LIKE '\_transient\_timeout\_sysmda\_llms\_%'
+		    -- ^ the /llms.txt index cache, removed in 0.53.0: a site upgrading
+		    -- from 0.52.0 or earlier can still hold the row until it expires.
 		    OR option_name LIKE '\_transient\_sysmda\_builder\_%'
 		    OR option_name LIKE '\_transient\_timeout\_sysmda\_builder\_%'"
 	);

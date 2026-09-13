@@ -8,10 +8,10 @@ plugin: they live in the `/assets` folder of the WP.org SVN, separate from
 |------|-----|
 | `icon-128x128.png` / `icon-256x256.png` | Icon (plugin grid, search results) |
 | `banner-772x250.png` / `banner-1544x500.png` | Banner at the top of the listing (1x / retina) |
-| `screenshot-1.png` … `screenshot-6.png` | Screenshots; numbering matches the `== Screenshots ==` captions in `readme.txt` |
+| `screenshot-1.png` … `screenshot-5.png` | Screenshots; numbering matches the `== Screenshots ==` captions in `readme.txt` |
 
-Screenshots 1–5 are one per tab of the settings page, in panel order: General,
-Markdown output, `/llms.txt`, Integrations, Advanced. Screenshot 6 is the
+Screenshots 1–4 are one per tab of the settings page, in panel order: General,
+Markdown output, Integrations, Advanced. Screenshot 5 is the
 `[sysmda_md_actions]` split button on the front end (copy/view/download), not
 a settings tab — added because a shot of the actual reader-facing output sells
 the plugin better than the settings panel alone. WP.org matches
@@ -19,9 +19,15 @@ the plugin better than the settings panel alone. WP.org matches
 sync if you add or reorder them. Heights may differ (each shot is as tall as its
 subject); only the numbering and the caption order matter.
 
-> Optional improvement: a shot of the actual `.md` output (a page served as
-> `.md`, and/or the `/llms.txt` response) would round this out further — add
-> it as `screenshot-7` with a matching caption when convenient.
+> **Owed after `0.53.0`**: `screenshot-1` still shows the settings page with
+> the two-column layout and the `/llms.txt` status aside, both removed with the
+> endpoint. The shot is stale rather than wrong about anything a user can still
+> reach, but it advertises a feature that no longer exists — retake it on the
+> next staging pass. The `/llms.txt` tab's own shot was deleted and 4–6
+> renumbered to 3–5 in that release.
+>
+> Optional improvement: a shot of the actual `.md` output would round this out
+> further — add it as `screenshot-6` with a matching caption when convenient.
 
 ## How they reach wordpress.org
 

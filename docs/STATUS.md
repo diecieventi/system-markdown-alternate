@@ -5,9 +5,9 @@ reviews and `AGENTS.md` carry the reasoning; the state of the work is here.
 A plan that disagrees with this file is stale — fix the plan, not this table.
 
 **Only actionable work is listed.** Anything that has been decided against —
-Elementor, the homepage `.md`, escaping the `# Title`, a front-end button, a
-crawler log — is *not* in this file, and must not be added back to it: durable
-decisions live in `AGENTS.md` under *Product decisions*, and closed
+Elementor, `/llms.txt`, the homepage `.md`, escaping the `# Title`, a front-end
+button, a crawler log — is *not* in this file, and must not be added back to it:
+durable decisions live in `AGENTS.md` under *Product decisions*, and closed
 measurements in [`evaluations.md`](evaluations.md). Read those before proposing
 anything; a backlog that lists what nobody intends to do is worse than no
 backlog, because it has to be re-read and re-dismissed every time.
@@ -21,8 +21,7 @@ backlog, because it has to be re-read and re-dismissed every time.
 > them out of the public repository. List that folder — do not infer its
 > contents from this file.
 
-Released: **0.52.0**, live on wordpress.org. No open pull request, no open
-issue.
+Released: **0.52.0**, live on wordpress.org. No open issue.
 
 ## Open work
 
@@ -30,9 +29,8 @@ issue.
 |---|---|---|---|---|
 | 1 | **Staging acceptance run on `0.52.0`** | Overdue | Nothing — both staging sites are connected and still on `0.51.0` | [staging-acceptance.md](staging-acceptance.md) |
 | 2 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
-| 3 | **noindex-aware `/llms.txt` + `## Sitemaps`** | Designed, not started | Seven storage-shape measurements, all blocking | [llms-txt-noindex-plan.md](llms-txt-noindex-plan.md) |
-| 4 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
-| 5 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
+| 3 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
+| 4 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
 
 **1. Acceptance run.** The last *full* matrix was `0.45.0` on 20 August 2026;
 the last recorded pass of any kind was `0.49.0` on 26 August, and it was
@@ -40,7 +38,8 @@ targeted rather than the full matrix. Four releases have shipped to
 wordpress.org since — `0.50.0` (a default reversed), `0.50.1`, `0.51.0` (table
 bytes and both validators) and `0.52.0` (`HEAD`, nested Bricks templates) — and
 the checklist's own fixtures for `0.51.0` and `0.52.0` have never been run as a
-pass. Both staging sites still carry `0.51.0`. Nothing blocks this but the
+pass. `0.53.0` removes `/llms.txt` outright, which adds its own fixtures to the
+same run. Both staging sites still carry `0.51.0`. Nothing blocks this but the
 doing, and it is the only item here with a real risk behind it.
 
 **2. Italian translation.** The plugin is live on wordpress.org, so the old
@@ -50,13 +49,7 @@ locale editor already approving (`piermario`). A language pack is generated at
 90%, so ~105 of the 116 have to land. No translation files belong in this
 repository — see the i18n note in `AGENTS.md`.
 
-**3. noindex-aware `/llms.txt`.** The first divergence in this plugin between
-**servable** and **listed**: the `.md` endpoint does not change and
-`is_servable()` is not touched. Every measurement it depends on is still
-untaken, and the whole feature is a guard — "a guard is not done until it has
-been seen to fire" applies to it directly.
-
-**4. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
+**3. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
 own `content` attribute, so the plugin publishes a synced pattern's default text
 where the page shows the per-instance override. Real, and the most invasive fix
 of the `0.50.0` review. Three connected installs scanned clean — but none of
@@ -64,7 +57,7 @@ them holds a single synced pattern, so the denominator is zero and the result
 carries no information. The SQL is in the plan; run it on the production
 reference site before spending anything.
 
-**5. Exclusion scanner.** An admin page inventorying the shortcode tags and
+**4. Exclusion scanner.** An admin page inventorying the shortcode tags and
 block names actually present in the servable corpus, so the three exclusion
 lists can be filled from evidence. The *damage* half shipped in `0.40.0` (lists
 accumulate, code samples are safe); *discovery* is what remains, and it waits on
@@ -73,11 +66,16 @@ a corpus worth scanning.
 ## Closed — do not redo
 
 Measurements and evaluations that answered a question for good live in
-[`evaluations.md`](evaluations.md): llms.txt v2, the caching and `304` host
-measurement, the `acceptmarkdown.com` guides, the block-native Markdown engine,
-server-side diagnostics, the homepage `.md`, escaping the `# Title`, and the
-ideas surfaced by reading comparable plugins. Read that file before proposing
-any of them again.
+[`evaluations.md`](evaluations.md): the caching and `304` host measurement, the
+`acceptmarkdown.com` guides, the block-native Markdown engine, server-side
+diagnostics, the homepage `.md`, escaping the `# Title`, and the ideas surfaced
+by reading comparable plugins. Read that file before proposing any of them
+again.
+
+**`/llms.txt` is gone**, generated by this plugin from `0.2.0` until `0.53.0`
+removed it. It is not an open item, a parked one or a candidate for a later
+release: the reasoning is a durable decision in `AGENTS.md`, and a hypothetical
+future for llms.txt is not a reason to reopen it.
 
 Durable product decisions — the ones that must not be reopened at all — stay in
 `AGENTS.md` under *Product decisions*.

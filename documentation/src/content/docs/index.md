@@ -38,7 +38,6 @@ No second copy of your content, no build step, no change to the HTML page. The M
 ## Also worth knowing
 
 - **[The `.md` endpoint](/endpoints/the-md-endpoint/)** — two ways to ask for Markdown, and the HTTP contract behind them
-- **[`/llms.txt`](/endpoints/the-llms-txt-index/)** — one file listing your Markdown content, so an agent can find it all
 - **[Shortcodes](/shortcodes/md-url/)** — link to, download, or let readers copy the Markdown
 - **[Extending with filters](/developers/extending-with-filters/)** — thirty-two documented hooks
 - **[Troubleshooting](/troubleshooting/nothing-served-at-the-md-url/)** — when nothing is served, or a cache answers first

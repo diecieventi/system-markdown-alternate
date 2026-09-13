@@ -65,18 +65,10 @@
 	clear: both;
 }
 
-/* Two-column layout. */
+/* Single column, kept to a readable width on wide screens. */
 .sysmda-settings-page__layout {
 	clear: both;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-	gap: 24px;
-	align-items: start;
-}
-
-.sysmda-settings-page__aside {
-	position: sticky;
-	top: 46px;
+	max-width: 1100px;
 }
 
 /* Client-side tabs: hide inactive panels only when JS is active. */
@@ -198,38 +190,6 @@
 	white-space: pre-wrap;
 }
 
-/* Aside: llms.txt endpoint status. */
-.sysmda-settings-page .sysmda-endpoint-state {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 2px 0 10px;
-	font-weight: 600;
-}
-
-.sysmda-settings-page .sysmda-endpoint-state .sysmda-dot {
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	background: #a7aaad;
-	box-shadow: 0 0 0 3px rgba( 167, 170, 173, .18 );
-}
-
-.sysmda-settings-page .sysmda-endpoint-state.is-on .sysmda-dot {
-	background: #00a32a;
-	box-shadow: 0 0 0 3px rgba( 0, 163, 42, .18 );
-}
-
-.sysmda-settings-page .sysmda-endpoint-state.is-off .sysmda-dot {
-	background: #d63638;
-	box-shadow: 0 0 0 3px rgba( 214, 54, 56, .18 );
-}
-
-.sysmda-settings-page .sysmda-endpoint-url {
-	margin: 0 0 6px;
-	word-break: break-all;
-}
-
 /* Informational cards (Integrations section). */
 .sysmda-settings-page .sysmda-integration-card {
 	max-width: 760px;
@@ -256,17 +216,6 @@
 	margin: 6px 0;
 }
 
-/* ─── Responsive ─────────────────────────────────────────────────────────── */
-@media screen and ( max-width: 960px ) {
-	.sysmda-settings-page__layout {
-		grid-template-columns: 1fr;
-	}
-
-	.sysmda-settings-page__aside {
-		position: static;
-	}
-}
-
 /*
  * The page-builder warning beside a content type. Colour only — the message
  * already says what is wrong, so this must stay readable if the colour does not
@@ -277,6 +226,7 @@
 	color: #b32d2e;
 }
 
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media screen and ( max-width: 782px ) {
 	.sysmda-settings-page__header {
 		display: block;

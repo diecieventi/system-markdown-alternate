@@ -9,6 +9,13 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.53.0
+
+* **Removed: the `/llms.txt` endpoint.** This plugin no longer generates that file, and no longer advertises one with the `rel="describedby"` link. Building a site-wide index was the only thing here that was not a Markdown version of a single post, and it is better served by the SEO plugins that already own the site's indexes — so the scope is now exactly what the plugin's name says. The `.md` URLs, content negotiation, the `rel="alternate"` discovery links, the shortcodes and everything else are untouched.
+* **If you had it enabled, `/llms.txt` stops being served after this update.** Nothing else changes, and no other setting is affected. Should you still want that file, generate it with your SEO plugin or another dedicated one; nothing in this plugin interferes with it. The llms.txt tab is gone from the settings page, along with its five options — they are deleted with the plugin, as always.
+* Removed with it: the `sysmda_llms_txt_*` filters (`cache_ttl`, `enriched`, `lastmod`, `summary`, `key_content`, `max_posts`, `main_posts`, `footer`) and the conflict notice that warned about another plugin serving the same URL. Every other filter is unchanged.
+* Internal: `LlmsTxtController` and `ConflictDetector` are gone, the settings page drops its two-column layout with them, and the suite loses the assertions that covered them. `link_header_has_relation()` keeps its relation argument — one relation's duplicate must never satisfy another's check, and that guard is still tested in both directions.
+
 ## 0.52.0
 
 * Bricks: a **nested** template is a cache dependency too. `BricksAdapter::fingerprint()` walked only the page's own elements, so on a `page → template → template` chain, editing only the inner template changed the rendered document while the validator stayed identical — the `.md` served the stale body for the full cache TTL and answered a conditional request `304`. Measured on a real Bricks 2.3.12 install (B1 of the `0.50.0` external review) before being fixed. The walk now follows a `template` element into the referenced template's own stored tree, deduplicated, with a cycle guard and a depth cap. The recursion is Bricks' own: `Element_Template::render()` renders a nested `template` element the same way.

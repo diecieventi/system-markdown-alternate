@@ -342,8 +342,8 @@ class ContentRenderer {
 	 * content in another post entirely — so a guard would go blind exactly where
 	 * `BlockCleaner` follows the reference. Expanding those patterns also makes
 	 * the description follow the body, which renders them. The cost is one
-	 * `parse_blocks()` per fallback description, `/llms.txt` entries included;
-	 * it is paid only when a post has neither an SEO description nor an excerpt.
+	 * `parse_blocks()` per fallback description, paid only when a post has
+	 * neither an SEO description nor an excerpt.
 	 *
 	 * The DOM pass returns its input untouched when nothing matched, so content
 	 * carrying no excluded class is never round-tripped through the DOM.

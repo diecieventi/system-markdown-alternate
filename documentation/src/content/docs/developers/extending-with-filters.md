@@ -27,7 +27,7 @@ add_filter( 'sysmda_post_is_servable', function ( bool $servable, WP_Post $post 
 }, 10, 2 );
 ```
 
-Every consumer honours it at once: the endpoint, negotiation, the discovery links, `/llms.txt`, the shortcodes and the dynamic tag.
+Every consumer honours it at once: the endpoint, negotiation, the discovery link, the shortcodes and the dynamic tag.
 
 `sysmda_markdown_unsupported_builders` is the built-in list of page builders whose posts have no Markdown version — see [Page builders](/integrations/page-builders/) for what that means and why. Drop a key to serve that builder's posts anyway, or return an empty array to switch the rule off entirely:
 

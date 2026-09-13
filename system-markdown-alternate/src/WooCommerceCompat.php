@@ -33,8 +33,8 @@ class WooCommerceCompat {
 	 * Whether the post is one of WooCommerce's own infrastructure pages.
 	 *
 	 * Consulted by `PostSupport::is_servable()`, so the rule reaches the `.md`
-	 * route, negotiation, `rel="alternate"`, `/llms.txt`, both shortcodes and
-	 * the dynamic tag at once — the same reach as the other built-in rules.
+	 * route, negotiation, `rel="alternate"`, both shortcodes and the dynamic
+	 * tag at once — the same reach as the other built-in rules.
 	 *
 	 * Reads `wc_get_page_id()` when WooCommerce is active, so any
 	 * WooCommerce-side filtering of these IDs is respected, and falls back to

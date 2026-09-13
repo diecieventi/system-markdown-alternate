@@ -23,9 +23,8 @@ defined( 'ABSPATH' ) || exit;
  * such a post has **no Markdown representation at all**. That is expressed as a
  * veto inside `PostSupport::is_servable()`, so it reaches every consumer at
  * once: the `.md` URL 404s, no `rel="alternate"` link or `Link:` header is
- * advertised, the post is absent from `/llms.txt`, and the shortcodes and the
- * dynamic tag render nothing — so nothing on the site ever points at a Markdown
- * URL that does not exist.
+ * advertised, and the shortcodes and the dynamic tag render nothing — so
+ * nothing on the site ever points at a Markdown URL that does not exist.
  *
  * Three rules shape the detection, and each one is easy to get backwards.
  *
@@ -124,10 +123,10 @@ class BuilderDetector {
 	 * The first `get_post_meta()` call primes WordPress's meta cache for the
 	 * whole post, so the loop below costs at most one query however many keys it
 	 * tests. That is per post, not per batch, and the distinction bites: a
-	 * caller that walks many posts must prime the meta cache for the batch, or
-	 * this becomes one query per post. `LlmsTxtController::servable_posts()`
-	 * does exactly that, for the same reason it already primed the term cache
-	 * that the post-format check reads.
+	 * caller that walks many posts must prime the meta cache for the batch
+	 * (`update_post_meta_cache`), or this becomes one query per post — the same
+	 * rule the post-format check needs for the term cache. The plugin has no
+	 * such batch caller today; a future one owes both.
 	 *
 	 * @return string A key of self::LABELS, or '' when the post is ordinary.
 	 */
@@ -195,8 +194,8 @@ class BuilderDetector {
 		 * `sysmda_post_is_servable`, which is the general per-post veto.
 		 *
 		 * The rule lives in `is_servable()`, so it applies to the `.md` route,
-		 * negotiation, `rel="alternate"`, `/llms.txt`, the shortcodes and the
-		 * dynamic tag at once. On the every-request path, `304` responses
+		 * negotiation, `rel="alternate"`, the shortcodes and the dynamic tag at
+		 * once. On the every-request path, `304` responses
 		 * included: keep it to values already in memory.
 		 *
 		 * @param string[] $builders Builder keys with no Markdown representation.

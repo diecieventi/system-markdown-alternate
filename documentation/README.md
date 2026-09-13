@@ -38,7 +38,7 @@ documentation/
         ├── index.md             landing page (splash template)
         ├── getting-started/     what it does, first Markdown file
         ├── settings/            one article per panel field
-        ├── endpoints/           .md endpoint, /llms.txt
+        ├── endpoints/           .md endpoint and content negotiation
         ├── shortcodes/          [sysmda_md_url], download link, reader actions
         ├── integrations/        ACF, GenerateBlocks
         ├── developers/          the filter API, in overview

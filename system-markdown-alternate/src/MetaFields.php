@@ -83,8 +83,7 @@ class MetaFields {
 		 * merges and would otherwise discard whatever that code returned. The list
 		 * REPLACES rather than accumulates, unlike the three exclusion filters:
 		 * this is a curated inclusion list with no built-in defaults, so the
-		 * value supplied is the whole answer (same semantics as
-		 * `sysmda_llms_txt_key_content`).
+		 * value supplied is the whole answer.
 		 *
 		 * @param string[] $keys Meta keys (default: none).
 		 * @param \WP_Post $post Reference post.

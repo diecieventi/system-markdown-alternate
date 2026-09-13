@@ -48,8 +48,6 @@ With plain permalinks (`?p=123`) there is no path to append `.md` to. The plugin
 
 The endpoint runs early on `template_redirect`, but a redirect manager or a security plugin can act sooner and send a redirect before the plugin sees the request. If `.md` URLs redirect somewhere unexpected, test with other plugins deactivated to find which one owns the rule.
 
-For `/llms.txt` specifically, a real file in the site root always wins: the web server delivers it without ever starting WordPress. The settings page flags this when it detects one.
-
 ## Still nothing?
 
 If the URL returns HTML rather than 404, the problem is different and usually a cache — see [Markdown negotiation returns HTML](/troubleshooting/negotiation-returns-html/).

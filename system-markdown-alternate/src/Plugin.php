@@ -47,10 +47,6 @@ class Plugin {
 		add_action( 'save_post', array( $this->controller, 'schedule_prewarm' ), 20 );
 		add_action( MarkdownController::PREWARM_HOOK, array( $this->controller, 'prewarm' ) );
 
-		// Endpoint /llms.txt.
-		$llms = new LlmsTxtController( $metadata );
-		add_action( 'template_redirect', array( $llms, 'maybe_render_llms_txt' ), 0 );
-
 		// ACF integration (opt-in through sysmda_acf_field_keys, sysmda_acf_subtitle_key, and sysmda_acf_tldr_key filters).
 		$acf = new AcfIntegration( $converter, $renderer );
 		add_filter( 'sysmda_markdown_appended_html', array( $acf, 'appended_html' ), 20, 2 );

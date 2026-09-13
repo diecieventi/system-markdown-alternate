@@ -68,9 +68,8 @@ interface BuilderAdapter {
 
 	/**
 	 * A cheap, unrendered approximation of this post's text, for the
-	 * front-matter `description` fallback and for `/llms.txt` entries — both
-	 * contexts where actually rendering through the vendor (potentially once
-	 * per listed post) would be prohibitive.
+	 * front-matter `description` fallback — a context where actually rendering
+	 * through the vendor would be prohibitive.
 	 *
 	 * Deliberately crude: no semantic mapping, just the text-bearing settings
 	 * of each element. May pick up a button label; that is an accepted

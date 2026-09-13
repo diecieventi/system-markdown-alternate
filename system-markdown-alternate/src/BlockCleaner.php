@@ -148,8 +148,7 @@ class BlockCleaner {
 	 * `render_block_core_block()` refuses a reference whose `post_password` is
 	 * set, so without the same check this expansion published text the HTML page
 	 * does not: an anonymous `.md` — and, through the description fallback, the
-	 * front matter and the enriched `/llms.txt` — carried the body of a
-	 * protected pattern. The rule is about the content, not the visitor, exactly
+	 * front matter — carried the body of a protected pattern. The rule is about the content, not the visitor, exactly
 	 * as in `PostSupport::is_servable()`: the password field is read directly and
 	 * never through `post_password_required()`, which answers the different
 	 * question of whether *this* visitor still has to supply it.
