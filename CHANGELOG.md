@@ -9,6 +9,12 @@ characters, so the complete history lives here and `readme.txt` links to it.
 Versions from `0.17.1` onward also have an annotated `vX.Y.Z` git tag, whose
 notes are generated from the entries in this file by `bin/release-tag.sh`.
 
+## 0.52.0
+
+* Bricks: a **nested** template is a cache dependency too. `BricksAdapter::fingerprint()` walked only the page's own elements, so on a `page → template → template` chain, editing only the inner template changed the rendered document while the validator stayed identical — the `.md` served the stale body for the full cache TTL and answered a conditional request `304`. Measured on a real Bricks 2.3.12 install (B1 of the `0.50.0` external review) before being fixed. The walk now follows a `template` element into the referenced template's own stored tree, deduplicated, with a cycle guard and a depth cap. The recursion is Bricks' own: `Element_Template::render()` renders a nested `template` element the same way.
+* No document is built for a `HEAD` request. The server discards the body, so converting it was work nobody received. The headers are unchanged — no `Content-Length` is sent, so nothing advertised depended on the body existing. Consequence worth knowing: a filter on `sysmda_markdown_output` with side effects no longer runs on `HEAD`, and a `HEAD` no longer warms the body cache.
+* The two dependency fingerprints are computed once per response instead of twice. `0.51.0` made the "may this response advertise its date" decision unconditional, which was the right trade for correctness but evaluated the pair a second time on every request, `304`s included. `serve_markdown()` now takes them once and hands them to both validators. The ETag is byte-identical either way.
+
 ## 0.51.0
 
 * Fixed: a **plugin update** did not stop date-only revalidation. An update can change how existing content converts without touching a single post — `0.50.1` did it twice — and a client that revalidates with `If-Modified-Since` alone was still told "not modified", keeping the pre-update version. A version change now invalidates the same way a settings save does.

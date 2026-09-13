@@ -4,7 +4,7 @@ Tags: markdown, llms.txt, ai, llm, content negotiation
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.51.0
+Stable tag: 0.52.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,11 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.52.0 =
+
+* Fixed, on **Bricks** pages built from templates: editing a template that is itself used *inside* another template left the page's Markdown untouched — the old version kept being served for up to a day, and a client asking "has this changed?" was told it had not. Only templates referenced directly by the page were being watched; a template referenced by a template now counts the same way, however deep the chain goes.
+* Faster, invisibly: a `HEAD` request (a "just the headers, please" request, used by link checkers and monitoring tools) no longer builds the document the server is going to throw away, and the two checks that decide how a response may be cached are now computed once per request instead of twice. The Markdown itself, and every header, are byte-for-byte what they were.
+
 = 0.51.0 =
 
 * Fixed: a **plugin update** did not stop date-only revalidation. An update can change how existing content converts without touching a single post — `0.50.1` did it twice — and a client that revalidates with `If-Modified-Since` alone was still told "not modified", keeping the pre-update version. A version change now invalidates the same way a settings save does.
@@ -205,13 +210,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed: a definition list whose term/definition pairs are wrapped in `<div>` elements — a shape the HTML standard allows and hand-written markup often uses — was **removed entirely** from the Markdown, terms and definitions alike. It is now flattened like any other definition list, and an unrecognised list is never deleted: at worst it converts imperfectly.
 * Fixed: conditional requests (`If-None-Match` / `If-Modified-Since`) are now answered with `304` only on `GET` and `HEAD`, and a `POST` to a post's permalink is left to WordPress instead of being answered with Markdown or a `406`.
 
-= 0.50.0 =
-
-* Changed: the `/llms.txt` endpoint is now **off by default**. The plugin answers that URL before anything else on the site gets the chance, and the conflict notice in the panel can only warn you — it cannot stand aside on its own — so serving the file is now always a deliberate choice you make under Settings → Markdown Alternate → llms.txt, after checking whether another plugin already generates it. Existing sites are unaffected: saving the settings page has always stored this toggle explicitly, so whatever your site is doing today it keeps doing. The new default reaches new installations — and the one unusual case of a site whose content types come from the `sysmda_markdown_supported_post_types` filter alone, with the settings page never saved: there the endpoint stops answering until you tick the box.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.52.0 =
+Recommended for sites building pages with Bricks templates: a page whose template references another template now picks up edits to that inner template immediately, instead of serving the previous Markdown for up to a day. Nothing to do after updating.
 
 = 0.51.0 =
 Recommended for every site. A plugin update now correctly invalidates cached Markdown for clients that revalidate by date, and the Last-Modified header is no longer sent when the plugin cannot back it — which stops a web server or CDN in front of WordPress from answering a revalidation with an outdated copy on its own.

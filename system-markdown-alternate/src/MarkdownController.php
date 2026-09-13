@@ -37,6 +37,7 @@ class MarkdownController {
 	/** @var MetadataBuilder */
 	private $metadata;
 
+
 	public function __construct( ContentRenderer $renderer, MarkdownConverter $converter, MetadataBuilder $metadata ) {
 		$this->renderer  = $renderer;
 		$this->converter = $converter;
@@ -854,6 +855,22 @@ class MarkdownController {
 	}
 
 	/**
+	 * Whether this request asked for the headers alone.
+	 *
+	 * Deliberately strict about the missing-method case, and the opposite of
+	 * `is_read_request()` there: no method at all means no HTTP request — cron,
+	 * WP-CLI, the test harness — and those callers want the document, so an
+	 * absent method is never a `HEAD`.
+	 */
+	public static function is_head_request(): bool {
+		$method = isset( $_SERVER['REQUEST_METHOD'] )
+			? strtoupper( trim( (string) wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			: '';
+
+		return 'HEAD' === $method;
+	}
+
+	/**
 	 * The `Cache-Control` value for the plugin's own URLs.
 	 *
 	 * Public and separate from the header call so the policy is testable
@@ -956,7 +973,13 @@ class MarkdownController {
 		// goes through this method.
 		$this->maybe_record_hit();
 
-		$version = $this->cache_version( $post );
+		// Computed once for this response and handed to both validators: the
+		// ETag and the "may this response advertise its date" decision read the
+		// same two fingerprints, and evaluating them separately is paid work,
+		// not safety (see fingerprints()).
+		$snapshot = $this->fingerprints( $post );
+
+		$version = $this->cache_version( $post, $snapshot );
 
 		// Computed once, here, and handed to both callees: the date this
 		// response ADVERTISES and the date its conditional path would accept
@@ -970,7 +993,7 @@ class MarkdownController {
 		// An unshared representation advertises no validators at all (see
 		// send_headers()), so it does not pay for the decision either.
 		$modified_ts = self::representation_is_shared()
-			? $this->advertised_modified_timestamp( $post )
+			? $this->advertised_modified_timestamp( $post, $snapshot )
 			: 0;
 
 		if ( $this->handle_conditional( $post, $version, $modified_ts ) ) {
@@ -978,6 +1001,23 @@ class MarkdownController {
 		}
 
 		$this->send_headers( $post, $version, $modified_ts );
+
+		// A `HEAD` response carries the headers of the `GET` and no body, and
+		// the server discards whatever is echoed, so converting the document
+		// here is work nobody receives. Two things this is NOT: a performance
+		// feature — conversion is ~8.6 ms against a ~1000-1200 ms TTFB the
+		// WordPress boot dominates — and a change to what is advertised, since
+		// no `Content-Length` is sent (see send_headers()), so no header
+		// depends on the body having been built.
+		//
+		// One behavioural consequence, stated rather than discovered: a filter
+		// on `sysmda_markdown_output` (or anything else in the build path) with
+		// side effects no longer runs on `HEAD`. A `HEAD` no longer warms the
+		// body cache either, which is the same trade in the other direction.
+		if ( self::is_head_request() ) {
+			exit;
+		}
+
 		echo $this->get_markdown( $post, $version ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
 	}
@@ -1105,9 +1145,10 @@ class MarkdownController {
 	 * for that post the next time the post itself is saved, which is exactly
 	 * when the date starts telling the truth again.
 	 */
-	private function date_is_strong_validator( \WP_Post $post ): bool {
-		if ( '' !== MetadataBuilder::taxonomies_fingerprint( $post )
-			|| '' !== $this->metadata->dependencies_fingerprint( $post ) ) {
+	private function date_is_strong_validator( \WP_Post $post, ?array $fingerprints = null ): bool {
+		list( $taxonomies, $dependencies ) = null !== $fingerprints ? $fingerprints : $this->fingerprints( $post );
+
+		if ( '' !== $taxonomies || '' !== $dependencies ) {
 			return false;
 		}
 
@@ -1160,8 +1201,8 @@ class MarkdownController {
 	 * `max-age=0, must-revalidate`, so no cache was deriving heuristic
 	 * freshness from it either.
 	 */
-	private function advertised_modified_timestamp( \WP_Post $post ): int {
-		return $this->date_is_strong_validator( $post ) ? $this->last_modified_timestamp( $post ) : 0;
+	private function advertised_modified_timestamp( \WP_Post $post, ?array $fingerprints = null ): int {
+		return $this->date_is_strong_validator( $post, $fingerprints ) ? $this->last_modified_timestamp( $post ) : 0;
 	}
 
 	/**
@@ -1342,6 +1383,39 @@ class MarkdownController {
 	}
 
 	/**
+	 * The two dependency fingerprints, as the tuple both validators need:
+	 * `array( $taxonomies, $dependencies )`, in the order `cache_version()`
+	 * folds them in.
+	 *
+	 * Computing them is not the cheap hash it looks like —
+	 * `dependencies_fingerprint()` runs `parse_blocks()` over the whole
+	 * `post_content` and again over every referenced synced pattern, measured
+	 * against real WordPress at 0.33 ms on an 18 KB article and 1.0 ms on a
+	 * 60 KB one — and `serve_markdown()` needs the pair twice: once for the
+	 * ETag, once to decide whether the date may be advertised. 0.51.0 made that
+	 * second evaluation unconditional in exchange for the two of them agreeing.
+	 *
+	 * So `serve_markdown()` takes this tuple once and hands it to both callees,
+	 * which is the same shape, for the same reason, as the advertised date it
+	 * already computes once and passes down. The scope is **one response**, not
+	 * the request: a value memoized for longer would outlive a settings change
+	 * or a save in the same process, and there is nothing here that is
+	 * expensive across responses — only twice within one.
+	 *
+	 * Every caller may also omit it and have it computed, which is what keeps a
+	 * single-shot path like `prewarm()` (one `cache_version()` call, no second
+	 * reader) free of ceremony it does not need.
+	 *
+	 * @return array{0:string,1:string}
+	 */
+	private function fingerprints( \WP_Post $post ): array {
+		return array(
+			MetadataBuilder::taxonomies_fingerprint( $post ),
+			$this->metadata->dependencies_fingerprint( $post ),
+		);
+	}
+
+	/**
 	 * Cache validity hash: changes when the post is edited, the plugin is updated,
 	 * or settings are saved (global salt).
 	 *
@@ -1359,12 +1433,12 @@ class MarkdownController {
 	 * when they have nothing to describe, which leaves the hash byte-identical
 	 * for posts that have neither (no mass invalidation on upgrade).
 	 */
-	private function cache_version( \WP_Post $post ): string {
-		$salt       = (string) get_option( 'sysmda_cache_salt', '0' );
-		$taxonomies = MetadataBuilder::taxonomies_fingerprint( $post );
-		$taxonomies = '' !== $taxonomies ? '|' . $taxonomies : '';
+	private function cache_version( \WP_Post $post, ?array $fingerprints = null ): string {
+		$salt = (string) get_option( 'sysmda_cache_salt', '0' );
 
-		$dependencies = $this->metadata->dependencies_fingerprint( $post );
+		list( $taxonomies, $dependencies ) = null !== $fingerprints ? $fingerprints : $this->fingerprints( $post );
+
+		$taxonomies   = '' !== $taxonomies ? '|' . $taxonomies : '';
 		$dependencies = '' !== $dependencies ? '|' . $dependencies : '';
 
 		return md5( (string) $post->post_modified_gmt . '|' . SYSMDA_VERSION . '|' . $salt . $taxonomies . $dependencies );

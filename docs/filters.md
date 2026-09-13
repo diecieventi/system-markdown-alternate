@@ -380,6 +380,12 @@ The final Markdown document, front matter included. Last hook of the build, and
 the one extension point that survives any change of engine: it receives a
 finished document and returns one.
 
+**It does not run on a `HEAD` request** (since `0.52.0`): that response carries
+the headers and no body, so the document is never built. Nothing in the response
+changes — the `ETag` and every other header are computed before the body — but a
+callback here with side effects of its own (a counter, a log, a warm-up) will not
+see those requests.
+
 ### Page builders
 
 Two more hooks sit inside the render step, before `sysmda_markdown_rendered_html`
