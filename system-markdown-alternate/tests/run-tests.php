@@ -3870,7 +3870,7 @@ $sysmda_builder_modes = array(
 foreach ( $sysmda_builder_modes as $sysmda_builder => $sysmda_meta ) {
 	check( "builder: {$sysmda_builder} detected", $sysmda_builder, BuilderDetector::detect( $sysmda_builder_post( $sysmda_meta ) ) );
 
-	// Bricks shipped an adapter (Phase 2) and left AWAITING_ADAPTER: a
+	// Bricks shipped an adapter (Phase 2) and is in neither veto list: a
 	// bricks-mode post is no longer vetoed by is_servable() on its own —
 	// PostSupport has no notion of "adapter active", only ContentRenderer's
 	// matching_builder_adapter() does (is_active() && handles()), which is
@@ -4000,18 +4000,18 @@ check(
 );
 unset( $GLOBALS['sysmda_test_filters']['sysmda_markdown_unsupported_builders'] );
 
-// The two lists together must cover every builder the detector can name,
-// except the ones that shipped an adapter (currently only Bricks) — or an
-// UNSHIPPED builder would be detected and then served anyway, the silent
-// half-failure this invariant exists to catch. Naming the exception here
-// rather than widening it to "any builder not in either list" keeps the
-// guard live: it still fails the moment some OTHER builder falls through.
+// The veto list must cover every builder the detector can name, except the
+// ones that shipped an adapter (currently only Bricks) — or an UNSHIPPED
+// builder would be detected and then served anyway, the silent half-failure
+// this invariant exists to catch. Naming the exception here rather than
+// widening it to "any builder not in the list" keeps the guard live: it still
+// fails the moment some OTHER builder falls through.
 check(
 	'builder: every detectable builder without a shipped adapter is vetoed by default',
 	array(),
 	array_diff(
 		array_keys( BuilderDetector::RENDER_MODE_META ),
-		array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER, array( 'bricks' ) )
+		array_merge( BuilderDetector::NEVER_SUPPORTED, array( 'bricks' ) )
 	)
 );
 check(
@@ -4019,6 +4019,11 @@ check(
 	array(),
 	array_diff( array_keys( BuilderDetector::RENDER_MODE_META ), array_keys( BuilderDetector::LABELS ) )
 );
+// Elementor is vetoed permanently, not pending (decided September 2026). The
+// assertion is on NEVER_SUPPORTED specifically, not on the veto's outcome:
+// a post is vetoed either way, so only the list it sits in records that no
+// adapter is coming.
+check( 'builder: elementor is vetoed permanently', true, in_array( 'elementor', BuilderDetector::NEVER_SUPPORTED, true ) );
 check( 'builder: label lookup', 'WPBakery Page Builder', BuilderDetector::label( 'wpbakery' ) );
 check( 'builder: unknown label falls back to the key', 'mystery', BuilderDetector::label( 'mystery' ) );
 
@@ -4118,7 +4123,7 @@ check(
 
 // ─── Phase 2: the Bricks adapter ───────────────────────────────────────────
 
-check( 'builder: bricks is no longer in AWAITING_ADAPTER', false, in_array( 'bricks', BuilderDetector::AWAITING_ADAPTER, true ) );
+check( 'builder: bricks is not vetoed', false, in_array( 'bricks', BuilderDetector::NEVER_SUPPORTED, true ) );
 
 /*
  * BricksAdapter's pure logic: everything that does not need \Bricks\Frontend

@@ -1,16 +1,15 @@
 # Page builders — Bricks first, a veto for the rest
 
-> Implementation plan. **The status of this work lives in
-> [`STATUS.md`](STATUS.md), not here** — one place, so the two cannot disagree.
-> In short: Phases 1, 1b, 0 and 2 all shipped in `0.46.0`, `bricks` has left
-> `BuilderDetector::AWAITING_ADAPTER`, and Elementor is the only open item
-> this plan still has. Written against `main @ 0.45.1`, updated through
-> `0.46.0`; the nested-template dependency walk followed in `0.52.0`.
+> **Record of shipped work. Nothing here is open.** Every phase shipped —
+> 1, 1b, 0 and 2 in `0.46.0`, with the nested-template dependency walk
+> following in `0.52.0` — and the one phase that was never written (Elementor)
+> was closed by decision in September 2026, not deferred: see *No page builder
+> beyond Bricks* in `AGENTS.md`. Written against `main @ 0.45.1`.
 >
 > Scope was fixed with the maintainer in August 2026 and is deliberately narrow:
-> **Bricks is the one builder to support.** Elementor is parked. Divi, WPBakery,
-> Oxygen, Beaver Builder and Breakdance are never to be supported at all — a
-> post built with one of them simply has no Markdown representation.
+> **Bricks is the one builder to support.** Elementor, Divi, WPBakery, Oxygen,
+> Beaver Builder and Breakdance are never to be supported — a post built with
+> one of them simply has no Markdown representation.
 >
 > Phase 1 (the veto) does not depend on the reconnaissance and shipped on its
 > own. The reconnaissance in §6 closed with one genuinely new finding —
@@ -487,21 +486,22 @@ to "are my articles affected?" should take three seconds, not an audit.
 
 | Phase | Content | Blocked by |
 |---|---|---|
-| **1** ✅ | The veto: `BuilderDetector`, the rule in `is_servable()`, the Stable `sysmda_markdown_unsupported_builders`. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor in `AWAITING_ADAPTER` | nothing |
+| **1** ✅ | The veto: `BuilderDetector`, the rule in `is_servable()`, the Stable `sysmda_markdown_unsupported_builders`. Divi/WPBakery/Oxygen/Beaver/Breakdance out permanently; Bricks and Elementor vetoed pending an adapter | nothing |
 | **1b** ✅ | Panel labels — `BuilderCensus`, one query, transient-cached, admin only | nothing |
 | **0** ✅ | Bricks reconnaissance (§6) — all seven questions in §6.2 answered, including the lazy-load image defect and fix | nothing |
-| **2** ✅ | Bricks adapter (`BricksAdapter`); `bricks` left `AWAITING_ADAPTER` in `0.46.0` | nothing — done |
-| **3** | Elementor — only on real demand, and only with a Pro staging | — |
+| **2** ✅ | Bricks adapter (`BricksAdapter`); `bricks` left the veto list in `0.46.0` | nothing — done |
+| **3** ✖ | Elementor — **cancelled** September 2026, not deferred. Elementor moved into `NEVER_SUPPORTED` alongside the rest and the `AWAITING_ADAPTER` list was deleted with it: there is no longer a list of builders an adapter is promised for | — |
 
-Phases 1 and 1b are shippable on their own and are most of the value: the
-concrete risk today is not the missing Bricks adapter, it is a wrong `.md`
-published without anyone noticing.
+Phases 1 and 1b were shippable on their own and were most of the value: the
+concrete risk was never the missing adapter, it was a wrong `.md` published
+without anyone noticing.
 
-## 10. Open questions
+## 10. Questions raised while planning — both resolved
 
 1. ~~In Phase 1, do Bricks and Elementor 404 immediately?~~ **Resolved: yes.**
-   Both shipped in `AWAITING_ADAPTER`. Consistent with the rest, and better than
-   the current emptiness.
+   Both shipped vetoed. Consistent with the rest, and better than the
+   emptiness of the time. Bricks left the veto in `0.46.0`; Elementor stayed
+   and is now there permanently.
 2. ~~Edge case 6: accept the related/CTA content that `the_content` reintroduces
    through the Post content element, or suppress foreign filters around the
    render?~~ **Resolved in Phase 2, as a maintainer-reversible default rather

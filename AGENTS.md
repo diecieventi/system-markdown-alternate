@@ -459,9 +459,9 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Page-builder veto** (`BuilderDetector`): a post rendered by a builder the
   plugin has no adapter for is not servable, so the `.md` 404s and the post
   leaves `/llms.txt`, the alternate links, the shortcodes and the dynamic tag —
-  one predicate, everything else by construction. Divi, WPBakery, Oxygen, Beaver
-  Builder and Breakdance permanently; Elementor until its adapter lands (Bricks
-  left this list in `0.46.0` — see the next bullet). Detection is **per post**,
+  one predicate, everything else by construction. Elementor, Divi, WPBakery,
+  Oxygen, Beaver Builder and Breakdance, all permanently (Bricks left this list
+  in `0.46.0` — see the next bullet). Detection is **per post**,
   keys on the **render mode** rather than the presence of builder data, reads
   **meta and never `post_content`**, and holds whether the builder plugin is
   active or not. Escape hatch: `sysmda_markdown_unsupported_builders`. The panel
@@ -690,7 +690,7 @@ The v1 scope is done and widely exceeded. Implemented:
   `sysmda_md_hits_named_bot_patterns` (canonical name => substrings).
   Deliberately a fixed, code-defined name list rather than a bucket per
   distinct UA ever seen: that alternative was considered and set aside (see
-  `docs/STATUS.md`) because it turns the option into a store keyed on
+  `docs/evaluations.md`) because it turns the option into a store keyed on
   request-derived text — a bigger step than this feature needs, and the one
   the count-only decision exists to avoid taking casually. `named_totals()`
   sums the same three windows as `totals()`; a bucket predating this
@@ -983,6 +983,17 @@ summarized here. Two copies of a status drift — and this file is read at the
 start of every session, while a backlog changes every release, so keeping the
 volatile half out of it is also what keeps the stable half worth caching.
 
+**Only actionable work belongs there, and this is a standing instruction, not
+a preference** (September 2026, after a "what's outstanding" review came back
+as a list of things the maintainer had already decided not to do). Anything
+declined, postponed indefinitely or blocked by a decision rather than by an
+input is **not** an open item: the decision goes under *Product decisions*
+below, the reasoning and any measurement behind it goes in
+`docs/evaluations.md`, and the backlog row disappears. Never re-add such an
+item "for completeness", never re-propose it in a summary of open work, and
+when a plan's last live phase is closed, reduce the plan to a record of what
+shipped instead of leaving the cancelled phase in it.
+
 **A "what's outstanding" review must also list `private-plans/` in the private
 companion repository** (see "This repository is public" above). Some plans live
 only there; they are not named in this repository on purpose, and
@@ -1118,11 +1129,12 @@ decisions*; this section is only about where the open work is written down.
   `is_servable()`, so the `.md` 404s, no `rel="alternate"` link or `Link:`
   header is advertised, the post leaves `/llms.txt`, and the shortcodes and the
   dynamic tag render nothing — all by construction, from one predicate.
-  `NEVER_SUPPORTED` is Divi, WPBakery, Oxygen, Beaver Builder and Breakdance;
-  `AWAITING_ADAPTER` is Elementor (Bricks left it in `0.46.0`, moved out by its
-  adapter shipping — see the decision below), and that list is how the work is
-  phased — an adapter shipping moves its builder out of it, with no other edit
-  and no window in which an empty or wrong `.md` is published.
+  `NEVER_SUPPORTED` is Elementor, Divi, WPBakery, Oxygen, Beaver Builder and
+  Breakdance — every builder the plugin can detect except Bricks, which left it
+  in `0.46.0` when its adapter shipped (see the decision below). There is no
+  second list: `AWAITING_ADAPTER` was deleted in September 2026 with the
+  Elementor decision, because a list of builders an adapter is promised for is
+  a backlog item wearing a constant's clothes.
   Escape hatch: `sysmda_markdown_unsupported_builders` (Stable; empty array =
   veto off). Rationale: the meta-based builders leave `post_content` empty, so
   the `.md` was front matter plus a bare `# Title`; Divi and WPBakery fill it
@@ -1177,6 +1189,31 @@ decisions*; this section is only about where the open work is written down.
   regression has **no symptom** (the index is byte-identical either way, only
   the query count moves), so the priming is asserted in the suite. Caught by
   Codex on PR #97.
+- **No page builder beyond Bricks — Elementor included, and the question is
+  closed** (decided September 2026 by the maintainer; do not propose an
+  Elementor adapter again, and do not reopen it as "parked", "on demand" or
+  "phase 3"). Elementor moved into `NEVER_SUPPORTED` with the other five and
+  `AWAITING_ADAPTER` was deleted, so the plugin no longer carries a list of
+  builders an adapter is owed for. Two reasons, the second of which is the one
+  that settles it:
+  - The maintainer does not want to support Elementor, which is a legitimate
+    scope decision for a one-person plugin and needs no engineering
+    justification.
+  - **The content this plugin exists for is already served on those sites.**
+    Even on an Elementor site, articles are normally written in the ordinary
+    editor — Gutenberg or classic — and the veto is per post, so those articles
+    get their `.md` exactly as they do anywhere else. What is vetoed is the
+    builder-rendered *pages*, which are the layout-heavy ones a machine-readable
+    representation gains least from. So this is not a gap to be closed later: it
+    is the plugin working on the half that matters.
+  Nothing about the mechanism changes — `is_unsupported()` still decides per
+  post from the render mode, the `.md` still 404s rather than publishing an
+  empty or wrong document, and `sysmda_markdown_unsupported_builders` is still
+  the escape hatch for a site that wants Elementor posts served anyway (with
+  whatever the ordinary pipeline makes of them, which is the point of the
+  veto). The only thing that changed is that no adapter is coming, so nothing
+  is pending. If a real user ever asks for Elementor support, that is a new
+  decision with a new reason, not the resumption of this one.
 - **The panel's per-type breakdown informs and decides nothing** (decided with
   the above, Phase 1b): `BuilderCensus` shows what each content type's published
   posts are actually built with — *12 Bricks, 3 Gutenberg* — with a warning
@@ -1828,6 +1865,19 @@ decisions*; this section is only about where the open work is written down.
     drift is caught mechanically rather than in review. Do **not** add styling
     options, a second class, an icon or a panel tab: that is the 0.31 → 0.33
     trajectory starting over.
+- **Markdown syntax in the `# Title` stays unescaped** (decided September 2026,
+  H1 of the `0.50.0` external review — declined, do not reopen without a real
+  report). A title reading `Literal *stars*` publishes as emphasis, because the
+  H1 is assembled by concatenating the stripped title after `# `. That is a
+  genuine inconsistency with "a text field is text" (`0.46.1`, `0.47.1`), and it
+  is still not worth fixing: the obvious remedy — reusing
+  `MarkdownConverter::escape_inline()` — was measured against the pinned library
+  and is worse, putting `&amp;` in the H1 of every title containing an
+  ampersand; the correct one is a title-specific escaper that changes bytes for
+  every title containing `*`, `_` or `[`, moves a documented output contract and
+  its golden fixtures, and answers a defect nobody has reported. The
+  measurement is in `docs/evaluations.md` so it is not redone. If a real report
+  ever arrives, the fix is the narrow escaper, never `escape_inline()`.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again): a
@@ -1835,7 +1885,8 @@ decisions*; this section is only about where the open work is written down.
   conceptually duplicate `/llms.txt` — which per public data is requested
   almost only by SEO tools anyway. The value of a homepage `.md` is the
   real-time assistant fetch of the actual content: if ever implemented, it is
-  the converted body of the static front page only (see `docs/STATUS.md`).
+  the converted body of the static front page only — postponed indefinitely,
+  with its shape recorded in `docs/evaluations.md` rather than in the backlog.
 - **NO XML sitemap for the `.md` URLs** (decided, do not propose again): the
   `.md` responses are `noindex` by design, so listing them in a sitemap would
   send contradictory signals to search engines (Search Console: "submitted URL

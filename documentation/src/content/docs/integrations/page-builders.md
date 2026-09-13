@@ -1,6 +1,6 @@
 ---
 title: "Page builders"
-description: "Bricks pages get a real Markdown version, rendered through Bricks' own API. Posts built with Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance have no Markdown version — and why a 404 is the honest answer for those."
+description: "Bricks pages get a real Markdown version, rendered through Bricks' own API. Posts built with Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance have no Markdown version, and none is planned — and why a 404 is the honest answer for those."
 sidebar:
   order: 3
 ---
@@ -9,14 +9,16 @@ Most page builders store their content somewhere other than the WordPress post c
 
 **Bricks is supported.** A Bricks-built page gets a real `.md`, rendered through Bricks' own API.
 
-**Every other page builder has no Markdown version at all.** Its `.md` URL returns 404, its HTML page advertises no Markdown `alternate` link, it is absent from `/llms.txt`, and the shortcodes and the dynamic tag render nothing for it.
+**Every other page builder has no Markdown version at all**, and none is planned — Elementor included, decided in September 2026. Such a post's `.md` URL returns 404, its HTML page advertises no Markdown `alternate` link, it is absent from `/llms.txt`, and the shortcodes and the dynamic tag render nothing for it.
+
+That is less of a limitation than it sounds, and the reason is the next section but one: the rule applies **per post**, not per site. On a site whose pages are built with Elementor and whose articles are written in the block editor — the normal shape of a builder site — every article still gets its Markdown version. What loses one is the builder-built page itself.
 
 ## Which builders
 
 | Builder | Status |
 |---|---|
 | Bricks | **Supported** — a real `.md`, rendered through Bricks' own API |
-| Elementor | No Markdown version — support is possible but not planned |
+| Elementor | No Markdown version, permanently |
 | Divi | No Markdown version, permanently |
 | WPBakery Page Builder | No Markdown version, permanently |
 | Oxygen | No Markdown version, permanently |
