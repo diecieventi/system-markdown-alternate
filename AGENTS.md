@@ -2672,6 +2672,18 @@ as required for dependency review by WordPress.org Plugin Check.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
+  **A release that changes the settings page owes new screenshots, and this is
+  a publish gate rather than a merge gate** (added September 2026, after Codex
+  caught it on PR #146). `.wordpress-org/` is synced verbatim on every deploy,
+  so a stale shot does not sit harmlessly in the repository — it goes straight
+  onto the listing, in front of the people deciding whether to install. The
+  `0.53.0` removal is the worked example: four of the five shots carried a tab
+  and a sidebar for an endpoint that no longer exists, and they had already
+  been four releases out of date before that. They cannot be regenerated from a
+  code change (a browser and a WordPress admin session are required), so a
+  PR **cannot** close this — it records the debt in `docs/STATUS.md` and the
+  acceptance run pays it. Check the shots against the panel whenever a tab,
+  a field or the layout moves.
 
 ### Playground Live Preview
 
@@ -2915,7 +2927,10 @@ Test posts:
     with no notice, and every other setting survives that save. Deleting the
     plugin removes the five `sysmda_llms_txt_*` options. Run this on an
     **upgraded** install, not a fresh one: a fresh install cannot show that the
-    URL was released or that the old options are cleaned up.
+    URL was released or that the old options are cleaned up. While the panel is
+    open, **retake `screenshot-1` … `screenshot-4`** (see `docs/STATUS.md`):
+    they still carry the removed tab and aside, and the listing is synced from
+    them on the next deploy.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
