@@ -11,8 +11,8 @@ defined( 'ABSPATH' ) || exit;
  * Shared eligibility rules for posts that expose a Markdown version.
  *
  * Single source of truth for the .md endpoint, content negotiation, the alternate
- * link, /llms.txt, the [sysmda_md_url], [sysmda_md_download] and
- * [sysmda_md_actions] shortcodes, and the {{sysmda_md_url}} dynamic tag.
+ * link, the [sysmda_md_url], [sysmda_md_download] and [sysmda_md_actions]
+ * shortcodes, and the {{sysmda_md_url}} dynamic tag.
  */
 class PostSupport {
 
@@ -61,8 +61,8 @@ class PostSupport {
 	 *
 	 * The settings page already keeps `attachment` out of the saved option, but
 	 * the filter is a public extension point: enforcing the rule here keeps it
-	 * true for every consumer (.md endpoint, negotiation, alternate link,
-	 * /llms.txt), not just for values coming from the panel.
+	 * true for every consumer (.md endpoint, negotiation, alternate link), not
+	 * just for values coming from the panel.
 	 *
 	 * @param array $types Raw list, as returned by the filter.
 	 * @return string[] Normalized list, without duplicates or excluded types.
@@ -100,8 +100,7 @@ class PostSupport {
 	 * once also unlocked the `.md`, the `rel="alternate"` link, the shortcode and
 	 * the dynamic tag. The rule is "protected content has no Markdown
 	 * representation at all" — see the decision in AGENTS.md — so having the
-	 * password is irrelevant. This also makes the endpoint agree with
-	 * `/llms.txt`, which has always filtered on `has_password => false`.
+	 * password is irrelevant.
 	 *
 	 * The page-builder veto comes next: a post rendered by a builder the
 	 * plugin has no adapter for has no Markdown representation, so it is
@@ -138,8 +137,8 @@ class PostSupport {
 		 * run, and it renders cleaned blocks instead of `the_content` by
 		 * design. This filter is how such a plugin denies a single post, and
 		 * it is honoured by every consumer at once — the `.md` route,
-		 * negotiation, the `rel="alternate"` link, `/llms.txt`, both
-		 * shortcodes and the dynamic tag.
+		 * negotiation, the `rel="alternate"` link, both shortcodes and the
+		 * dynamic tag.
 		 *
 		 * **Veto only.** It is consulted just when the built-in rules already
 		 * said yes, so returning `true` can never publish a draft, a
@@ -166,7 +165,8 @@ class PostSupport {
 	 *   shipped with a comment promising "the emission path validates the type
 	 *   again", and nothing did: a type re-registered as `public => false`, or
 	 *   replaced by an internal one of the same name, stayed fully servable and
-	 *   `/llms.txt` kept advertising it. A stale saved slug is not a request;
+	 *   the alternate link kept advertising it. A stale saved slug is not a
+	 *   request;
 	 * - site code adding a type through the filter IS a request, and an explicit
 	 *   one. Enforcing the policy after the filter would silently overrule it
 	 *   and contradict the filter's documented job of widening what is served.

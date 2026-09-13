@@ -703,14 +703,12 @@ class MetadataBuilder {
 	/**
 	 * Description fallback order: Rank Math => excerpt => trimmed content text.
 	 *
-	 * Public because LlmsTxtController reuses it for enriched index entries.
-	 *
-	 * The last fallback reads the post content rather than the rendered body —
-	 * deliberately, since it also runs per entry when building `/llms.txt`,
-	 * where rendering every listed post would be prohibitive. That shortcut is
-	 * what made it leak: the exclusion rules are applied by the render pipeline,
-	 * so a `md-exclude` section the body never publishes was summarised into the
-	 * front matter regardless. The content therefore goes through the same
+	 * The last fallback reads the post content rather than the rendered body,
+	 * deliberately: rendering a post just to summarise it would be prohibitive
+	 * where the front matter is built. That shortcut is what made it leak —
+	 * the exclusion rules are applied by the render pipeline, so a `md-exclude`
+	 * section the body never publishes was summarised into the front matter
+	 * regardless. The content therefore goes through the same
 	 * exclusion pass first (a no-op, and byte-identical, for the content that
 	 * carries no such class — which is nearly all of it).
 	 */

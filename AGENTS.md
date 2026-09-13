@@ -142,31 +142,6 @@ The v1 scope is done and widely exceeded. Implemented:
   rel="alternate"; type="text/markdown"` in the HTML response headers. The
   latter also works for `HEAD`, appends rather than replacing other Link fields
   and suppresses an exact relation/target duplicate.
-- **`/llms.txt` discovery** (`0.49.0`, llms.txt v2's `rel="describedby"`): the
-  same responses also point at `home_url( '/llms.txt' )` — `<link
-  rel="describedby">` in the head, `Link: <…>; rel="describedby"` in the
-  headers, no `type` parameter — gated on `is_negotiable_request()` **plus**
-  `sysmda_llms_txt_enabled`. That conjunction is a correctness requirement, not
-  a style choice: `maybe_render_llms_txt()` has a *second* gate after its own
-  option (it stays silent with no enabled content type), so gating on the
-  option alone would advertise a 404 on an install whose owner ticked the
-  toggle before selecting a content type.
-  `is_negotiable_request()` covers it transitively — so anything that widens
-  this beyond negotiable requests must re-add the `supported_post_types()`
-  check explicitly. **The two relations are emitted independently**: one
-  shared `headers_sent()` guard, then a block each, because an empty or
-  already-advertised alternate says nothing about `/llms.txt` and an early
-  return there silently dropped the second field (caught in review before it
-  shipped). `link_header_has_alternate()` became
-  `link_header_has_relation( $sent, $target, $relation )` for the same reason —
-  one relation's duplicate must never satisfy the other's check.
-  Deliberately **not** emitted for an `/llms.txt` served by anything else: a
-  third party's is undecidable locally (reading their options and loopback
-  probes are both already rejected), and a checkbox asserting it was
-  considered and declined — it converts a self-verifying gate into an
-  unverifiable promise that rots silently when the other plugin's setting
-  changes. If demand ever appears, a filter is the cheap answer, not a panel
-  field.
 - **HTTP headers**: Markdown responses carry `Content-Type: text/markdown;
   charset=utf-8`, `X-Robots-Tag: noindex, follow` and `Link: <permalink>;
   rel="canonical"`; negotiable canonical HTML responses carry the alternate
@@ -188,10 +163,11 @@ The v1 scope is done and widely exceeded. Implemented:
   out-of-post dependency fingerprints, see "Technical notes" 6), so a `304`
   always means the cached body would be identical; `If-None-Match` takes priority over
   `If-Modified-Since` (RFC 9110). Works even with the body cache disabled.
-  **Only on `GET`/`HEAD`** (`0.50.1`, `MarkdownController::is_read_request()`,
-  shared with `LlmsTxtController`): `304` answers a revalidation, and the same
-  headers on another method are a precondition whose failure is `412` — which
-  neither endpoint implements, so such a request is served in full. An
+  **Only on `GET`/`HEAD`** (`0.50.1`,
+  `MarkdownController::is_read_request()`): `304` answers a revalidation, and
+  the same headers on another method are a precondition whose failure is
+  `412` — which the endpoint does not implement, so such a request is served
+  in full. An
   anonymous `POST` carrying `If-None-Match: *` was answered `304`, a body-less
   reply to a request that never asked for a body. The same predicate keeps
   content negotiation off a non-read request on the **canonical permalink**,
@@ -402,7 +378,7 @@ The v1 scope is done and widely exceeded. Implemented:
     all five built-in ones in the same save. Exclusions are a safety list — the
     cost of getting one wrong is a form published into every `.md` — so they
     accumulate. `option_to_merged_list()` is used by the three exclusion filters
-    only; `sysmda_llms_txt_key_content` keeps replace semantics, because a
+    only; `sysmda_markdown_extra_meta_keys` keeps replace semantics, because a
     curated list is the user's whole answer rather than an addition to one.
     Removing a default is deliberately filter-only (priority 10, before the
     closure that appends at 20). The panel's "built-in defaults" disclosure now
@@ -457,9 +433,9 @@ The v1 scope is done and widely exceeded. Implemented:
   **Synced patterns** (`core/block`) are expanded into the referenced content and
   cleaned with the same rules (reference-cycle guard).
 - **Page-builder veto** (`BuilderDetector`): a post rendered by a builder the
-  plugin has no adapter for is not servable, so the `.md` 404s and the post
-  leaves `/llms.txt`, the alternate links, the shortcodes and the dynamic tag —
-  one predicate, everything else by construction. Elementor, Divi, WPBakery,
+  plugin has no adapter for is not servable, so the `.md` 404s and the
+  alternate links, the shortcodes and the dynamic tag go quiet — one
+  predicate, everything else by construction. Elementor, Divi, WPBakery,
   Oxygen, Beaver Builder and Breakdance, all permanently (Bricks left this list
   in `0.46.0` — see the next bullet). Detection is **per post**,
   keys on the **render mode** rather than the presence of builder data, reads
@@ -471,8 +447,7 @@ The v1 scope is done and widely exceeded. Implemented:
 - **WooCommerce utility-page exclusion** (`WooCommerceCompat`): cart, checkout
   and my-account are ordinary published pages but never editorial content, so
   `is_servable()` denies them the same way it denies an excluded post format —
-  `.md` 404s, `/llms.txt` leaves them out, the alternate link and both
-  shortcodes render nothing. Reads `wc_get_page_id()` when WooCommerce is
+  `.md` 404s, the alternate link and both shortcodes render nothing. Reads `wc_get_page_id()` when WooCommerce is
   active, its own options otherwise (survives deactivation). The shop page is
   unaffected. Escape hatch: `sysmda_markdown_excluded_woocommerce_pages`.
   Rationale, live verification and the cache-salt hooks: the durable decision
@@ -560,7 +535,7 @@ The v1 scope is done and widely exceeded. Implemented:
     300-element/~89 KB tree ~0.36 ms — negligible next to the ~1000–1200 ms
     `.md` TTFB already measured in the `0.29.0` cache work, and this runs on
     every request, `304`s included.
-  - **`description` / `/llms.txt` fallback**: `MetadataBuilder::description()`'s
+  - **`description` fallback**: `MetadataBuilder::description()`'s
     last-resort tier (after Rank Math, after the excerpt) now checks
     `ContentRenderer::builder_handles()` first. For a builder-handled post it
     uses `BuilderAdapter::source_text()` — a cheap, unrendered walk of the
@@ -573,9 +548,7 @@ The v1 scope is done and widely exceeded. Implemented:
     in the description field, the exact "confidently wrong" failure the
     page-builder veto exists to prevent in the body (see the `0.45.0`
     decision below) — empty is the honest answer there, not a fallback to a
-    field that was never trustworthy for this post. `/llms.txt` inherits this
-    for free through the shared `description()` method: it never renders N
-    Bricks pages to build N entries.
+    field that was never trustworthy for this post.
   - **Post Content and `the_content`**: Bricks' `post-content` element calls
     WordPress's full `the_content` filter chain internally, which would
     reintroduce exactly the injected related/CTA content `render_block()` is
@@ -609,35 +582,6 @@ The v1 scope is done and widely exceeded. Implemented:
 - **Plain permalinks** (`?p=123`): the `.md` suffix is not applicable, so
   `markdown_url()` falls back to `?format=markdown` (served via negotiation);
   notice in the settings page. Post eligibility centralized in `PostSupport`.
-- **`/llms.txt`** (cached, excludes protected content) with an on/off toggle,
-  **off by default** — enabling it is always the owner's explicit choice (see
-  the durable decision below).
-  The body cache is the anonymous representation only: authenticated requests
-  rebuild in the visitor's context without reading or populating the shared
-  entry and are sent `private, no-store, must-revalidate`. Their strong ETag is
-  still safe because it is derived from the freshly rebuilt body, not from a
-  shared metadata validator.
-  Since `0.29.0` it answers conditional requests like the `.md` endpoint:
-  **`ETag` + `304`** and the same `Cache-Control`. Its `ETag` is the **md5 of the
-  body about to be sent** — the one strong validator in the plugin, and
-  deliberately NOT `cache_version()`, which does not cover the posts listed in
-  the file (a new post is picked up by deleting the cache entry, not by moving
-  the version, so a version-derived `ETag` would answer `304` with an index
-  missing it). Hashing the bytes is free here precisely because the body already
-  exists before the response is written, which is exactly what the `.md`
-  endpoint cannot do. No `Last-Modified`: the index has no single modification
-  date, so `If-Modified-Since` is not honoured either.
-  Optional **enriched mode** (`sysmda_llms_txt_enriched` toggle, default off;
-  off = base output unchanged): site summary, curated "Key content" section
-  (IDs/URLs from the settings page), per-entry description (Rank Math → excerpt →
-  trimmed chain), overflow beyond the most recent posts under `## Optional`
-  (spec keyword, not translated), `sysmda_llms_txt_footer` filter as a hook for
-  policy/LLM signals. Optional **last modified dates** (`sysmda_llms_txt_lastmod`
-  toggle, default off; off = output unchanged): appends `(updated: YYYY-MM-DD)`
-  to every entry (base and enriched, Key content and Optional included) — ISO
-  date from `post_modified_gmt`, English `updated:` label never translated
-  (same convention as the `Optional` spec keyword), placed in the free-text
-  notes after the `:` so it stays llms.txt-spec-compatible.
 - **LiteSpeed page-cache compatibility** (`LiteSpeedCompat`): some LiteSpeed
   servers key the page cache by URL only and ignore `Vary: Accept` (observed
   live: a cached Markdown variant served to HTML clients and vice versa, while
@@ -759,10 +703,11 @@ The v1 scope is done and widely exceeded. Implemented:
   covered by golden tests), which owns the rule that the blank line after the
   block belongs to the block.
 - **Admin panel** (single page, Settings API): General / Markdown output /
-  llms.txt / Integrations / Advanced. Restyled UI (presentation only): page
-  header + single Save button, native WP **tabs**, section **cards**, two-column
-  layout with an at-a-glance `/llms.txt` status/conflict aside, built-in defaults
-  in a `<details>` disclosure. `render_page()` iterates the registered Settings
+  Integrations / Advanced. Restyled UI (presentation only): page header +
+  single Save button, native WP **tabs**, section **cards**, built-in defaults
+  in a `<details>` disclosure. The two-column layout went with `/llms.txt` in
+  `0.53.0`: the aside held that endpoint's status and conflict notice and
+  nothing else, so the page is a single column again. `render_page()` iterates the registered Settings
   API sections (`$wp_settings_sections`) and wraps each in a card+tab-panel;
   **all fields stay in the single form** (tabs show/hide client-side), so saving,
   sanitization and nonces are unchanged. Admin-scoped CSS + a tiny dependency-free
@@ -1002,9 +947,11 @@ only there; they are not named in this repository on purpose, and
 Closed measurements and evaluations live in
 [`docs/evaluations.md`](docs/evaluations.md) — the answers that exist so the
 same question is not investigated twice. **Read it before proposing any of
-these**, each of which was evaluated and closed: llms.txt v2, the caching and
-`304` host measurement, the `acceptmarkdown.com` guides, the block-native
-Markdown engine, and server-side diagnostics.
+these**, each of which was evaluated and closed: the caching and `304` host
+measurement, the `acceptmarkdown.com` guides, the block-native Markdown engine,
+and server-side diagnostics. `/llms.txt` itself is not there — it shipped, ran
+for fifty releases and was removed in `0.53.0`; that is a durable decision
+below, not an evaluation.
 
 The decisions that must not be reopened at all are below, in *Product
 decisions*; this section is only about where the open work is written down.
@@ -1015,9 +962,8 @@ decisions*; this section is only about where the open work is written down.
 - `sysmda_markdown_supported_post_types` defaults to **empty** → the plugin is
   **inactive** until at least one type is selected in the panel. `attachment` is
   always excluded. **CPTs are supported** (all public types are shown/validated).
-  "Inactive" is now literal: `maybe_render_markdown()` returns immediately with no
-  enabled type (it used to still 301-redirect `.md` URLs it would then 404), and
-  `/llms.txt` stays silent as well (see below).
+  "Inactive" is now literal: `maybe_render_markdown()` returns immediately with
+  no enabled type (it used to still 301-redirect `.md` URLs it would then 404).
   **The public policy is applied to the SAVED SELECTION and nowhere else**
   (decided August 2026, `0.36.0`): the AdminSettings callback that feeds the
   option into this filter at priority 20 drops any slug whose type is not
@@ -1039,8 +985,7 @@ decisions*; this section is only about where the open work is written down.
   valid `wp-postpass_*` cookie made it false and a reader who had entered the
   password once also unlocked the `.md`, the `rel="alternate"` link, the
   shortcode and the dynamic tag. Having the password is irrelevant: the rule is
-  about the content, not the visitor. This also makes `is_servable()` agree with
-  `/llms.txt`, which always filtered on `has_password => false`. The old check
+  about the content, not the visitor. The old check
   was invisible to the tests because the stub for `post_password_required()`
   returned `! empty( $post->post_password )` — it encoded the assumption the
   code was making instead of WordPress's actual behaviour; it now models the
@@ -1050,10 +995,11 @@ decisions*; this section is only about where the open work is written down.
   `wp_block` must be published **and** carry no password. Core's own
   `render_block_core_block()` refuses a protected reference, so without the same
   check the plugin published text the HTML page does not — anonymously, and in
-  three places at once: the `.md` body, the front-matter `description` (whose
-  fallback walks the same expansion) and the enriched `/llms.txt` (which reuses
-  that fallback). One guard in one method closes all three, which is the reason
-  the expansion is worth keeping in a single place. Same reading as the
+  two places at once: the `.md` body and the front-matter `description`, whose
+  fallback walks the same expansion. One guard in one method closes both, which
+  is the reason the expansion is worth keeping in a single place. (It closed a
+  third at the time, the enriched `/llms.txt` entry, which reused the same
+  fallback; that endpoint was removed in `0.53.0`.) Same reading as the
   decision above: the test is `'' !== $post_password` on the *content*, never
   `post_password_required()` on the visitor. Deliberately stricter than core for
   the degenerate password `"0"`, which core's `! empty()` reads as unprotected.
@@ -1065,16 +1011,6 @@ decisions*; this section is only about where the open work is written down.
   protected pattern's modification date: over-invalidation is harmless, and
   removing the password changes the body without touching the article's
   `post_modified_gmt`.
-- **`/llms.txt` invalidation covers the site identity, and deliberately NOT the
-  post format** (decided July 2026, closes M2 of the same review): the cached
-  index is versioned on the site name and tagline as well, because they are its
-  heading and subtitle and are edited in Settings → General, which never fires
-  `save_post`. A post's **format** is deliberately left out even though it does
-  change which posts are servable: it is set from the editor, where saving
-  already clears the cache, and post formats are not part of how this site
-  classifies content (see the decision below). Paying a `set_object_terms` hook
-  on every term write to close a gap only reachable through programmatic term
-  updates is not worth it. The residual risk is bounded by the TTL.
 - **Non-standard post formats are never served** (decided July 2026):
   `PostSupport::EXCLUDED_POST_FORMATS` covers all nine (aside, audio, chat,
   gallery, image, link, quote, status, video). Rationale: those are short,
@@ -1082,12 +1018,11 @@ decisions*; this section is only about where the open work is written down.
   representation; the standard format — the *absence* of a format — is
   unaffected, which is the overwhelming majority of content. The rule lives in
   `is_servable()`, so it applies everywhere at once: `.md`, negotiation,
-  `rel="alternate"`, `/llms.txt`, the shortcode and the dynamic tag. Escape hatch:
+  `rel="alternate"`, the shortcode and the dynamic tag. Escape hatch:
   `sysmda_markdown_excluded_post_formats` (empty array = serve them all again).
-  Corollary for `/llms.txt`: the listing query filters its results through
-  `is_servable()` (with `update_post_term_cache => true` so the formats are primed
-  in one query, not one per post) — the index must never advertise a `.md` URL
-  that 404s.
+  Corollary for any batch caller: filter through `is_servable()` and prime the
+  term cache first (`update_post_term_cache => true`), or the format check
+  costs a query per post.
 - **WooCommerce's own infrastructure pages (cart, checkout, my account) are
   never served** (decided August 2026, `WooCommerceCompat`): they are ordinary
   published `page` posts, so nothing else in `is_servable()` catches them, but
@@ -1099,7 +1034,7 @@ decisions*; this section is only about where the open work is written down.
   the whole battery" — on any WooCommerce site with `page` enabled, `/cart/`,
   `/checkout/` and `/my-account/` were being listed in its `llms.txt` with
   cart-empty boilerplate as the description. Checked against this plugin's own
-  `PostSupport`/`LlmsTxtController`: the same gap existed here, unguarded.
+  `PostSupport`: the same gap existed here, unguarded.
   `WooCommerceCompat::is_utility_page()` reads `wc_get_page_id()` when
   WooCommerce is active (so any WooCommerce-side filtering of these IDs is
   respected) and falls back to WooCommerce's own `woocommerce_{key}_page_id`
@@ -1117,7 +1052,9 @@ decisions*; this section is only about where the open work is written down.
   `PostSupport::is_servable()` correctly excluded all three while an unrelated
   page stayed servable; the filter both re-included and narrowed the
   exclusion correctly; a real `/llms.txt` HTTP round-trip (cache cleared
-  first) confirmed the three titles absent and the control page present. The
+  first) confirmed the three titles absent and the control page present —
+  that endpoint existed at the time and was removed in `0.53.0`, so a rerun
+  today has to read `is_servable()` directly. The
   `wc_get_page_id()`-active branch was verified in-process (a request-scoped
   shim function, since WooCommerce itself is not installed on either staging
   site) and takes priority over a stale option, as documented. Test fixtures
@@ -1127,8 +1064,8 @@ decisions*; this section is only about where the open work is written down.
   representation** (decided August 2026, Phase 1 of `docs/page-builders-plan.md`):
   `BuilderDetector::is_unsupported()` is the last built-in rule in
   `is_servable()`, so the `.md` 404s, no `rel="alternate"` link or `Link:`
-  header is advertised, the post leaves `/llms.txt`, and the shortcodes and the
-  dynamic tag render nothing — all by construction, from one predicate.
+  header is advertised, and the shortcodes and the dynamic tag render nothing —
+  all by construction, from one predicate.
   `NEVER_SUPPORTED` is Elementor, Divi, WPBakery, Oxygen, Beaver Builder and
   Breakdance — every builder the plugin can detect except Bricks, which left it
   in `0.46.0` when its adapter shipped (see the decision below). There is no
@@ -1146,8 +1083,9 @@ decisions*; this section is only about where the open work is written down.
   (`docs/staging-acceptance.md`): a Bricks page whose `post_content` still held
   the prose from before it was rebuilt served a `.md` of six well-formed
   paragraphs, while the page itself rendered a single Bricks heading — the text
-  appearing nowhere in the rendered page except `og:description`, and `/llms.txt`
-  advertising it with the same text. Not empty, not chrome: **confidently wrong**.
+  appearing nowhere in the rendered page except `og:description`, and the
+  then-existing `/llms.txt` advertising it with the same text. Not empty, not
+  chrome: **confidently wrong**.
   A builder does not have to leave `post_content` empty for the old behaviour to
   be harmful; it only has to leave it stale.
   Three rules carry the design, and each one is easy to get backwards:
@@ -1180,15 +1118,17 @@ decisions*; this section is only about where the open work is written down.
   **Corollary for every batch caller: prime the meta cache.** `detect()` costs
   one query per post at most, because the first `get_post_meta()` loads the
   post's whole meta row set — but *per post*, so a loop over N posts with an
-  unprimed cache is N queries. `LlmsTxtController::servable_posts()` had
-  `update_post_meta_cache => $enriched`, from when the enriched descriptions
-  were the only meta reader, and the veto silently inherited `false` on the
-  basic path: up to 2500 extra queries per content type on a cold index. It now
-  primes unconditionally, for the same reason it already primed the term cache
-  that the post-format check reads — two rules, one shape, one line each. The
-  regression has **no symptom** (the index is byte-identical either way, only
-  the query count moves), so the priming is asserted in the suite. Caught by
-  Codex on PR #97.
+  unprimed cache is N queries. The plugin has no batch caller left after
+  `0.53.0` removed `/llms.txt`, but the rule outlives it and is why it is
+  written down here: that listing query had `update_post_meta_cache =>
+  $enriched`, from when the enriched descriptions were the only meta reader,
+  so the veto silently inherited `false` on the basic path — up to 2500 extra
+  queries per content type on a cold index. It was fixed to prime
+  unconditionally, for the same reason it already primed the term cache the
+  post-format check reads: two rules, one shape, one line each. The regression
+  had **no symptom** — the output was byte-identical either way, only the query
+  count moved. Caught by Codex on PR #97; any future batch caller owes both
+  lines from the start.
 - **No page builder beyond Bricks — Elementor included, and the question is
   closed** (decided September 2026 by the maintainer; do not propose an
   Elementor adapter again, and do not reopen it as "parked", "on demand" or
@@ -1272,7 +1212,7 @@ decisions*; this section is only about where the open work is written down.
     (`brxe-form`, `brxe-nav-menu`, `brxe-nav-nested`, `brxe-post-sharing`,
     `brxe-post-toc`, `brxe-breadcrumbs`) key on. Additive to whatever else
     contributes to the list, per the `0.40.0` rule — never a replacement.
-  - **The `description`/`llms.txt` fallback never reads a Bricks post's
+  - **The `description` fallback never reads a Bricks post's
     `post_content`, even when it finds nothing better.** This is the same
     lesson the "confidently wrong" measurement above already taught for the
     body — a Bricks post's `post_content` can hold stale prose left over from
@@ -1296,8 +1236,8 @@ decisions*; this section is only about where the open work is written down.
     hold. The classes are concatenated onto the leaf's own span rather than
     rebuilt as real nesting, because the pass matches any element carrying an
     excluded class; the parent map is built once per tree (a per-leaf rescan
-    would be quadratic, and `/llms.txt` runs this once per listed post), and a
-    missing parent or a cycle ends the walk instead of looping.
+    would be quadratic), and a missing parent or a cycle ends the walk instead
+    of looping.
   - **Suppressing foreign `the_content` filters around Bricks' Post Content
     element is implemented, but as a maintainer-reversible default, not a
     settled answer** (closes `docs/page-builders-plan.md` §10's open
@@ -1336,53 +1276,57 @@ decisions*; this section is only about where the open work is written down.
   differ between the `.md` suffix route and the negotiated permalink route
   (documentation only; no code change, and no broader `is_singular()`-style
   risk turned out to exist to fix).
-- **`/llms.txt` is OFF by default** (decided September 2026, `0.50.0` —
-  **reverses** the July 2026 "on by default" default; do not restore it).
-  `maybe_render_llms_txt()` intercepts the URL at `template_redirect` priority
-  0 and `exit`s the moment it renders: a hard takeover no other handler can
-  win. `ConflictDetector` can only ever raise an admin notice — it must not
-  disable anything on a guess (see its own decision below) — so an
-  on-by-default endpoint let a fresh install start shadowing another plugin's
-  `/llms.txt` as a side effect of ticking one post type for the unrelated
-  `.md` feature, with a sidebar notice as the only warning. That is "NO
-  auto-yield" read from the other side: the plugin never disables itself in
-  reaction to another handler, and by the same logic must never enable itself
-  in reaction to nothing at all. **Four call sites read the option and all
-  four default to `'0'`** (`LlmsTxtController::maybe_render_llms_txt()`,
-  `MarkdownController::should_advertise_llms_txt()`,
-  `AdminSettings::render_llmstxt_aside()`, `field_llms_txt_enabled()`); the
-  endpoint, the `describedby` discovery, the status aside and the checkbox
-  must never disagree about what a fresh install does. **The upgrade is a
-  no-op for every install that ever saved the panel, and saying so matters** —
-  the first attempt at this change (PR #134, closed) shipped an alarming
-  "re-enable it after updating" notice that was simply false: the toggle is in
-  the single settings group with `sanitize_checkbox()`, and the Settings API
-  writes *every* registered option of the group on each save (unchecked →
-  `'0'`), so such an install already holds an explicit row and keeps it. The
-  pre-ticked checkbox, not the endpoint's own gate, was the actual lever: it
-  turned the very first save into an implicit "yes".
-  **One install does lose the endpoint, and it is deliberately not migrated**
-  (Codex, PR #135): a site that enables its content types *only* through the
-  Stable `sysmda_markdown_supported_post_types` filter and has never saved the
-  settings page has no option row while `supported_post_types()` is non-empty,
-  so it was serving `/llms.txt` on the old default and stops. A migration
-  writing back the implicit `'1'` was considered and rejected on two grounds,
-  the first decisive: **that site stores nothing at all**, so it is
-  indistinguishable from a fresh install — the migration would have to guess
-  from an unrelated option's presence, and guessing wrong writes the implicit
-  "yes" into exactly the fresh installs this decision exists to protect. And
-  preserving an implicit enablement is the behaviour being ended, not an
-  invariant to carry forward: the site never chose it. It is a
-  developer-managed install by construction (someone wrote the filter), the
-  fix is one tick or one `update_option()`, and the release note names the
-  case.
-- **`/llms.txt` stays silent until a content type is enabled** (decided July
-  2026; unaffected by the default reversal above, which changed only what the
-  *toggle* defaults to): with nothing to index the endpoint answered a site
-  name plus a tagline and took the URL over from anything else that might serve
-  it, while the rest of the plugin was still inactive. This
-  is NOT auto-yielding (see the decision below): the plugin never reacts to
-  another handler, it simply has nothing to say yet.
+- **`/llms.txt` is REMOVED, and it is not coming back on a hypothetical**
+  (decided September 2026, `0.53.0`, by the maintainer — do not propose
+  regenerating it, do not reopen it as "parked", "on demand" or "behind a
+  filter", and do not re-add it to `docs/STATUS.md`). The plugin generated
+  that index from `0.2.0` to `0.52.0`. `LlmsTxtController`, `ConflictDetector`,
+  the panel tab and its five options, the eight `sysmda_llms_txt_*` filters and
+  the `rel="describedby"` discovery link are all gone; the five options survive
+  in `uninstall.php` as legacy keys, exactly as the `0.34.0` button's did.
+  Seven reasons, and the fourth is the one that settles it:
+  - **It is the only thing the plugin did that was not a Markdown version of a
+    single post.** Everything else here is per-post and derives from the
+    content; a site-wide index is a different product wearing the same plugin.
+    Removing it makes the scope exactly what the name says.
+  - **Every decision taken about it since July 2026 was a step away from it**:
+    no auto-yield, a conflict detector that may only ever inform, silence until
+    a content type is enabled, and finally off by default in `0.50.0`. This is
+    the end of a road already being walked, not a new direction.
+  - **It cost a third consumer in every review.** `0.50.1` is the clearest
+    case: one defect — a password-protected synced pattern — surfaced in the
+    body, the front-matter `description` *and* the enriched index. Every
+    decision about exclusions, descriptions or eligibility had to be reasoned
+    about three times instead of two.
+  - **The maintainer does not want to compete on site indexes**, which is a
+    legitimate scope decision for a one-person plugin and needs no engineering
+    justification. The SEO plugins already own that surface, they generate
+    llms.txt themselves, and a site that wants the file has somewhere to get it.
+  - **It was the only backlog item blocked on work nobody had started.** The
+    noindex-aware index plus a `## Sitemaps` section needed seven storage-shape
+    measurements, all untaken. Removing the feature closed the item and deleted
+    its plan.
+  - **The real cost of removal is small and was checked, not assumed.** The
+    endpoint has been off by default since `0.50.0`, so the affected population
+    is the sites that deliberately ticked it; the coupling to the rest of the
+    plugin turned out to be documentation only — every mention of it in
+    `MetadataBuilder`, `PostSupport`, `ContentRenderer`, `BlockCleaner`,
+    `BricksAdapter` and `MetaFields` was a comment, never a call.
+  - **What is NOT claimed**: that nothing is lost. The index listed the `.md`
+    URLs, which no SEO plugin's generator does — they list HTML permalinks,
+    because they do not know a Markdown alternate exists. So a site that
+    regenerates `/llms.txt` elsewhere gets an index of its HTML, not of its
+    Markdown. That is a real and accepted loss: per-page discovery
+    (`rel="alternate"` in the head and the `Link:` header) still reaches every
+    `.md`, and the plugin's own `docs/evaluations.md` already records that
+    `/llms.txt` is fetched almost exclusively by SEO tools. Saying so honestly
+    is the point; it is not an argument for putting it back.
+  **Corollary, and the reason this is worth a decision rather than a changelog
+  line**: a feature that is off by default and costs almost nothing to keep is
+  still not free, and "it might matter later" is not a reason to carry one.
+  If a real user asks for a Markdown-aware index, that is a new decision with
+  a new reason — and the answer then is probably a filter on someone else's
+  generator, not a second endpoint here.
 - **`.htaccess`: the lock spans the whole read-modify-write, and the write is
   in place** (decided July 2026, amended after review — do not "improve" it into
   an atomic rename again): `LiteSpeedCompat::update()` opens with `c+`, takes
@@ -1458,15 +1402,6 @@ decisions*; this section is only about where the open work is written down.
 - **GenerateBlocks Dynamic Tag**: auto-registered when GB 2.x is present. For
   non-servable posts the callback returns '' → GB's "required to render" option
   hides the element (no broken links).
-- **`/llms.txt` conflict detection**: only **local, stable** signals (active SEO
-  plugins via constant/class + physical file in the root). No reading of third-
-  party internal options, no loopback HTTP checks (removed: unreliable behind a
-  WAF). It is an informational notice only; the user decides.
-- **NO auto-yield of `/llms.txt`** (decided, do not propose again): the plugin
-  NEVER disables itself, not even as an option. Enabling/disabling is always and
-  only a manual user choice from the panel; if other handlers are active
-  underneath, that is the user's responsibility. The conflict notice stays purely
-  informational.
 - **Custom taxonomies are opt-in and alphabetically ordered** (decided July
   2026): enabling them changes the front-matter payload of every post on an
   upgraded site, so it must be the user's explicit choice — default off, and off
@@ -1499,8 +1434,9 @@ decisions*; this section is only about where the open work is written down.
   (+ `featured_image_alt`).
   **The last fallback reads the post content, not the rendered body, and that
   shortcut is deliberate — so it has to re-apply the exclusion rules itself**
-  (`0.38.1`): the same method builds every entry of `/llms.txt`, where rendering
-  each listed post would be prohibitive, which is why it must stay cheap. But
+  (`0.38.1`): rendering a post just to summarise it would be prohibitive, which
+  is why it must stay cheap. (Until `0.53.0` the same method also built every
+  entry of `/llms.txt`, which is where the constraint came from.) But
   the exclusions live in the render pipeline, so a `md-exclude` section the body
   refuses to publish was summarised straight into the front matter of any post
   with no SEO description and no excerpt. It now runs through
@@ -1526,7 +1462,7 @@ decisions*; this section is only about where the open work is written down.
   nor an excerpt.
   The rule generalizes: **anything deriving text from `post_content` instead of
   the rendered body owes the same pass — all of it.** What the body excludes is
-  excluded everywhere, front matter and `/llms.txt` included. When in doubt,
+  excluded everywhere, the front matter included. When in doubt,
   reuse the cleaner rather than reason about which exclusions "cannot matter":
   that reasoning is what failed here.
 - **The `ETag` is weak (`W/"…"`) and stays weak** (decided July 2026, `0.28.0`,
@@ -1563,8 +1499,9 @@ decisions*; this section is only about where the open work is written down.
   discarded the body. Its default `if_modified_since exact` is what makes the
   case sharp: `IMS` = 2020 → `200`, `IMS` = 2099 → `200`, `IMS` = the exact
   advertised date → `304` — i.e. it fires precisely for the client that was
-  given the header. `/llms.txt`, which sends no `Last-Modified` at all, could
-  not be downgraded the same way, which is the control.
+  given the header. The control was `/llms.txt` — removed in `0.53.0`, but at
+  the time it sent no `Last-Modified` at all and could not be downgraded the
+  same way.
   So every case `date_is_strong_validator()` exists for — emitted taxonomies,
   out-of-post dependencies, a site-wide salt bump, and the plugin upgrade the
   decision below adds — was defeated by a standard reverse proxy, on the
@@ -1610,8 +1547,8 @@ decisions*; this section is only about where the open work is written down.
 - **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
   (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
   `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
-  evidence). Applies to the `.md` endpoint and `/llms.txt`; the negotiated
-  responses keep `no-store`, see the next decision. The old rule assumed that
+  evidence). Applies to the `.md` endpoint; the negotiated responses keep
+  `no-store`, see the next decision. The old rule assumed that
   sending nothing meant "always revalidate". It is wrong twice over:
   - **"No header" is not "no freshness".** RFC 9111 §4.2.2 lets a cache invent a
     lifetime when a response carries none — typically a fraction of the age
@@ -1675,11 +1612,6 @@ decisions*; this section is only about where the open work is written down.
     the ETag is weak: do not send a claim this plugin cannot back. Anonymous
     traffic, which is the entire audience for this endpoint, is untouched and
     keeps the full shared-cache behaviour.
-    `/llms.txt` uses the same definition for its **body cache** and cache-control
-    policy: logged-in requests neither read nor populate the anonymous index
-    entry. Its conditional path is intentionally different because its strong
-    ETag hashes the rebuilt bytes themselves; a matching tag therefore describes
-    that visitor's actual body rather than the anonymous cache.
   - `sysmda_post_is_servable` is the per-post **veto**, honoured by every
     consumer through `PostSupport::is_servable()`. It exists because the
     built-in checks know WordPress's own notion of access (status, the core
@@ -1792,8 +1724,8 @@ decisions*; this section is only about where the open work is written down.
   custom properties and a specificity fight with the theme in `0.33.0`. A plugin
   whose value is a clean machine-readable representation should not be shipping a
   presentational widget it cannot test against an unknown theme. The `.md` stays
-  discoverable through the HTML and HTTP `rel="alternate"`, `/llms.txt`,
-  negotiation and `[sysmda_md_url]`; anything visual is the theme's job.
+  discoverable through the HTML and HTTP `rel="alternate"`, negotiation and
+  `[sysmda_md_url]`; anything visual is the theme's job.
   `MarkdownButton.php`,
   `assets/md-button.{css,js}`, the panel tab, the five filters and both options
   are gone; the options stay in `uninstall.php` as legacy keys, and
@@ -1880,22 +1812,31 @@ decisions*; this section is only about where the open work is written down.
   ever arrives, the fix is the narrow escaper, never `escape_inline()`.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
-- **NO synthesized homepage index** (decided, do not propose again): a
-  purpose-built homepage `.md` index (site links + recent posts) would
-  conceptually duplicate `/llms.txt` — which per public data is requested
-  almost only by SEO tools anyway. The value of a homepage `.md` is the
-  real-time assistant fetch of the actual content: if ever implemented, it is
-  the converted body of the static front page only — postponed indefinitely,
-  with its shape recorded in `docs/evaluations.md` rather than in the backlog.
+- **NO synthesized homepage index** (decided, do not propose again; the
+  reasoning was **restated** in `0.53.0` and is now stronger, not weaker). The
+  original argument was that a purpose-built homepage `.md` index (site links
+  + recent posts) would duplicate `/llms.txt`. That half died with the
+  endpoint — and the decision does not, because removing `/llms.txt` settled
+  the more general question it was a special case of: **a site-wide index is
+  out of scope for this plugin**, whatever URL it is served at. Synthesizing
+  one at `/` instead of at `/llms.txt` would be the removed feature under
+  another name, which is precisely the shape to watch for. The value of a
+  homepage `.md` is the real-time assistant fetch of the actual content: if
+  ever implemented, it is the converted body of the static front page only —
+  postponed indefinitely, with its shape recorded in `docs/evaluations.md`
+  rather than in the backlog.
 - **NO XML sitemap for the `.md` URLs** (decided, do not propose again): the
   `.md` responses are `noindex` by design, so listing them in a sitemap would
   send contradictory signals to search engines (Search Console: "submitted URL
   marked noindex") — exactly the SEO risk the plugin promises not to create —
   and a second sitemap generator would overlap with the SEO plugin's sitemaps
-  (Rank Math & co.). Discovery for the real audience (LLMs/agents) is already
-  covered by the HTML and HTTP `rel="alternate"` links and by `/llms.txt`.
-  Freshness signals go into `/llms.txt` itself (the optional `lastmod` mode): no
-  separate machine-index endpoint either.
+  (Rank Math & co.). Both halves of that argument are independent of
+  `/llms.txt` and survive its removal intact. What does change is the fallback:
+  discovery for the real audience (LLMs/agents) is now carried **entirely** by
+  the per-page `rel="alternate"` link and `Link:` header, and there is no
+  plugin-side place for freshness signals at all. That is the accepted cost of
+  the `0.53.0` decision, not an argument for a machine-index endpoint — which
+  stays refused, sitemap or otherwise.
 - **`.md` hit counter is count-only** (decided): when enabled it stores ONLY
   aggregate daily counters split bot/human. NEVER store IP addresses, raw
   user-agent strings, timestamps finer than the day, or any per-visitor
@@ -2092,8 +2033,8 @@ Developed and tested against a stack based on **GeneratePress/GenerateBlocks
 **WAF/CDN** may block non-browser User-Agents (e.g. `curl` as a "bad bot"): use
 a browser User-Agent. Observed on the reference site (RunCloud 8G firewall):
 `curl/*` **and `ClaudeBot`** are answered with a `302` to
-`/RUNCLOUD-8G-WAF-BLOCKED`, site-wide — HTML, `.md` and `/llms.txt` alike —
-while GPTBot, PerplexityBot, CCBot and the rest pass. A block page arriving
+`/RUNCLOUD-8G-WAF-BLOCKED`, site-wide, on HTML and `.md` alike, while GPTBot,
+PerplexityBot, CCBot and the rest pass. A block page arriving
 instead of Markdown is a WAF, not a plugin bug; check the `Location` header
 before debugging anything else.
 
@@ -2175,7 +2116,6 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section
 │   ├── markdown-fidelity-plan.md ← table grids and label escaping (shipped; kept as the record)
 │   ├── review-followup-plan.md   ← what the 0.50.0 external review found, and the reasoning behind each fix
 │   └── page-builders-plan.md
@@ -2199,7 +2139,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
     ├── tests/run-tests.php             ← pure-logic tests (php tests/run-tests.php, no WP/PHPUnit)
     └── src/
         ├── Plugin.php              ← bootstrap, registers hooks and dependencies
-        ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link, invalidation
+        ├── MarkdownController.php  ← intercepts .md + content negotiation (Vary/q-values/406), validation, headers, cache (+ opt-in pre-warm), assemble_document(), output, alternate link (head + Link header), invalidation
         ├── AcceptNegotiator.php    ← Accept header parser with q-values (no WP deps)
         ├── ContentRenderer.php     ← source → clean HTML (shortcodes/blocks/DOM/absolute URLs, tables/dl, code lines); render_fragment(); the builder-adapter seam (matching_builder_adapter(), builder_dependency_parts(), builder_source_text(), builder_handles()); render_appended() honours sysmda_markdown_appended_html on every branch
         ├── BlockCleaner.php        ← Gutenberg block parsing/cleaning (expands synced patterns)
@@ -2207,7 +2147,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── BuilderCensus.php       ← what each post type is built with, for the panel (admin only, transient-cached)
         ├── BuilderAdapter.php      ← interface: a page builder that can render its own content
         ├── BricksAdapter.php       ← BuilderAdapter for Bricks (render_data(), lazy-load fix, fingerprint, source_text)
-        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, WooCommerce utility pages, sanitize_types: attachment always stripped)
+        ├── PostSupport.php         ← post eligibility (is_servable, supported types memoized per blog, excluded post formats, unsupported page builders, WooCommerce utility pages, sanitize_types: attachment always stripped) — the single predicate every consumer honours
         ├── WooCommerceCompat.php   ← keeps WooCommerce's own cart/checkout/my-account pages out of the Markdown surface (wc_get_page_id() when active, its options otherwise)
         ├── ShortcodeCleaner.php    ← removal of excluded shortcodes
         ├── MetadataBuilder.php     ← YAML front matter; markdown_url(), taxonomy_terms()/normalize_taxonomies()/taxonomies_fingerprint(), candidate_taxonomies()/filter_candidates()/is_public_taxonomy() for the panel list only (all static); dependencies_fingerprint() is an instance method (needs ContentRenderer's builder adapter list); collect_meta_dependencies() gates on metadata_exists()
@@ -2219,9 +2159,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
         ├── AcfIntegration.php      ← subtitle + TL;DR (preamble); ACF source fields
         ├── MetaFields.php          ← generic post-meta content (panel key list; emit() shared with AcfIntegration)
         ├── HitCounter.php          ← opt-in .md hit counter (aggregate daily bot/human buckets)
-        ├── LlmsTxtController.php   ← /llms.txt endpoint (cached)
         ├── AdminSettings.php       ← settings page (Settings API)
-        ├── ConflictDetector.php    ← /llms.txt conflict detection (local only)
         ├── LiteSpeedCompat.php     ← LiteSpeed page-cache compatibility (no-cache signals + optional .htaccess rules, locked/atomic writes)
         ├── Shortcodes.php          ← [sysmda_md_url] + [sysmda_md_download] (resolve_post() is shared, public static)
         ├── MarkdownActions.php     ← [sysmda_md_actions] split button + conditional asset loading
@@ -2390,8 +2328,7 @@ Two things about it are load-bearing:
 The full list — every filter, its default, what changing it does and its
 **stability level** — lives in **[`docs/filters.md`](docs/filters.md)**, grouped
 by area (content selection, headers, caching, pipeline, front matter, ACF,
-`/llms.txt`, hit counter) with the default exclusion tables and runnable
-examples.
+hit counter) with the default exclusion tables and runnable examples.
 
 It is deliberately **not** duplicated here: a developer looking for the filter
 API should not have to read the agent guide to find it, and two copies of a
@@ -2407,14 +2344,15 @@ not exist as far as the public API is concerned.
   or to a concept the plugin is about (what may be served, what the final
   document is, what the response says about caching) — breaking one goes through
   deprecation, changelog and docs. **Advanced** = anchored to a stage of the
-  *current implementation* (where the pipeline cuts, how ACF is read, how the hit
-  counter classifies, how `/llms.txt` is laid out) — supported and documented,
-  free to evolve pre-1.0. 24 Stable, 14 Advanced.
+  *current implementation* (where the pipeline cuts, how ACF is read, how the
+  hit counter classifies) — supported and documented, free to evolve pre-1.0.
+  20 Stable, 12 Advanced.
   The classification is deliberate on three points, all of which a naive reading
   gets backwards:
   - **The settings-transport hooks are Stable, and they are stable for free.**
-    Fourteen of the 33 are how `AdminSettings::hook_filters()` feeds a saved
-    option into the code (priority 20; 5 for the taxonomy slugs). They cannot be
+    Twelve of the 32 are how `AdminSettings::hook_filters()` feeds a saved
+    option into the code (priority 20; 5 for the taxonomy slugs and the extra
+    meta keys). They cannot be
     removed without breaking the panel, so calling them "internal, no promises"
     would buy no refactoring freedom while making them look unreliable. They last
     exactly as long as the checkbox.
@@ -2475,8 +2413,7 @@ not exist as far as the public API is concerned.
 5. **Absolute URLs**: resolved against the post permalink (not `home_url('/')`).
 6. **Cache**: key `sysmda_md_{post_id}`, value with a validity hash
    (`post_modified_gmt|SYSMDA_VERSION|salt`, plus the taxonomy fingerprint when
-   that feature is on); `/llms.txt` cached under `sysmda_llms_txt`. Everything
-   through the `Cache` helper (persistent object cache or transients). The
+   that feature is on). Everything through the `Cache` helper (persistent object cache or transients). The
    **same hash is the (weak) `ETag`** of the `.md` response
    (`ETag`/`Last-Modified` + conditional `304`, `If-None-Match` over
    `If-Modified-Since`); it derives from `post_modified`, so conditional requests
@@ -2735,6 +2672,18 @@ as required for dependency review by WordPress.org Plugin Check.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
   and are updated with `10up/action-wordpress-plugin-asset-update` from the
   repo's `.wordpress-org/` folder.
+  **A release that changes the settings page owes new screenshots, and this is
+  a publish gate rather than a merge gate** (added September 2026, after Codex
+  caught it on PR #146). `.wordpress-org/` is synced verbatim on every deploy,
+  so a stale shot does not sit harmlessly in the repository — it goes straight
+  onto the listing, in front of the people deciding whether to install. The
+  `0.53.0` removal is the worked example: four of the five shots carried a tab
+  and a sidebar for an endpoint that no longer exists, and they had already
+  been four releases out of date before that. They cannot be regenerated from a
+  code change (a browser and a WordPress admin session are required), so a
+  PR **cannot** close this — it records the debt in `docs/STATUS.md` and the
+  acceptance run pays it. Check the shots against the panel whenever a tab,
+  a field or the layout moves.
 
 ### Playground Live Preview
 
@@ -2759,15 +2708,12 @@ rewrite rules (`.md` URLs are not reachable under WordPress's default plain
 permalinks — see "Plain permalinks" in "Current state" — and Playground boots
 with plain permalinks by default), and lands on `/`, the front page: the
 seed content every fresh install carries (the "Hello world!" post, the
-"Sample Page" page) is enough to exercise both enabled post types and
-`/llms.txt` end to end, and a real WordPress site a visitor can click around
+"Sample Page" page) is enough to exercise both enabled post types end to
+end, and a real WordPress site a visitor can click around
 is a better first impression than a single raw `.md` response — the earlier
 draft of this blueprint landed straight on `/hello-world.md`, and got called
 out for exactly that: a `text/markdown` response is a download or a wall of
 plain text with zero context to a visitor who has not read this file, not a
-demo. `sysmda_llms_txt_enabled` defaults **off** (see the durable decision in
-"Product decisions"), so the blueprint sets it to `'1'` explicitly — without
-that line the Preview would not demonstrate `/llms.txt` at all.
 **Verified live before merging, not just schema-validated** (the "a guard is
 not done until it has been seen to fire" rule applies to a blueprint exactly
 as it does to code): validated against the published
@@ -2779,8 +2725,10 @@ wordpress.org listing, `/` renders the ordinary Twenty Twenty-Five front page
 with the seed post on it, and both `/hello-world.md` and `/sample-page.md`
 answer `200 text/markdown` with correct front matter — not a 404 or an
 inactive-plugin HTML page, which is what an unenabled post type or unflushed
-permalinks would have produced silently — and `/llms.txt` lists both under
-`## Posts` / `## Pages`. **What this verification does NOT cover, and never
+permalinks would have produced silently. That run predates `0.53.0`, whose
+only change here is dropping the `sysmda_llms_txt_enabled` line the blueprint
+used to set; the permalink and post-type steps it verified are untouched.
+**What this verification does NOT cover, and never
 can**: because
 the resource is always the published stable release, running this same check
 again — say, right before shipping a future version — exercises whatever is
@@ -2807,7 +2755,7 @@ Test posts:
 4. Post with a form shortcode (`[contact-form-7 ...]`) and a TOC (`[lwptoc]`) → absent from the `.md`.
 5. Disallowed content (non-enabled page/CPT, draft, password-protected post) → **404**.
 6. Post with a **non-standard post format** (aside/status/quote/…) → **404**, no
-   `rel="alternate"` link, absent from `/llms.txt`, empty shortcode/dynamic tag.
+   `rel="alternate"` link, empty shortcode/dynamic tag.
 7. Post with a **table** and a **definition list** → GFM pipe table, `**Term**` +
    paragraphs (not glued text). Add a table with **no header row** (the block
    editor's default) and confirm its first row stays data under an empty
@@ -2883,8 +2831,8 @@ Test posts:
 
 19. **Page builder veto.** An Elementor page (`_elementor_edit_mode =
     'builder'`) → `.md` **404**, no `rel="alternate"` link and no `Link:`
-    header on its HTML, absent from `/llms.txt`, and all three shortcodes plus
-    the dynamic tag render nothing. Same for Divi/WPBakery/Oxygen/Beaver
+    header on its HTML, and all three shortcodes plus the dynamic tag render
+    nothing. Same for Divi/WPBakery/Oxygen/Beaver
     Builder/Breakdance fixtures. A Gutenberg post on the same page-builder-
     themed site is completely unaffected. In the panel, the *Enabled content
     types* rows read the real breakdown (for example *Pages — 8 Divi, 3
@@ -2893,8 +2841,8 @@ Test posts:
 20. **Bricks adapter (`0.46.0`).** A Bricks page
     (`_bricks_editor_mode = 'bricks'`) → `.md` **200**, `text/markdown`,
     front matter plus a body rendered through `\Bricks\Frontend::render_data()`;
-    `rel="alternate"` and the `Link:` header present; listed in `/llms.txt`;
-    all three shortcodes and the dynamic tag render normally. Images reference
+    `rel="alternate"` and the `Link:` header present; all three shortcodes and
+    the dynamic tag render normally. Images reference
     their **real `src`/`srcset`**, never a `data:image/svg+xml,...` placeholder
     (verify against an element referencing a real WordPress attachment — a raw
     external URL never exercises Bricks' own lazy-load filter, so it cannot
@@ -2914,8 +2862,7 @@ Test posts:
     Bricks-themed site is completely unaffected either way.
 21. **WooCommerce utility pages.** On a site with WooCommerce active and
     `page` enabled, its Cart, Checkout and My account pages → `.md` **404**,
-    absent from `/llms.txt`, no `alternate` link, both shortcodes and the
-    dynamic tag render nothing — while the Shop page and every ordinary page
+    no `alternate` link, both shortcodes and the dynamic tag render nothing — while the Shop page and every ordinary page
     are unaffected. Reassigning one of the three pages to a different page
     from WooCommerce's own settings screen moves the exclusion immediately
     (the salt-bump hooks in `AdminSettings`), with no post save involved.
@@ -2929,15 +2876,14 @@ Test posts:
 
 22. **Protected synced pattern.** A published `wp_block` with a password, and a
     public post that references it. The HTML page shows nothing for the
-    reference (core refuses it) → the `.md`, the front-matter `description`
-    (post with no SEO description and no excerpt) and the enriched `/llms.txt`
-    entry must show nothing either. Removing the password puts the content back
-    in all three. A pattern nested inside a public one is checked at its own
+    reference (core refuses it) → the `.md` and the front-matter `description`
+    (post with no SEO description and no excerpt) must show nothing either.
+    Removing the password puts the content back in both. A pattern nested inside a public one is checked at its own
     level, not the outer one's.
 
 23. **Method handling.** `curl -X POST -H 'If-None-Match: *' '<permalink>.md'`
-    → the full document, never `304`; the same on `/llms.txt`. `GET`/`HEAD`
-    with a matching validator still answer `304` with no body. A `POST` to the
+    → the full document, never `304`. `GET`/`HEAD` with a matching validator
+    still answer `304` with no body. A `POST` to the
     canonical permalink with `Accept: text/markdown` → whatever WordPress does
     with that request, never Markdown and never `406`.
 
@@ -2971,6 +2917,20 @@ Test posts:
     body cache emptied first, a `HEAD` must leave it empty and the following
     `GET` must be what populates it; check the cache entry, not the response
     time.
+
+27. **`/llms.txt` is gone (`0.53.0`).** On a site upgraded from `0.52.0` with
+    the endpoint enabled: `/llms.txt` returns whatever the site serves without
+    this plugin — a WordPress 404, or another plugin's index — and never this
+    plugin's output. No `rel="describedby"` appears in any HTML head or `Link:`
+    header, while the Markdown `alternate` is unchanged in both forms. The
+    settings page has no llms.txt tab and no aside, is a single column, saves
+    with no notice, and every other setting survives that save. Deleting the
+    plugin removes the five `sysmda_llms_txt_*` options. Run this on an
+    **upgraded** install, not a fresh one: a fresh install cannot show that the
+    URL was released or that the old options are cleaned up. While the panel is
+    open, **retake `screenshot-1` … `screenshot-4`** (see `docs/STATUS.md`):
+    they still carry the removed tab and aside, and the listing is synced from
+    them on the next deploy.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

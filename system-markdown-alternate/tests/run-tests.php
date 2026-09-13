@@ -49,9 +49,6 @@ $GLOBALS['sysmda_test_status']      = array(); // status codes sent by status_he
 $GLOBALS['sysmda_test_users']       = array(); // user ID => user object (display_name)
 $GLOBALS['sysmda_test_logged_in']   = false;   // whether the current visitor is authenticated
 $GLOBALS['sysmda_test_post_types']  = array(); // post type => registered object (overrides the public default)
-$GLOBALS['sysmda_test_query_posts'] = array(); // post type => WP_Post list served by the get_posts() stub
-$GLOBALS['sysmda_test_query_pages'] = array(); // pages the get_posts() stub was asked for
-$GLOBALS['sysmda_test_query_args']  = array(); // full args every get_posts() call was made with
 
 /**
  * Stub: filters return the default value, unless a test forced a return value
@@ -388,28 +385,6 @@ function post_password_required( $post ) {
 	return ! empty( $post->post_password );
 }
 
-/** Stub: site identity, part of the /llms.txt cache validity hash. */
-function get_bloginfo( $show = '', $filter = 'raw' ) {
-	return isset( $GLOBALS['sysmda_test_bloginfo'][ $show ] ) ? $GLOBALS['sysmda_test_bloginfo'][ $show ] : '';
-}
-
-/**
- * Stub: paged post query. Serves slices of a per-type fixture list so the
- * /llms.txt paging can be exercised, and records the pages actually requested.
- */
-function get_posts( $args ) {
-	$type = isset( $args['post_type'] ) ? $args['post_type'] : '';
-	$all  = isset( $GLOBALS['sysmda_test_query_posts'][ $type ] ) ? $GLOBALS['sysmda_test_query_posts'][ $type ] : array();
-
-	$per_page = isset( $args['posts_per_page'] ) ? (int) $args['posts_per_page'] : 10;
-	$paged    = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
-
-	$GLOBALS['sysmda_test_query_pages'][] = $paged;
-	$GLOBALS['sysmda_test_query_args'][]  = $args;
-
-	return array_slice( $all, ( $paged - 1 ) * $per_page, $per_page );
-}
-
 /** Stub: post format, driven by a test-only property (false = standard format). */
 function get_post_format( $post = null ) {
 	return isset( $post->post_format ) ? $post->post_format : false;
@@ -697,7 +672,6 @@ require __DIR__ . '/../src/BricksAdapter.php';
 require __DIR__ . '/../src/PostSupport.php';
 require __DIR__ . '/../src/WooCommerceCompat.php';
 require __DIR__ . '/../src/MetadataBuilder.php';
-require __DIR__ . '/../src/LlmsTxtController.php';
 require __DIR__ . '/../src/MarkdownController.php';
 require __DIR__ . '/../src/LiteSpeedCompat.php';
 require __DIR__ . '/../src/HitCounter.php';
@@ -728,7 +702,6 @@ use Diecieventi\SystemMarkdownAlternate\ContentRenderer;
 use Diecieventi\SystemMarkdownAlternate\PostSupport;
 use Diecieventi\SystemMarkdownAlternate\HitCounter;
 use Diecieventi\SystemMarkdownAlternate\LiteSpeedCompat;
-use Diecieventi\SystemMarkdownAlternate\LlmsTxtController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownController;
 use Diecieventi\SystemMarkdownAlternate\MarkdownConverter;
 use Diecieventi\SystemMarkdownAlternate\MarkdownActions;
@@ -929,7 +902,7 @@ check( 'reusable: nonexistent ref discarded', array(), $cleaner->clean( array( m
 // A password-protected pattern has no Markdown representation, exactly as it has
 // no HTML one: core's own render_block_core_block() refuses a reference whose
 // post_password is set, so expanding it here published — anonymously, in the
-// .md, in the front-matter description and in the enriched /llms.txt — text the
+// .md and in the front-matter description — text the
 // page itself does not carry. The test is on the content, never on whether this
 // visitor happens to hold the password.
 $GLOBALS['sysmda_test_posts'][14] = new WP_Post(
@@ -1298,7 +1271,7 @@ $p = new WP_Post( array( 'ID' => 26, 'post_content' => $sysmda_desc_src ) );
 check( 'description: ordinary block content unaffected', 'First. Second.', $metadata->description( $p ) );
 
 // The description fallback expands synced patterns, so the protected-pattern
-// leak reached the front matter and the enriched /llms.txt as well as the body —
+// leak reached the front matter as well as the body —
 // which is where it was actually observed. One guard in expand_reusable() closes
 // all three, and this asserts the path rather than the guard: a post with no SEO
 // description and no excerpt is summarised straight from the source.
@@ -2010,24 +1983,10 @@ check( 'Link alternate: comma-separated link-values are inspected', true, Markdo
 check( 'Link alternate: comma inside the URI is not a separator', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md?parts=one,two>; rel="alternate"' ), 'https://example.com/article.md?parts=one,two', 'alternate' ) );
 check( 'Link alternate: comma inside a quoted parameter is not a separator', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; title="One, two"; rel="alternate"' ), $sysmda_alternate, 'alternate' ) );
 
-// ─── Link describedby: the llms.txt v2 index relation ────────────────
-//
-// Same parsing, a second relation. The cross-relation pair at the end is the
-// part carrying information the matrix above cannot give: one relation's
-// duplicate must never satisfy the other's check, or a site where another
-// plugin advertises the same URL under a different relation loses a field it
-// should have emitted.
-$sysmda_index = 'https://example.com/llms.txt';
-check( 'Link describedby: nothing sent yet', false, MarkdownController::link_header_has_relation( array(), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: X-Link is not a Link field', false, MarkdownController::link_header_has_relation( array( 'X-Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: a different target is not a duplicate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/other/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: an existing describedby is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: relation matching is case-insensitive', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; ReL="DescribedBy"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: relation token list is detected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby help"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: repeated Link fields are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/>; rel="canonical"', 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
-check( 'Link describedby: comma-separated link-values are inspected', true, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="alternate", <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'describedby' ) );
-check( 'Link cross-relation: an alternate does not satisfy describedby', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="alternate"' ), $sysmda_index, 'describedby' ) );
-check( 'Link cross-relation: a describedby does not satisfy alternate', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/llms.txt>; rel="describedby"' ), $sysmda_index, 'alternate' ) );
+// The cross-relation guard, both ways: the same target under another relation
+// is never a duplicate, so a site whose theme advertises the `.md` URL under a
+// relation of its own does not lose the field this plugin owes.
+check( 'Link cross-relation: an alternate does not satisfy canonical', false, MarkdownController::link_header_has_relation( array( 'Link: <https://example.com/article.md>; rel="alternate"' ), $sysmda_alternate, 'canonical' ) );
 
 // ─── handle_conditional: If-Modified-Since must not go stale ─────────
 //
@@ -2380,209 +2339,6 @@ check(
 	$sysmda_cv_method->invoke( $sysmda_counting_controller, $sysmda_perf_post, $sysmda_snapshot )
 );
 
-// ─── LlmsTxtController: line escaping ─────────────────────────────────
-
-// escape_link_text: escape characters that would break [text](url).
-check( 'llms: simple link text', 'Hello world', LlmsTxtController::escape_link_text( 'Hello world' ) );
-check( 'llms: square brackets', 'Title \\[draft\\]', LlmsTxtController::escape_link_text( 'Title [draft]' ) );
-check( 'llms: parentheses', 'Guide \\(2024\\)', LlmsTxtController::escape_link_text( 'Guide (2024)' ) );
-check( 'llms: backslash escaped once', 'a\\\\b', LlmsTxtController::escape_link_text( 'a\\b' ) );
-check( 'llms: newline => single line', 'Line one Line two', LlmsTxtController::escape_link_text( "Line one\nLine two" ) );
-check( 'llms: control characters removed', 'A B', LlmsTxtController::escape_link_text( "A\t\x00B" ) );
-check( 'llms: whitespace collapsed and trimmed', 'X Y', LlmsTxtController::escape_link_text( "  X   Y  " ) );
-
-// normalize_inline: single line only, no bracket escaping (description).
-check( 'llms: multiline description => single line', 'One two three', LlmsTxtController::normalize_inline( "One\ntwo\r\nthree" ) );
-check( 'llms: description brackets preserved', 'see [1] and (2)', LlmsTxtController::normalize_inline( 'see [1] and (2)' ) );
-
-// ─── LlmsTxtController::servable_posts (the limit counts ELIGIBLE posts) ──────
-//
-// Entries are filtered through is_servable() after the query, so asking for
-// exactly $limit rows and filtering afterwards returns fewer than $limit as
-// soon as the newest batch holds an ineligible post — and the older eligible
-// posts behind it are never reached. In the extreme a whole section vanishes
-// while the site still has servable content of that type.
-
-$sysmda_sp_method = sysmda_reflection_method( LlmsTxtController::class, 'servable_posts' );
-$sysmda_sp_ctrl = new LlmsTxtController( new MetadataBuilder( new ShortcodeCleaner(), $sysmda_renderer ) );
-
-/** Builds a fixture list: $formats entries, '' meaning a standard (servable) format. */
-$sysmda_sp_fixture = static function ( array $formats ) {
-	$posts = array();
-	foreach ( $formats as $i => $format ) {
-		$args = array(
-			'ID'          => 900 + $i,
-			'post_type'   => 'post',
-			'post_status' => 'publish',
-		);
-		if ( '' !== $format ) {
-			$args['post_format'] = $format;
-		}
-		$posts[] = new WP_Post( $args );
-	}
-	return $posts;
-};
-
-$sysmda_sp_run = static function ( array $formats, $limit ) use ( $sysmda_sp_method, $sysmda_sp_ctrl, $sysmda_sp_fixture ) {
-	$GLOBALS['sysmda_test_query_posts']['post'] = $sysmda_sp_fixture( $formats );
-	$GLOBALS['sysmda_test_query_pages']         = array();
-	$GLOBALS['sysmda_test_query_args']          = array();
-	return $sysmda_sp_method->invoke( $sysmda_sp_ctrl, 'post', $limit );
-};
-
-$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'] = array( 'post' );
-
-// Three of the newest four are asides: a single-page query would have returned
-// one entry out of the three requested, and stopped there.
-check(
-	'llms: the limit counts servable posts, not rows',
-	3,
-	count( $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
-);
-check( 'llms: it paged to find them', array( 1, 2 ), $GLOBALS['sysmda_test_query_pages'] );
-
-// The oldest eligible posts are reached, in date order, and none is duplicated.
-check(
-	'llms: the entries are the eligible ones in order',
-	array( 902, 904, 905 ),
-	array_map( static function ( $p ) {
-		return $p->ID;
-	}, $sysmda_sp_run( array( 'aside', 'aside', '', 'aside', '', '', '' ), 3 ) )
-);
-
-// A type with fewer eligible posts than requested stops at the last page rather
-// than paging to the cap: no later page can add anything.
-$sysmda_sp_short = $sysmda_sp_run( array( '', 'aside' ), 5 );
-check( 'llms: a short type yields what it has', 1, count( $sysmda_sp_short ) );
-check( 'llms: and stops after one page', array( 1 ), $GLOBALS['sysmda_test_query_pages'] );
-
-// Enough ineligible content to exhaust the page cap: shorter than requested,
-// which is the pre-existing outcome, but bounded rather than unbounded.
-check(
-	'llms: the page cap bounds the work',
-	LlmsTxtController::MAX_QUERY_PAGES,
-	count( ( static function () use ( $sysmda_sp_run ) {
-		$sysmda_sp_run( array_fill( 0, 60, 'aside' ), 2 );
-		return $GLOBALS['sysmda_test_query_pages'];
-	} )() )
-);
-
-check( 'llms: a zero limit queries nothing', array(), $sysmda_sp_run( array( '', '' ), 0 ) );
-
-// Both object caches are primed for the whole batch, and BOTH matter: the
-// servability check reads each post's format (a term lookup) and its
-// page-builder render mode (a meta lookup). Unprimed, each becomes a query per
-// post — up to posts_per_page × MAX_QUERY_PAGES of them, on the route that runs
-// whenever the index cache is cold. Meta priming used to be tied to enriched
-// mode, back when the descriptions were the only meta reader, and the builder
-// veto silently inherited the basic path's `false`.
-//
-// Asserted because the regression has no symptom: the index comes out
-// byte-identical either way, and only the query count moves. Caught by Codex on
-// PR #97, not by any output assertion.
-$sysmda_sp_run( array( '', '', '' ), 2 );
-check(
-	'llms: the batch primes the meta cache (the builder check reads meta)',
-	true,
-	! empty( $GLOBALS['sysmda_test_query_args'] ) && true === $GLOBALS['sysmda_test_query_args'][0]['update_post_meta_cache']
-);
-check(
-	'llms: and the term cache (the post-format check reads terms)',
-	true,
-	! empty( $GLOBALS['sysmda_test_query_args'] ) && true === $GLOBALS['sysmda_test_query_args'][0]['update_post_term_cache']
-);
-
-unset(
-	$GLOBALS['sysmda_test_filters']['sysmda_markdown_supported_post_types'],
-	$GLOBALS['sysmda_test_query_posts']['post']
-);
-$GLOBALS['sysmda_test_query_pages'] = array();
-$GLOBALS['sysmda_test_query_args']  = array();
-
-// ─── LlmsTxtController: the cached index follows the site identity ────
-//
-// The site name is the `# ` heading of /llms.txt and the tagline the blockquote
-// under it, but both are edited in Settings → General, which never fires
-// save_post — so renaming the site used to leave the old name in the index for
-// a full TTL. Both assertions fail against 0.26.3.
-
-$sysmda_llms_cv_method = sysmda_reflection_method( LlmsTxtController::class, 'cache_version' );
-$sysmda_llms_controller = new LlmsTxtController( $metadata );
-$sysmda_llms_cv         = function () use ( $sysmda_llms_cv_method, $sysmda_llms_controller ) {
-	return $sysmda_llms_cv_method->invoke( $sysmda_llms_controller );
-};
-
-$GLOBALS['sysmda_test_bloginfo'] = array(
-	'name'        => 'Old Site Name',
-	'description' => 'Old tagline',
-);
-$sysmda_llms_cv_before = $sysmda_llms_cv();
-
-$GLOBALS['sysmda_test_bloginfo']['name'] = 'New Site Name';
-check( 'llms: renaming the site invalidates the cached index', true, $sysmda_llms_cv_before !== $sysmda_llms_cv() );
-
-$sysmda_llms_cv_named                           = $sysmda_llms_cv();
-$GLOBALS['sysmda_test_bloginfo']['description'] = 'New tagline';
-check( 'llms: changing the tagline invalidates the cached index', true, $sysmda_llms_cv_named !== $sysmda_llms_cv() );
-check( 'llms: unchanged identity keeps the same version', $sysmda_llms_cv(), $sysmda_llms_cv() );
-
-// ─── LlmsTxtController: validators on the index ───────────────────────
-//
-// The ETag hashes the BYTES about to be sent, not cache_version(): the version
-// does not cover the posts listed in the file (a new post is picked up by
-// deleting the cache entry, not by moving the version), so using it here would
-// answer 304 with an index missing that post.
-
-check( 'llms: body etag is the md5 of the body', '"' . md5( "# Site\n" ) . '"', LlmsTxtController::body_etag( "# Site\n" ) );
-check( 'llms: a different body is a different etag', true, LlmsTxtController::body_etag( 'a' ) !== LlmsTxtController::body_etag( 'b' ) );
-check( 'llms: the same body is the same etag', LlmsTxtController::body_etag( 'x' ), LlmsTxtController::body_etag( 'x' ) );
-
-$sysmda_llms_hc_method = sysmda_reflection_method( LlmsTxtController::class, 'handle_conditional' );
-
-/** Runs the index's conditional check with a given If-None-Match header. */
-$sysmda_llms_hc = function ( $header, $etag ) use ( $sysmda_llms_hc_method, $sysmda_llms_controller ) {
-	$GLOBALS['sysmda_test_status'] = array();
-	if ( null === $header ) {
-		unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
-	} else {
-		$_SERVER['HTTP_IF_NONE_MATCH'] = $header;
-	}
-	$result = $sysmda_llms_hc_method->invoke( $sysmda_llms_controller, $etag );
-	unset( $_SERVER['HTTP_IF_NONE_MATCH'] );
-	return $result;
-};
-
-$sysmda_llms_etag = LlmsTxtController::body_etag( "# Site\n\n> Tagline\n" );
-
-check( 'llms: no If-None-Match => full body', false, $sysmda_llms_hc( null, $sysmda_llms_etag ) );
-check( 'llms: no 304 without the header', array(), $GLOBALS['sysmda_test_status'] );
-check( 'llms: matching validator => 304', true, $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag ) );
-check( 'llms: 304 actually sent', array( 304 ), $GLOBALS['sysmda_test_status'] );
-check( 'llms: stale validator => full body', false, $sysmda_llms_hc( '"outdated"', $sysmda_llms_etag ) );
-check( 'llms: no 304 for a stale validator', array(), $GLOBALS['sysmda_test_status'] );
-// Same weak comparison as the .md endpoint: the index reuses etag_matches().
-check( 'llms: weakened validator still revalidates', true, $sysmda_llms_hc( 'W/' . $sysmda_llms_etag, $sysmda_llms_etag ) );
-
-// One rule for both endpoints: a 304 answers a GET/HEAD revalidation, and the
-// index must not answer one to a POST any more than the .md route does.
-check(
-	'llms: POST is never answered 304',
-	false,
-	sysmda_with_method( 'POST', function () use ( $sysmda_llms_hc, $sysmda_llms_etag ) {
-		return $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag );
-	} )
-);
-check( 'llms: no 304 status sent on POST', array(), $GLOBALS['sysmda_test_status'] );
-check(
-	'llms: HEAD still revalidates',
-	true,
-	sysmda_with_method( 'HEAD', function () use ( $sysmda_llms_hc, $sysmda_llms_etag ) {
-		return $sysmda_llms_hc( $sysmda_llms_etag, $sysmda_llms_etag );
-	} )
-);
-
-$GLOBALS['sysmda_test_status'] = array();
-
 // ─── Cache-Control on the URLs the plugin owns ────────────────────────
 //
 // Sending nothing was never "always revalidate": RFC 9111 §4.2.2 lets a cache
@@ -2631,12 +2387,8 @@ unset( $GLOBALS['sysmda_test_filters']['sysmda_cache_control'] );
 // keeps the full shared-cache behaviour, and only an authenticated request
 // leaves it.
 check( 'shared: an anonymous request is the public representation', true, MarkdownController::representation_is_shared() );
-$sysmda_llms_cache_method = sysmda_reflection_method( LlmsTxtController::class, 'uses_shared_body_cache' );
-check( 'llms cache: anonymous requests use the shared body cache', true, $sysmda_llms_cache_method->invoke( null, DAY_IN_SECONDS ) );
-check( 'llms cache: zero TTL disables the shared body cache', false, $sysmda_llms_cache_method->invoke( null, 0 ) );
 $GLOBALS['sysmda_test_logged_in'] = true;
 check( 'shared: an authenticated request is not', false, MarkdownController::representation_is_shared() );
-check( 'llms cache: authenticated requests bypass the shared body cache', false, $sysmda_llms_cache_method->invoke( null, DAY_IN_SECONDS ) );
 check(
 	'cache-control: the default follows the visitor',
 	'private, no-store, must-revalidate',
@@ -2644,13 +2396,6 @@ check(
 );
 $GLOBALS['sysmda_test_logged_in'] = false;
 $GLOBALS['sysmda_test_filters'] = array();
-
-// lastmod_suffix: `(updated: YYYY-MM-DD)` suffix for index entries.
-check( 'llms: lastmod valid date', '(updated: 2026-07-01)', LlmsTxtController::lastmod_suffix( '2026-07-01 08:30:00' ) );
-check( 'llms: lastmod date only', '(updated: 2024-12-31)', LlmsTxtController::lastmod_suffix( '2024-12-31' ) );
-check( 'llms: lastmod empty date', '', LlmsTxtController::lastmod_suffix( '' ) );
-check( 'llms: lastmod zero date', '', LlmsTxtController::lastmod_suffix( '0000-00-00 00:00:00' ) );
-check( 'llms: lastmod invalid string', '', LlmsTxtController::lastmod_suffix( 'not-a-date' ) );
 
 // ─── MarkdownController::etag_matches ────────────────────────────────────────
 
@@ -3682,7 +3427,7 @@ check(
 $GLOBALS['sysmda_test_password_cookie'] = false;
 
 // Non-standard post formats are snippets, not documents: excluded everywhere
-// is_servable() is consulted (.md, alternate link, /llms.txt, shortcode, tag).
+// is_servable() is consulted (.md, alternate link, shortcode, dynamic tag).
 foreach ( array( 'aside', 'status', 'quote', 'link', 'gallery', 'image', 'video', 'audio', 'chat' ) as $sysmda_format ) {
 	check( "servable: {$sysmda_format} format excluded", false, PostSupport::is_servable( $sysmda_mk_post( array( 'post_format' => $sysmda_format ) ) ) );
 }
@@ -4208,7 +3953,7 @@ check( 'bricks adapter: source_text is empty for a post it does not handle', '',
 // marked md-exclude is a separate entry from the text inside it. Wrapping each
 // leaf in its own classes alone left the exclusion pass nothing to match on:
 // the body correctly dropped the subtree while the front-matter description and
-// the enriched /llms.txt entry kept its text. What the body excludes is
+// the front-matter description kept its text. What the body excludes is
 // excluded everywhere.
 $sysmda_bricks_nested = $sysmda_bricks_post(
 	array(
@@ -6792,11 +6537,6 @@ $sysmda_stable_hooks = array(
 	'sysmda_front_matter_taxonomy_slugs'    => 2,
 	'sysmda_acf_subtitle_key'               => 2,
 	'sysmda_acf_tldr_key'                   => 2,
-	'sysmda_llms_txt_cache_ttl'             => 1,
-	'sysmda_llms_txt_enriched'              => 1,
-	'sysmda_llms_txt_lastmod'               => 1,
-	'sysmda_llms_txt_summary'               => 1,
-	'sysmda_llms_txt_key_content'           => 1,
 );
 
 /**

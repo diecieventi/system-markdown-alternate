@@ -48,8 +48,6 @@ With that one setting saved, two things are already in place:
 - **Discovery.** Each HTML page now advertises its Markdown twin, both in the document head and as an HTTP `Link` header, so a client can find it without guessing the URL.
 - **Content negotiation.** A client that explicitly asks for `text/markdown` on the normal permalink gets Markdown, without needing the `.md` suffix at all.
 
-And one more is a tick away: **an index.** `/llms.txt` can list the content you just enabled, so an agent discovers the whole site from one file. It is off by default, because serving that URL takes it over from anything else that might answer it — see [The /llms.txt index](/endpoints/the-llms-txt-index/).
-
 ## A note on permalinks
 
 The `.md` suffix needs pretty permalinks. If your site still uses plain permalinks (`?p=123`), there is nowhere to put the suffix, so Markdown URLs fall back to `?format=markdown` and everything else keeps working. The settings page tells you when this applies. Switching to a pretty permalink structure under **Settings → Permalinks** is the better fix.

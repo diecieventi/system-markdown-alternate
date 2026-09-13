@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
  * Configuration panel in wp-admin (Settings => Markdown Alternate).
  *
  * A single page using the native Settings API, with one option per setting.
- * Sections are grouped by scope (General, Markdown output, llms.txt,
+ * Sections are grouped by scope (General, Markdown output,
  * Integrations, Advanced), but remain in one form: saving writes every option
  * in the group, so settings from other sections cannot be lost.
  *
@@ -636,46 +636,6 @@ class AdminSettings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
-			'sysmda_llms_txt_enabled',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sysmda_llms_txt_enriched',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sysmda_llms_txt_lastmod',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_checkbox' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sysmda_llms_txt_summary',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_textarea_field',
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'sysmda_llms_txt_key_content',
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => array( $this, 'sanitize_lines' ),
-			)
-		);
-		register_setting(
-			self::OPTION_GROUP,
 			'sysmda_litespeed_htaccess',
 			array(
 				'type'              => 'string',
@@ -733,14 +693,6 @@ class AdminSettings {
 		} else {
 			add_settings_field( 'sysmda_acf_notice', __( 'ACF fields', 'system-markdown-alternate' ), array( $this, 'field_acf_notice' ), self::PAGE, 'sysmda_markdown' );
 		}
-
-		// ── llms.txt ─────────────────────────────────────────────────────────────
-		add_settings_section( 'sysmda_llmstxt', 'llms.txt', array( $this, 'render_llmstxt_intro' ), self::PAGE );
-		add_settings_field( 'sysmda_llms_txt_enabled', __( 'Enable /llms.txt', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enabled' ), self::PAGE, 'sysmda_llmstxt' );
-		add_settings_field( 'sysmda_llms_txt_enriched', __( 'Enriched output', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_enriched' ), self::PAGE, 'sysmda_llmstxt' );
-		add_settings_field( 'sysmda_llms_txt_lastmod', __( 'Last modified dates', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_lastmod' ), self::PAGE, 'sysmda_llmstxt' );
-		add_settings_field( 'sysmda_llms_txt_summary', __( 'Site summary', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_summary' ), self::PAGE, 'sysmda_llmstxt' );
-		add_settings_field( 'sysmda_llms_txt_key_content', __( 'Key content', 'system-markdown-alternate' ), array( $this, 'field_llms_txt_key_content' ), self::PAGE, 'sysmda_llmstxt' );
 
 		// ── Integrations (informational only) ──────────────────────────────────────
 		add_settings_section( 'sysmda_integrations', __( 'Integrations', 'system-markdown-alternate' ), array( $this, 'render_integrations_intro' ), self::PAGE );
@@ -948,15 +900,6 @@ class AdminSettings {
 			20
 		);
 
-		add_filter(
-			'sysmda_llms_txt_cache_ttl',
-			function ( $fallback ) {
-				$v = get_option( 'sysmda_cache_ttl' );
-				return false !== $v ? (int) $v : $fallback;
-			},
-			20
-		);
-
 		// Priority 5, before the default 10: the saved selection is the *default*
 		// value of the filter, so site code hooking at 10 can still narrow it and
 		// extend it. The `sysmda_front_matter_taxonomies` gate needs no closure:
@@ -968,41 +911,6 @@ class AdminSettings {
 				return false !== $saved ? (array) $saved : $slugs;
 			},
 			5
-		);
-
-		add_filter(
-			'sysmda_llms_txt_enriched',
-			function ( $fallback ) {
-				$v = get_option( 'sysmda_llms_txt_enriched' );
-				return false !== $v ? '1' === $v : $fallback;
-			},
-			20
-		);
-
-		add_filter(
-			'sysmda_llms_txt_lastmod',
-			function ( $fallback ) {
-				$v = get_option( 'sysmda_llms_txt_lastmod' );
-				return false !== $v ? '1' === $v : $fallback;
-			},
-			20
-		);
-
-		add_filter(
-			'sysmda_llms_txt_summary',
-			function ( $fallback ) {
-				$v = get_option( 'sysmda_llms_txt_summary' );
-				return ( false !== $v && '' !== trim( (string) $v ) ) ? (string) $v : $fallback;
-			},
-			20
-		);
-
-		add_filter(
-			'sysmda_llms_txt_key_content',
-			function ( $defaults ) {
-				return $this->option_to_list( 'sysmda_llms_txt_key_content', (array) $defaults );
-			},
-			20
 		);
 
 		add_filter(
@@ -1188,52 +1096,6 @@ class AdminSettings {
 		echo '<p class="sysmda-help">' . esc_html__( 'Settings for advanced users.', 'system-markdown-alternate' ) . '</p>';
 	}
 
-	public function render_llmstxt_intro(): void {
-		echo '<p class="sysmda-help">' . wp_kses_post( __( 'The <code>/llms.txt</code> file exposes selected site resources in a format readable by LLMs and AI agents. It currently lists the enabled Markdown content.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	/**
-	 * Quick info in the aside: /llms.txt endpoint status, URL and conflicts.
-	 * Presentation only: uses the same data already calculated by the plugin.
-	 */
-	public function render_llmstxt_aside(): void {
-		$enabled = '1' === get_option( 'sysmda_llms_txt_enabled', '0' ); // Off by default.
-		$url     = home_url( '/llms.txt' );
-
-		// The option being on is not the same as the endpoint answering. With no
-		// content type selected LlmsTxtController deliberately stays silent —
-		// there is nothing to index, and it must not take the URL over from
-		// whatever else may be handling it while the rest of the plugin is
-		// inactive. Reporting that as a flat "Enabled" sent the reader to a URL
-		// that does not respond, with nothing on the page explaining why.
-		$waiting = $enabled && empty( PostSupport::supported_post_types() );
-
-		echo '<section class="sysmda-card sysmda-aside-card">';
-		echo '<header class="sysmda-card__header"><h2>' . esc_html__( 'llms.txt status', 'system-markdown-alternate' ) . '</h2></header>';
-		echo '<div class="sysmda-card__body">';
-
-		echo '<p class="sysmda-endpoint-state ' . ( $enabled && ! $waiting ? 'is-on' : 'is-off' ) . '">';
-		echo '<span class="sysmda-dot" aria-hidden="true"></span>';
-		if ( ! $enabled ) {
-			echo esc_html__( 'Disabled', 'system-markdown-alternate' );
-		} elseif ( $waiting ) {
-			echo esc_html__( 'Enabled, waiting for a content type', 'system-markdown-alternate' );
-		} else {
-			echo esc_html__( 'Enabled', 'system-markdown-alternate' );
-		}
-		echo '</p>';
-
-		if ( $waiting ) {
-			echo '<p class="description">' . esc_html__( 'Nothing is indexed yet, so the endpoint does not respond. Select at least one content type under General.', 'system-markdown-alternate' ) . '</p>';
-		}
-
-		echo '<p class="sysmda-endpoint-url"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer"><code>' . esc_html( $url ) . '</code></a></p>';
-
-		$this->render_conflict_warning();
-
-		echo '</div></section>';
-	}
-
 	public function render_integrations_intro(): void {
 		echo '<p class="sysmda-help">' . wp_kses_post( __( 'Informational section: how to use the <code>.md</code> URL in content and templates.', 'system-markdown-alternate' ) ) . '</p>';
 
@@ -1266,42 +1128,6 @@ class AdminSettings {
 			? '<p>' . wp_kses_post( __( 'ACF detected. The Subtitle and TL;DR fields are configured in the <strong>Markdown output</strong> section.', 'system-markdown-alternate' ) ) . '</p>'
 			: '<p>' . esc_html__( 'ACF not detected. The Subtitle and TL;DR fields are not available.', 'system-markdown-alternate' ) . '</p>';
 		echo '</div>';
-	}
-
-	/**
-	 * Warns when another /llms.txt handler is active (SEO plugin or physical file),
-	 * or when the endpoint responds even though it should not.
-	 */
-	private function render_conflict_warning(): void {
-		$detector = new ConflictDetector();
-
-		$alerts = array(); // Likely conflicts (red).
-		$notes  = array(); // Informational notes (description).
-
-		if ( $detector->physical_file_exists() ) {
-			$alerts[] = __( 'A physical <code>llms.txt</code> file exists in the site root: the web server serves it <strong>before</strong> WordPress, so this endpoint (and any other plugin\'s) is ignored.', 'system-markdown-alternate' );
-		}
-
-		$providers = $detector->detected_providers();
-		if ( $providers ) {
-			$notes[] = sprintf(
-				/* translators: %s is a comma-separated list of active SEO plugin names. */
-				__( 'Active SEO plugins that <em>might</em> handle <code>/llms.txt</code>: <strong>%s</strong>. If one of them already generates it, keep only one handler active (disable this one below, or the llms.txt feature in the other plugin).', 'system-markdown-alternate' ),
-				esc_html( implode( ', ', $providers ) )
-			);
-		}
-
-		if ( $alerts ) {
-			echo '<div class="notice notice-warning inline" style="margin:8px 0;padding:8px 12px"><p style="margin-top:0"><strong>' . esc_html__( 'Possible /llms.txt conflict:', 'system-markdown-alternate' ) . '</strong></p><ul style="list-style:disc;margin:0 0 0 20px">';
-			foreach ( $alerts as $a ) {
-				echo '<li>' . wp_kses_post( $a ) . '</li>';
-			}
-			echo '</ul></div>';
-		}
-
-		if ( $notes ) {
-			echo '<p class="description">' . wp_kses_post( implode( '<br>', $notes ) ) . '</p>';
-		}
 	}
 
 	// ─── Campi ──────────────────────────────────────────────────────────────────
@@ -1345,7 +1171,7 @@ class AdminSettings {
 			);
 		}
 
-		echo '<p class="description">' . wp_kses_post( __( 'Content types exposed as <code>.md</code> and in <code>/llms.txt</code>. No selection = plugin inactive.', 'system-markdown-alternate' ) ) . '</p>';
+		echo '<p class="description">' . wp_kses_post( __( 'Content types exposed as <code>.md</code>. No selection = plugin inactive.', 'system-markdown-alternate' ) ) . '</p>';
 	}
 
 	/**
@@ -1484,12 +1310,6 @@ class AdminSettings {
 		echo '<p class="description">' . esc_html__( 'ACF not detected: the Subtitle and TL;DR fields will appear here when ACF is active. Any previously saved settings are preserved.', 'system-markdown-alternate' ) . '</p>';
 	}
 
-	public function field_llms_txt_enabled(): void {
-		$v = get_option( 'sysmda_llms_txt_enabled', '0' ); // Off by default: enabling it is always a manual choice.
-		echo '<label><input type="checkbox" name="sysmda_llms_txt_enabled" value="1"' . checked( '1', $v, false ) . ' /> ' . wp_kses_post( __( 'Enable the <code>/llms.txt</code> endpoint', 'system-markdown-alternate' ) ) . '</label>';
-		echo '<p class="description">' . wp_kses_post( __( 'Off by default. Enabling it takes <code>/llms.txt</code> over immediately, so check the status panel first for another plugin already serving it.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
 	/**
 	 * Checkbox list of the taxonomies to emit under `taxonomies:`.
 	 *
@@ -1543,30 +1363,6 @@ class AdminSettings {
 		}
 
 		echo '<p class="description">' . wp_kses_post( __( 'Adds a <code>taxonomies:</code> block with the terms of the taxonomies ticked above, in alphabetical order. Nothing is added until you tick one. Categories and tags already have their own keys and are never repeated here.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	public function field_llms_txt_enriched(): void {
-		$v = get_option( 'sysmda_llms_txt_enriched', '0' ); // Disabled by default.
-		echo '<label><input type="checkbox" name="sysmda_llms_txt_enriched" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Enable the enriched output', 'system-markdown-alternate' ) . '</label>';
-		echo '<p class="description">' . wp_kses_post( __( 'Adds the site summary, the key content section, a description for each entry (Rank Math meta → excerpt → trimmed text) and moves the overflow beyond the most recent posts into an <code>Optional</code> section. Off = the basic index only.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	public function field_llms_txt_lastmod(): void {
-		$v = get_option( 'sysmda_llms_txt_lastmod', '0' ); // Disabled by default.
-		echo '<label><input type="checkbox" name="sysmda_llms_txt_lastmod" value="1"' . checked( '1', $v, false ) . ' /> ' . esc_html__( 'Append the last modified date to each entry', 'system-markdown-alternate' ) . '</label>';
-		echo '<p class="description">' . wp_kses_post( __( 'Adds <code>(updated: YYYY-MM-DD)</code> after every entry, so crawlers can spot changed content without re-fetching each URL. Works with both the basic and the enriched output.', 'system-markdown-alternate' ) ) . '</p>';
-	}
-
-	public function field_llms_txt_summary(): void {
-		$v = (string) get_option( 'sysmda_llms_txt_summary', '' );
-		echo '<textarea name="sysmda_llms_txt_summary" rows="3" class="large-text sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sysmda-help">' . esc_html__( 'One short paragraph describing the site, shown after the tagline. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
-	}
-
-	public function field_llms_txt_key_content(): void {
-		$v = (string) get_option( 'sysmda_llms_txt_key_content', '' );
-		echo '<textarea name="sysmda_llms_txt_key_content" rows="4" class="code sysmda-textarea">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description sysmda-help">' . esc_html__( 'Featured content: one post ID or URL per line. Listed first, before the automatic sections. Used only when the enriched output is enabled.', 'system-markdown-alternate' ) . '</p>';
 	}
 
 	public function field_robots_header(): void {
@@ -1792,9 +1588,6 @@ class AdminSettings {
 						}
 						?>
 					</main>
-					<aside class="sysmda-settings-page__aside">
-						<?php $this->render_llmstxt_aside(); ?>
-					</aside>
 				</div>
 			</form>
 		</div>

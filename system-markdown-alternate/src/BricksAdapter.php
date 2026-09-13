@@ -185,9 +185,8 @@ class BricksAdapter implements BuilderAdapter {
 	 * through, rather than reimplementing exclusion for raw text.
 	 *
 	 * Only used as a last resort — after Rank Math and the excerpt — and only
-	 * for the front-matter description fallback and `/llms.txt` entries, both
-	 * contexts where rendering every listed post through Bricks would be
-	 * prohibitive. Crude by design: no nested-item extraction (list, tabs,
+	 * for the front-matter description fallback, a context where rendering the
+	 * post through Bricks would be prohibitive. Crude by design: no nested-item extraction (list, tabs,
 	 * accordion item text-field names were not confirmed — see
 	 * docs/page-builders-plan.md §6.2.5's deferred note on the `list` element),
 	 * so those elements contribute nothing here even though they may hold text.
@@ -319,8 +318,8 @@ class BricksAdapter implements BuilderAdapter {
 	 * separate entry from the text element inside it. Wrapping each leaf in its
 	 * OWN classes alone therefore produced a span the exclusion pass had nothing
 	 * to match on: the body correctly dropped the excluded subtree while the
-	 * front-matter `description` and the enriched `/llms.txt` entry kept its
-	 * text. What the body excludes is excluded everywhere — the same rule the
+	 * front-matter `description` kept its text. What the body excludes is
+	 * excluded everywhere — the same rule the
 	 * `description` fallback already owes `post_content`, one builder over.
 	 *
 	 * Concatenating the ancestors' tokens onto the leaf's own span is enough
@@ -330,8 +329,7 @@ class BricksAdapter implements BuilderAdapter {
 	 */
 	private function leaves_markup( array $tree ): string {
 		// Built once for the whole tree: resolving each leaf's ancestry by
-		// re-scanning the array would be quadratic, and this runs once per
-		// listed post while /llms.txt is assembled.
+		// re-scanning the array would be quadratic.
 		$by_id = array();
 
 		foreach ( $tree as $element ) {

@@ -9,7 +9,7 @@ Most page builders store their content somewhere other than the WordPress post c
 
 **Bricks is supported.** A Bricks-built page gets a real `.md`, rendered through Bricks' own API.
 
-**Every other page builder has no Markdown version at all**, and none is planned — Elementor included, decided in September 2026. Such a post's `.md` URL returns 404, its HTML page advertises no Markdown `alternate` link, it is absent from `/llms.txt`, and the shortcodes and the dynamic tag render nothing for it.
+**Every other page builder has no Markdown version at all**, and none is planned — Elementor included, decided in September 2026. Such a post's `.md` URL returns 404, its HTML page advertises no Markdown `alternate` link, and the shortcodes and the dynamic tag render nothing for it.
 
 That is less of a limitation than it sounds, and the reason is the next section but one: the rule applies **per post**, not per site. On a site whose pages are built with Elementor and whose articles are written in the block editor — the normal shape of a builder site — every article still gets its Markdown version. What loses one is the builder-built page itself.
 
@@ -37,7 +37,7 @@ A Bricks page's `.md` is built by calling Bricks' own `\Bricks\Frontend::render_
 
 **A page switched to *Render with WordPress* is unaffected.** The plugin follows the page's *current* render mode, not whether Bricks data happens to be stored on it, so switching back to the WordPress editor serves an ordinary `.md` built from the post content — even though the Bricks tree is still sitting in the database.
 
-**The front-matter `description` and its `/llms.txt` entry never fall back to the post's raw content.** For posts in the ordinary editor, a missing SEO description and excerpt fall back to a trimmed extract of the post content. A Bricks page's post content is not reliable for that — it can hold text left over from before the page was rebuilt in Bricks — so the fallback there instead reads a small amount of text straight out of the Bricks element tree. It is deliberately crude (it may pick up a button label) but it is never stale.
+**The front-matter `description` never falls back to the post's raw content.** For posts in the ordinary editor, a missing SEO description and excerpt fall back to a trimmed extract of the post content. A Bricks page's post content is not reliable for that — it can hold text left over from before the page was rebuilt in Bricks — so the fallback there instead reads a small amount of text straight out of the Bricks element tree. It is deliberately crude (it may pick up a button label) but it is never stale.
 
 ## Why the others get a 404
 

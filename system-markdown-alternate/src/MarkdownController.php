@@ -156,46 +156,6 @@ class MarkdownController {
 	}
 
 	/**
-	 * Whether this response should advertise the /llms.txt index (llms.txt v2
-	 * `rel="describedby"`).
-	 *
-	 * Both conditions are required, and the second is not decoration: the
-	 * endpoint has a gate after its own option — it stays silent while no
-	 * content type is enabled — so an owner who ticks the option before
-	 * selecting a content type would otherwise have every page advertise a
-	 * target that 404s. is_negotiable_request() covers that gate transitively,
-	 * because it also returns false with no enabled type.
-	 *
-	 * Anything that later widens this beyond negotiable requests MUST re-add
-	 * the PostSupport::supported_post_types() check explicitly: the two are in
-	 * step by construction here and nothing enforces it.
-	 *
-	 * Deliberately re-checks is_negotiable_request() rather than trusting the
-	 * caller to have done it, so neither emitter can drift. Both run on HTML
-	 * responses only; the .md route has already exited.
-	 */
-	private function should_advertise_llms_txt(): bool {
-		if ( ! $this->is_negotiable_request() ) {
-			return false;
-		}
-
-		// Off by default, in step with LlmsTxtController::maybe_render_llms_txt().
-		return '1' === get_option( 'sysmda_llms_txt_enabled', '0' );
-	}
-
-	/**
-	 * The advertised /llms.txt URL, from one place so the HTML link and the
-	 * HTTP header cannot drift.
-	 *
-	 * home_url() and never a bare '/llms.txt': on a subdirectory install the
-	 * endpoint lives under the home path, which is what LlmsTxtController
-	 * itself matches on.
-	 */
-	private static function llms_txt_url(): string {
-		return home_url( '/llms.txt' );
-	}
-
-	/**
 	 * Hook: wp_head. Prints the alternate link only on supported public posts/CPTs.
 	 */
 	public function print_alternate_link(): void {
@@ -219,16 +179,6 @@ class MarkdownController {
 			'<link rel="alternate" type="text/markdown" href="%s" />' . "\n",
 			esc_url( MetadataBuilder::markdown_url( $post ) )
 		);
-
-		// llms.txt v2: point the page at the index that describes it. Gated
-		// independently of the alternate above — the two describe different
-		// resources and one being absent must never suppress the other.
-		if ( $this->should_advertise_llms_txt() ) {
-			printf(
-				'<link rel="describedby" href="%s" />' . "\n",
-				esc_url( self::llms_txt_url() )
-			);
-		}
 	}
 
 	/**
@@ -254,8 +204,8 @@ class MarkdownController {
 	}
 
 	/**
-	 * Hook: save_post / deleted_post. Deletes the post's Markdown cache and the
-	 * /llms.txt index so new posts, changes, and deletions are reflected immediately.
+	 * Hook: save_post / deleted_post. Deletes the post's Markdown cache so
+	 * changes and deletions are reflected immediately.
 	 *
 	 * Skips revisions and autosaves: save_post fires continuously while editing,
 	 * and those IDs do not have their own cache.
@@ -266,7 +216,6 @@ class MarkdownController {
 		}
 
 		Cache::delete( 'sysmda_md_' . $post_id );
-		Cache::delete( LlmsTxtController::CACHE_KEY );
 	}
 
 	/**
@@ -573,28 +522,10 @@ class MarkdownController {
 			return;
 		}
 
-		// One snapshot, and one block per relation. headers_sent() is the only
-		// condition that genuinely applies to both, so it is the only early
-		// return allowed to cover both: an empty or already-advertised
-		// alternate says nothing about /llms.txt, and a `return` here would
-		// silently drop the describedby field on exactly the sites where
-		// another plugin is emitting Link fields of its own.
-		$sent = headers_list();
-
 		$alternate = esc_url_raw( MetadataBuilder::markdown_url( $post ) );
 
-		if ( '' !== $alternate && ! self::link_header_has_relation( $sent, $alternate, 'alternate' ) ) {
+		if ( '' !== $alternate && ! self::link_header_has_relation( headers_list(), $alternate, 'alternate' ) ) {
 			header( 'Link: <' . $alternate . '>; rel="alternate"; type="text/markdown"', false );
-		}
-
-		if ( ! $this->should_advertise_llms_txt() ) {
-			return;
-		}
-
-		$index = esc_url_raw( self::llms_txt_url() );
-
-		if ( '' !== $index && ! self::link_header_has_relation( $sent, $index, 'describedby' ) ) {
-			header( 'Link: <' . $index . '>; rel="describedby"', false );
 		}
 	}
 
@@ -732,9 +663,9 @@ class MarkdownController {
 	}
 
 	/**
-	 * Sends the caching policy of a representation that has its own URL: the
-	 * `.md` endpoint and `/llms.txt`. Storable by anything, reusable by nothing
-	 * without asking first.
+	 * Sends the caching policy of the representation that has its own URL, the
+	 * `.md` endpoint. Storable by anything, reusable by nothing without asking
+	 * first.
 	 *
 	 * Until `0.29.0` these responses sent no `Cache-Control` at all, on the
 	 * assumption that saying nothing meant "always revalidate". It does not, in
@@ -888,13 +819,13 @@ class MarkdownController {
 		}
 
 		/**
-		 * Filter: `Cache-Control` for the URLs the plugin owns (`.md` and
-		 * `/llms.txt`). The default grants storage but forbids reuse without
-		 * revalidation, which is what keeps a cached `.md` from outliving an
-		 * edit. Returning a freshness lifetime (`s-maxage`, `max-age`) is
-		 * supported and makes staleness possible again: the URL is invisible to
-		 * page-cache plugins, which purge the permalink and not `permalink.md`,
-		 * so nothing will clear it early. An empty string sends no header at all.
+		 * Filter: `Cache-Control` for the URL the plugin owns (`.md`). The
+		 * default grants storage but forbids reuse without revalidation, which
+		 * is what keeps a cached `.md` from outliving an edit. Returning a
+		 * freshness lifetime (`s-maxage`, `max-age`) is supported and makes
+		 * staleness possible again: the URL is invisible to page-cache plugins,
+		 * which purge the permalink and not `permalink.md`, so nothing will
+		 * clear it early. An empty string sends no header at all.
 		 */
 		$value = apply_filters( 'sysmda_cache_control', 'public, max-age=0, must-revalidate' );
 

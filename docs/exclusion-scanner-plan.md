@@ -137,9 +137,9 @@ of mine doing anything at all?" without enumerating anything.
 
 Published posts of the **enabled** post types, filtered through
 `PostSupport::is_servable()` so the inventory describes what actually reaches a
-`.md`. Same shape as the `/llms.txt` listing query, including
-`update_post_term_cache => true`, so post formats are primed in one query rather
-than one per post.
+`.md`. The batch primes both caches — `update_post_term_cache => true` for the
+post-format check and `update_post_meta_cache => true` for the page-builder
+veto — so each is one query rather than one per post.
 
 `wp_block` posts are not scanned as entries of their own: they have no `.md`.
 Their content is reached only by following a reference from a scanned post.
@@ -190,9 +190,9 @@ violate constraint 1: the closure returns a constant list and is pure. What
 constraint 1 forbids is instrumenting those filters to observe or count the
 pipeline. Do not let a later reader mistake one for the other.
 
-The preview is **not optional**, and `0.38.2` is why: exclusions now reach the
-front-matter `description` and enriched `/llms.txt` entries, not just the body,
-so a wrong tick no longer dirties one place. A number cannot justify a decision
+The preview is **not optional**, and `0.38.2` is why: exclusions reach the
+front-matter `description` as well as the body, so a wrong tick no longer
+dirties one place. A number cannot justify a decision
 with that reach; seeing the removed text can.
 
 ### 4.6 Inform, do not apply

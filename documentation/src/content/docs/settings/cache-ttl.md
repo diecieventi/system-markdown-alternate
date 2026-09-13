@@ -41,18 +41,12 @@ That is the part worth keeping: `ETag` handling and the body cache are independe
 
 ## From code
 
-Two filters, both taking seconds:
+One filter, taking seconds:
 
 ```php
-// The per-post Markdown documents.
 add_filter( 'sysmda_markdown_cache_ttl', function ( int $ttl, WP_Post $post ) {
 	return 'product' === $post->post_type ? HOUR_IN_SECONDS : $ttl;
 }, 10, 2 );
-
-// The /llms.txt index.
-add_filter( 'sysmda_llms_txt_cache_ttl', function ( int $ttl ) {
-	return 6 * HOUR_IN_SECONDS;
-} );
 ```
 
-Returning `0` or less from the first one disables the body cache for that post.
+Returning `0` or less disables the body cache for that post.

@@ -17,7 +17,6 @@ Every published post of that type, subject to the eligibility rules below, gains
 
 - a `.md` URL, and content negotiation on its normal permalink;
 - an `alternate` link in the page head and in the HTTP response headers;
-- an entry in `/llms.txt`;
 - working output from the [shortcodes](/shortcodes/md-url/) and the [GenerateBlocks dynamic tag](/integrations/generateblocks-dynamic-tag/).
 
 ## Which types appear in the list
@@ -41,11 +40,11 @@ Enabling a type is necessary but not sufficient. A post is served only when all 
 | Not built with an unsupported page builder | A post rendered by Elementor, Divi, WPBakery, Oxygen, Beaver Builder or Breakdance keeps its content outside the WordPress post content, so there is nothing to convert. **Bricks is the exception**: a Bricks-built post is rendered through Bricks' own API and does get a `.md`. Decided post by post — see [Page builders](/integrations/page-builders/). |
 | Not a WooCommerce cart, checkout or my-account page | These are ordinary published pages, but without a shopping session their body is WooCommerce's own placeholder text ("Your cart is currently empty!"), not anything written for a reader. The shop page is unaffected — that one is real content. |
 
-A post failing any of these returns **404** on its `.md` URL, is absent from `/llms.txt`, gets no `alternate` link, and makes the shortcodes render nothing at all — so nothing on your site ever links to a Markdown URL that does not exist.
+A post failing any of these returns **404** on its `.md` URL, gets no `alternate` link, and makes the shortcodes render nothing at all — so nothing on your site ever links to a Markdown URL that does not exist.
 
 ## Changing the selection later
 
-Safe at any time. Unticking a type stops serving it immediately; its URLs return 404 and its entries leave `/llms.txt`. Saving the settings page invalidates the Markdown cache site-wide, so the change is visible at once.
+Safe at any time. Unticking a type stops serving it immediately and its URLs return 404. Saving the settings page invalidates the Markdown cache site-wide, so the change is visible at once.
 
 ## From code
 
