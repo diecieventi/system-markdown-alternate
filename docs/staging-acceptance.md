@@ -160,6 +160,24 @@ the server.
   the page's enriched `/llms.txt` entry. Before `0.51.0` the body was right and
   the other two kept the text, which is the whole point of the fixture: an
   exclusion applied to the leaf directly always worked and proves nothing here.
+- **A nested Bricks template is a dependency** (since `0.52.0`). Build a
+  `page -> outer template -> inner template` chain: the page holds a `template`
+  element pointing at the outer template, and the outer template holds one
+  pointing at the inner. Warm the page's `.md` and record its `ETag`, then edit
+  **only the inner template** and save it. The `.md` must come back with the new
+  text and a different `ETag`, and the recorded `ETag` must no longer be
+  answered `304`. Editing the outer template alone must do the same. This is the
+  fixture that distinguishes the fix from what shipped in `0.46.0`: a template
+  the page references *directly* already moved the validator, so a one-level
+  chain proves nothing here. Deleting the inner template, and pointing the outer
+  one at a different template, are the other two halves.
+- **A `HEAD` request costs no conversion** (since `0.52.0`). `curl -sI` on a
+  `.md` URL returns the same status and the same headers as the `GET` —
+  `Content-Type`, `ETag`, `X-Robots-Tag`, the canonical `Link`, `Cache-Control`
+  — and no body. With the body cache empty, a `HEAD` must leave it empty: the
+  following `GET` is the request that populates it. Not directly observable from
+  outside, so check the cache entry itself rather than inferring it from
+  response time.
 - A `POST` carrying `If-None-Match: *` to a `.md` URL and to `/llms.txt`
   returns the full response, never `304`, while `GET`/`HEAD` with a matching
   validator still return `304` with no body. A `POST` to a canonical permalink

@@ -66,6 +66,18 @@ class BricksAdapter implements BuilderAdapter {
 	 */
 	const MAX_ANCESTOR_DEPTH = 50;
 
+	/**
+	 * How far the referenced-template walk follows nested `template` elements.
+	 *
+	 * A backstop behind the `$seen` set, not a limit on real layouts: a Bricks
+	 * page nests a template inside a template a handful of levels at most. The
+	 * set already ends every cycle it can describe; this ends the ones it
+	 * cannot (a tree rewritten mid-walk, a `get_post_meta()` filter handing back
+	 * a fresh reference each call). Truncating loses one branch of the
+	 * dependency graph, which is the pre-fix behaviour and nothing worse.
+	 */
+	const MAX_TEMPLATE_DEPTH = 10;
+
 	public function is_active(): bool {
 		return class_exists( '\Bricks\Frontend' ) && class_exists( '\Bricks\Database' );
 	}
@@ -121,9 +133,11 @@ class BricksAdapter implements BuilderAdapter {
 	 * Cache-validator inputs (folded into MetadataBuilder::dependencies_fingerprint()):
 	 * the render mode (so a flip to/from "Render with WordPress" moves the
 	 * validator even though the tree itself is untouched), a hash of the whole
-	 * tree, and the modification date of any referenced `template` element's
-	 * own post (edge case 11 — the template's own content lives outside this
-	 * post's row and editing it does not touch post_modified_gmt here).
+	 * tree, and the modification date of every `template` element's referenced
+	 * post, **followed transitively** (edge case 11 — the template's own content
+	 * lives outside this post's row and editing it does not touch
+	 * post_modified_gmt here; a template nested inside a template is the same
+	 * dependency one level down, see referenced_template_fingerprint()).
 	 *
 	 * Deliberately narrower than "every out-of-post dependency": a Bricks
 	 * "component" instance carries a `cid` reference whose own definition was
@@ -194,16 +208,80 @@ class BricksAdapter implements BuilderAdapter {
 	 * The stored element tree, or an empty array when there is none.
 	 */
 	private function tree( \WP_Post $post ): array {
-		$tree = get_post_meta( $post->ID, self::META_CONTENT, true );
+		return self::stored_tree( $post->ID );
+	}
+
+	/**
+	 * The same read by post ID, for the referenced-template walk: it follows
+	 * references into posts it never receives a `WP_Post` for, and asking for
+	 * one would be a query this does not need.
+	 */
+	private static function stored_tree( int $post_id ): array {
+		$tree = get_post_meta( $post_id, self::META_CONTENT, true );
 
 		return is_array( $tree ) ? $tree : array();
 	}
 
 	/**
-	 * Fingerprint of every `template` element's referenced post.
+	 * Fingerprint of every `template` element's referenced post, **transitively**.
+	 *
+	 * It has to follow a template into the templates *it* references, and until
+	 * 0.52.0 it did not — it read the page's own elements and stopped. Measured
+	 * on a real Bricks 2.3.12 install (B1 of the 0.50.0 external review, see
+	 * docs/review-followup-plan.md): on a `page -> outer template -> inner
+	 * template` chain, editing **only the inner template** changed the rendered
+	 * document while this value stayed byte-identical, so the `.md` went on
+	 * serving the old body for the full cache TTL and a conditional request was
+	 * answered `304`. Nothing else invalidates it: saving the inner template
+	 * clears that template's own cache entry, not the page's, and the page's
+	 * `post_modified_gmt` never moves.
+	 *
+	 * The recursion is Bricks' own, not a precaution: `Element_Template::render()`
+	 * loads the referenced template's `_bricks_page_content_2` and renders it
+	 * through the `[bricks_template]` shortcode, which walks a nested `template`
+	 * element exactly the same way.
+	 *
+	 * Same shape, and the same two jobs for `$seen`, as
+	 * `MetadataBuilder::collect_pattern_refs()`: a template that references
+	 * itself — directly or around a ring — would otherwise recurse forever, and
+	 * a template used twice on one page is one dependency, not two.
+	 *
+	 * Deliberately unchanged in scope: a Bricks "component" (`cid`) reference is
+	 * still not resolved. Its value moves the tree hash, so a *reassigned*
+	 * component invalidates; a component's own definition changing elsewhere
+	 * does not. That is the documented, narrow residual — it is NOT what this
+	 * walk is about, and closing B1 does not close it.
 	 */
 	private static function referenced_template_fingerprint( array $tree ): string {
 		$parts = array();
+		$seen  = array();
+
+		self::collect_template_refs( $tree, $seen, $parts, 0 );
+
+		return empty( $parts ) ? '' : md5( implode( '|', $parts ) );
+	}
+
+	/**
+	 * Appends a fingerprint part for every template this tree reaches, then
+	 * walks into each one's own stored tree.
+	 *
+	 * A Bricks tree is a FLAT array of elements linked by `parent`/`children`,
+	 * so one pass over `$tree` already sees every element of that post — the
+	 * recursion here crosses posts, never nesting inside the array.
+	 *
+	 * A missing template records `missing` rather than being skipped: creating
+	 * the referenced post later changes the rendered body, and a skipped
+	 * reference would leave the validator where it was.
+	 *
+	 * @param array<int|string, mixed> $tree  Stored element tree.
+	 * @param array<int, bool>         $seen  Template IDs already visited, by ID.
+	 * @param array<int, string>       $parts Fingerprint parts, appended to.
+	 * @param int                      $depth Current recursion depth.
+	 */
+	private static function collect_template_refs( array $tree, array &$seen, array &$parts, int $depth ): void {
+		if ( $depth >= self::MAX_TEMPLATE_DEPTH ) {
+			return;
+		}
 
 		foreach ( $tree as $element ) {
 			if ( ! is_array( $element ) || ! isset( $element['name'] ) || 'template' !== $element['name'] ) {
@@ -212,15 +290,23 @@ class BricksAdapter implements BuilderAdapter {
 
 			$template_id = isset( $element['settings']['template'] ) ? (int) $element['settings']['template'] : 0;
 
-			if ( $template_id <= 0 ) {
+			if ( $template_id <= 0 || isset( $seen[ $template_id ] ) ) {
 				continue;
 			}
 
-			$template = get_post( $template_id );
-			$parts[]  = $template_id . ':' . ( $template instanceof \WP_Post ? (string) $template->post_modified_gmt : 'missing' );
-		}
+			$seen[ $template_id ] = true;
 
-		return empty( $parts ) ? '' : md5( implode( '|', $parts ) );
+			$template = get_post( $template_id );
+
+			if ( ! $template instanceof \WP_Post ) {
+				$parts[] = $template_id . ':missing';
+				continue;
+			}
+
+			$parts[] = $template_id . ':' . (string) $template->post_modified_gmt;
+
+			self::collect_template_refs( self::stored_tree( $template_id ), $seen, $parts, $depth + 1 );
+		}
 	}
 
 	/**

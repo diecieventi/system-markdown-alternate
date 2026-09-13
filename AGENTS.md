@@ -38,14 +38,15 @@ that repository is not available in the current session, say so rather than
 guessing at its content or defaulting a private-shaped document into `docs/`.
 
 **A "what's outstanding" review has to check both repositories, not just this
-one's `docs/` and "Open / to do".** Some roadmap items — a plan the maintainer
-is not ready to have discoverable by browsing this repository, independent of
-whether the content itself is competitor-shaped — live only in the private
-companion repository's `private-plans/` and nowhere in this file. This file
-does not enumerate them, on purpose: a pointer that named them would defeat
-the point of keeping them out of here. So when asked to look across the
-project and report what's left to do, open the private companion repository
-too, rather than treating this file's "Open / to do" as the complete backlog.
+one's [`docs/STATUS.md`](docs/STATUS.md).** Some roadmap items — a plan the
+maintainer is not ready to have discoverable by browsing this repository,
+independent of whether the content itself is competitor-shaped — live only in
+the private companion repository's `private-plans/`, whose own `README.md` is
+the private half of the same index. Neither this file nor `docs/STATUS.md`
+enumerates them, on purpose: a pointer that named them would defeat the point
+of keeping them out of here. So when asked to look across the project and
+report what's left to do, **list that folder** rather than treating
+`docs/STATUS.md` as the complete backlog.
 
 ### Before writing a report or a plan, ask where it goes
 
@@ -214,6 +215,28 @@ The v1 scope is done and widely exceeded. Implemented:
   so is the `-gzip`/`-br` suffix Apache appends inside the quotes when it
   compresses a response (`DeflateAlterETag AddSuffix`, the default — without
   that, gzip clients on a stock Apache never revalidate).
+  Both validators are derived from **one** evaluation of the two dependency
+  fingerprints (`0.52.0`, `MarkdownController::fingerprints()`, PERF2):
+  `serve_markdown()` computes the pair once and hands it to `cache_version()`
+  and `date_is_strong_validator()`, which since `0.51.0` both run on every
+  request. The scope is deliberately **one response**, not the request — a
+  value memoized for longer would outlive a settings change or a save in the
+  same process, and the cost being removed is two evaluations within a single
+  response, not one per response (`dependencies_fingerprint()` runs
+  `parse_blocks()` over the whole `post_content` and again over every
+  referenced pattern: 0.33 ms on an 18 KB article, 1.0 ms on a 60 KB one).
+  Every caller may omit the tuple and have it computed, which is what keeps a
+  single-shot path like `prewarm()` unchanged.
+- **`HEAD` builds no document** (`0.52.0`, PERF1): the headers are computed and
+  sent exactly as for the `GET` — no `Content-Length` is emitted, so nothing
+  advertised depends on the body — and `serve_markdown()` then exits before
+  converting anything. Not a performance feature (conversion is ~8.6 ms against
+  a ~1000–1200 ms TTFB); it is work nobody receives. Two consequences worth
+  stating rather than discovering: a filter on `sysmda_markdown_output` with
+  side effects no longer runs for such a request, and a `HEAD` no longer warms
+  the body cache. `is_head_request()` is the opposite of `is_read_request()` on
+  an absent method: no method at all means no HTTP request (cron, WP-CLI, the
+  harness), and those callers want the document.
 - **Clean conversion**: `render_block()` on the cleaned blocks (no related/CTA),
   excluded blocks/shortcodes/classes, fenced code blocks, **absolute URLs resolved
   against the source permalink** (document-relative, `../`, root-relative,
@@ -233,7 +256,7 @@ The v1 scope is done and widely exceeded. Implemented:
     holding a block element (`BLOCK_TAGS`) is therefore **not** rewritten to `<p>`.
     `<dl>` is flattened to a bold term plus paragraphs.
   - **the table GRID is normalized in the DOM, never in a converter**
-    (`0.51.0`, `normalize_tables()`, Phase 2 of the private fidelity plan). The
+    (`0.51.0`, `normalize_tables()`, Phase 2 of `docs/markdown-fidelity-plan.md`). The
     library converts **bottom-up**, so by the time a `table` converter runs its
     rows and cells are already converted strings — `colspan`, `rowspan` and the
     existence of a header section are gone before it is called, and
@@ -507,10 +530,24 @@ The v1 scope is done and widely exceeded. Implemented:
     the matching adapter for its `fingerprint()`. For Bricks: the render mode
     (so a flip to/from "Render with WordPress" moves the validator even
     though the tree is untouched), a hash of the whole stored tree, and the
-    modification date of any referenced `template` element's own post (a
+    modification date of every referenced `template` element's own post (a
     `bricks_template` post referenced via `settings.template` — confirmed
     live; the classic "out-of-post dependency" shape, same rule as a synced
-    pattern). **Deliberately narrower than every out-of-post dependency**: a
+    pattern), **followed transitively since `0.52.0`** (B1 of the `0.50.0`
+    review). Until then the walk read the page's own elements and stopped,
+    which is the *same* mistake the synced-pattern walk had already been
+    fixed for one class over: measured on Bricks 2.3.12, editing only the
+    **inner** template of a `page → outer → inner` chain changed the rendered
+    document while this value stayed byte-identical, so the `.md` served the
+    stale body for the full TTL and answered `304`. The recursion is Bricks'
+    own — `Element_Template::render()` walks a nested `template` element the
+    same way — and it is deduplicated, cycle-guarded and depth-capped
+    (`MAX_TEMPLATE_DEPTH`), exactly like `collect_pattern_refs()`. Cost
+    measured on the staging rather than assumed: **0.005 ms per referenced
+    template warm, 0.43 ms cold** (one `get_post()` plus one
+    `get_post_meta()`), so ~0.05 ms / ~4.3 ms at the depth cap, against a
+    ~1000–1200 ms `.md` TTFB; a page with no `template` element pays nothing
+    at all. **Deliberately narrower than every out-of-post dependency**: a
     Bricks "component" instance carries a `cid` reference whose own
     definition was not confirmed to live anywhere resolvable on the
     reconnaissance install (no `bricks_component` post type registered, no
@@ -653,7 +690,7 @@ The v1 scope is done and widely exceeded. Implemented:
   `sysmda_md_hits_named_bot_patterns` (canonical name => substrings).
   Deliberately a fixed, code-defined name list rather than a bucket per
   distinct UA ever seen: that alternative was considered and set aside (see
-  "Open / to do" below) because it turns the option into a store keyed on
+  `docs/STATUS.md`) because it turns the option into a store keyed on
   request-derived text — a bigger step than this feature needs, and the one
   the count-only decision exists to avoid taking casually. `named_totals()`
   sums the same three windows as `totals()`; a bucket predating this
@@ -937,335 +974,30 @@ The v1 scope is done and widely exceeded. Implemented:
 - `uninstall.php` (removes `sysmda_*` options + transients + the LiteSpeed
   `.htaccess` block).
 
-## Open / to do (towards wordpress.org)
+## Open / to do
 
-- **Ideas surfaced by reviewing a comparable plugin** (`Serve Markdown` /
-  `serve-md`, wordpress.org, `akumarjain`, v1.0 — read in full August 2026;
-  not a plan, three separate candidates recorded for future evaluation, none
-  built). It is smaller and less mature than this plugin on every engineering
-  axis that matters here — regex-based HTML→Markdown conversion instead of a
-  DOM pipeline, `the_content` instead of `render_block()` (reintroducing
-  exactly the injected related/CTA content this plugin's rendering choice
-  avoids, see "Technical notes" 4), no caching, no `ETag`/`304`, and an
-  `Accept` parser that never compares against `text/html`'s own q-value and
-  sends no `Vary`. None of that is worth adopting. Three narrower ideas are:
-  - **Per-post opt-out.** A single postmeta checkbox in a meta box
-    (`_serve_md_disabled` in their plugin), independent of every exclusion
-    axis this plugin already has (post type, post format, taxonomy
-    inclusion, page-builder veto, password). None of those cover "this one
-    post, for an editorial reason, regardless of type or category." Cheap
-    and additive; the natural implementation reuses the existing
-    `sysmda_post_is_servable` veto filter (see the anonymous-representation
-    decision) rather than adding a new gate to `is_servable()`.
-  - **Category/tag exclusion.** Excluding whole taxonomy terms from being
-    served is an axis this plugin does not have at all: the only
-    taxonomy-shaped gates today are post format
-    (`PostSupport::EXCLUDED_POST_FORMATS`) and the opt-in custom-taxonomy
-    *inclusion* in front matter — neither lets an owner say "nothing in
-    category X is servable." Same discipline as the generic-meta-fields item
-    above: explicit, opt-in, additive, never auto-detected.
-  - **A per-request crawler log — evaluated and NOT proposed as their
-    plugin builds it, because it reopens a decision already made on
-    purpose.** Their `Serve_MD_Logger` stores, per Markdown request, the raw
-    IP address, the full User-Agent string and a day-resolution-or-finer
-    timestamp in a dedicated DB table (with retention/row-count/size caps
-    and a stats UI). That is exactly what "`.md` hit counter is count-only"
-    (Product decisions) forbids here, for a stated reason: aggregate-only,
-    no IP, no raw UA, no per-visitor identifier, so the feature stays
-    outside GDPR scope with no consent flow needed. It is also exactly the
-    shape "Server-side diagnostics" (below) already considered and
-    declined, closing with "the only shipped request-side telemetry remains
-    the count-only `.md` hit counter." Reopening either is not proposed.
-    What IS worth evaluating, because it stays inside both boundaries — a
-    per-known-bot-name breakdown of the bot total — **shipped in `0.48.0`**:
-    see `HitCounter::named_bot()`/`named_totals()` in "Current state". Real
-    demand, not a guess: raised again after a real production panel showed
-    13 uncounted bot hits in a single day with no way to say which crawlers
-    they were. The two questions this item left open were both resolved
-    during that work, deliberately on the simpler side of each: a **fixed,
-    curated name list** (`ClaudeBot`, `GPTBot`, `PerplexityBot`, `CCBot`),
-    not a bucket per distinct UA ever seen — the dynamic alternative would
-    key the option on request-derived text, which is a bigger step than a
-    small breakdown needs and the kind of scope creep the count-only decision
-    exists to head off; and the panel shows **only names seen at least once**
-    in the last 30 days, not a fixed table padded with always-zero rows for
-    crawlers a site never gets. `sysmda_md_hits_bot_patterns` itself is
-    untouched — naming is a new, separate filter
-    (`sysmda_md_hits_named_bot_patterns`), not a widened reach of the
-    existing bot/human one.
-- **External review follow-up** (`docs/review-followup-plan.md`): an independent
-  review of `0.50.0` found eight defects. **Four shipped in `0.50.1`** (the
-  protected-pattern disclosure, dot segments inside a query or fragment,
-  `div`-grouped definition lists being deleted, and `304` on any HTTP method)
-  and **R5 in `0.51.0`**, together with the larger finding that came out of
-  measuring it (a validator the plugin refuses is no longer advertised — see the
-  two durable decisions). Both measurements the plan made blocking have now been
-  taken, on 10 September 2026:
-  - **B1 is confirmed and needs code.** On the Bricks staging, editing only a
-    nested template changed the rendered document while
-    `BricksAdapter::fingerprint()` stayed byte-identical, the `.md` went on
-    serving the old body for the full TTL, and a conditional request was
-    answered `304`. The fix is a bounded, deduplicated recursive walk with a
-    cycle guard; measure its cost against the existing budget.
-  - **R3's corpus measurement is empty but inconclusive**, and must not be
-    read as a close: none of the three connected installs contains a single
-    synced pattern, so the denominator is zero. Re-run the query in the plan on
-    the production reference site before spending anything.
-  **R2 also shipped in `0.51.0`** (the Bricks description fallback losing
-  ancestor exclusions), reproduced live before being fixed — as did Phase 2 of
-  the private fidelity plan (table grids), which is not a review finding but
-  travelled with it, and two P2 findings Codex raised on that PR: a header row
-  carrying a `colspan` emitted as a data row, and `rowspan="0"` — valid HTML —
-  coerced to `1`.
-  **Pick up at B1**: it is measured, confirmed and independent. What remains
-  after it: R3 (parked pending that one corpus query), and two small
-  performance items
-  — PERF2 has become "snapshot the fingerprints once per request", since
-  `0.51.0` deliberately computes them twice (measured at 0.33 ms on an 18 KB
-  article, against a ~1000 ms TTFB). A sixth, escaping Markdown syntax in the
-  `# Title`, is written up with a recommendation to decline — the obvious remedy
-  (`escape_inline()`) was measured and puts `&amp;` in the H1 of every title
-  containing an ampersand.
-- Once live on wordpress.org: translate the strings into Italian on
-  translate.wordpress.org (request PTE if needed) so the `it_IT` language pack
-  gets built — no translation files live in this repo.
-- Future idea: formalized **LLM signals** in `/llms.txt` once the spec
-  (Cloudflare & co.) settles — the hook is already in place (`sysmda_llms_txt_footer`).
-- **Serve `.md` for the site homepage** (postponed — decided July 2026:
-  re-evaluate only once the `.md` hit counter provides real demand data; the
-  shape is already settled, see the "NO synthesized homepage index" decision in
-  "Product decisions"). If/when implemented: **static front page only**
-  (`show_on_front = 'page'`: a real `WP_Post` converted with the existing
-  pipeline), dedicated opt-in toggle (e.g. `sysmda_markdown_homepage`, default
-  off) independent of `sysmda_markdown_supported_post_types`; when the front
-  page is the blog posts index, **skip** (archive, no `WP_Post`; notice in the
-  panel). Implementation notes parked for that day:
-  - URL `https://example.com/.md`: `url_to_postid('/')` may return 0 for the
-    front page → needs a `get_option('page_on_front')` fallback in the
-    resolution; trailing-slash and query handling as today.
-  - Eligibility through `PostSupport::is_servable()` (single source of truth),
-    without loosening the rule for anything else; `attachment` stays excluded,
-    published + not password-protected stay required.
-  - `print_alternate_link()` guards on `is_singular($types)`, which is false
-    for a front page whose type isn't enabled → guard to revisit.
-  - Verify conversion quality first: front pages are block-heavy.
-  - New toggle in `docs/filters.md` + docs + translations;
-    tests for the `/.md` → front-page resolution and both `show_on_front`
-    branches.
-- **Page builders** (`docs/page-builders-plan.md`): **Phases 1, 1b, 0 and 2 are
-  all shipped** (`0.46.0`) — the veto, the panel breakdown, the Bricks
-  reconnaissance and the Bricks adapter itself; see "Current state" for what
-  `BricksAdapter` does. Only Elementor remains parked in `AWAITING_ADAPTER`
-  (a free-only staging cannot validate the Pro features that make it hard);
-  Divi, WPBakery, Oxygen, Beaver Builder and Breakdance are **never** to be
-  supported. Elementor — real demand and a Pro staging, in that order — is
-  the only open item this plan still has.
-- **Exclusion scanner** (`docs/exclusion-scanner-plan.md`): **parked, not
-  started** — deferred August 2026, see the status note at the top of the plan.
-  The damage half shipped in `0.40.0` (lists accumulate, code samples are safe,
-  `ez-toc` added); discovery is what remains, and it is waiting on a real corpus
-  to point at. An admin page that inventories the shortcode tags and block names
-  actually present in the servable corpus, so the three exclusion lists can be
-  filled in from evidence instead of guesswork. Greenlit by a measurement rather
-  than an idea: `0.38.1` made a registered shortcode inside block content expand
-  in full into every `.md` that contains it, and a staging reproduction on
-  10 August 2026 confirmed it end to end (a newsletter form's label, button and
-  GDPR paragraph landing in the middle of the prose). What that measurement
-  cannot say is whether any real corpus *contains* such a shortcode — which is
-  exactly what the scanner exists to answer, and why it is the cheapest
-  available instrument rather than a feature looking for a use. The design is
-  fixed and its constraints are all blocking; two are easy to get wrong and are
-  called out here as well: applying a suggestion must write **the current
-  effective list plus the new tag** (a non-empty option *replaces* the defaults,
-  see `AdminSettings::option_to_list()`), and the results option must be
-  **excluded from the settings-save cache-salt bump**, like the hit-counter
-  buckets, or every scan invalidates the whole cache. It informs and never
-  applies on its own — the same line as "never auto-detect which taxonomies to
-  emit".
-- **noindex-aware `/llms.txt` + a `## Sitemaps` section**
-  (`docs/llms-txt-noindex-plan.md`): **designed, not started** — scope fixed with
-  the maintainer in August 2026. The `.md` endpoint does **not** change and
-  `is_servable()` is not touched: every served `.md` already carries
-  `X-Robots-Tag: noindex, follow` from one place, so a noindex article's Markdown
-  twin cannot re-enter a search index and withdrawing it would only remove a
-  representation from the audience this plugin exists for. What changes is the
-  index: `/llms.txt` stops *listing* noindex content (per post, per post-type
-  default, and site-wide via `blog_public`), which is the first divergence in
-  this plugin between **servable** and **listed** — hence the new rule sits
-  beside `is_servable()`, never inside it. Under a site-wide noindex the endpoint
-  still answers **200** with the site identity and the new Sitemaps section
-  rather than `404`, because `should_advertise_llms_txt()` would otherwise go on
-  advertising a dead URL from every page — a `404` costs a second gate to keep in
-  step forever, and the plan records that as the reason. The curated **Key
-  content** list is deliberately exempt (a hand-typed entry outranks a site-wide
-  preference), on by default with a filter to switch it off, Rank Math and Yoast
-  only for now. Seven storage-shape measurements are listed as blocking and none
-  has been taken yet.
-### To check next time (not urgent, parked here)
+**The backlog lives in [`docs/STATUS.md`](docs/STATUS.md), and nowhere else.**
+One file, one table: every open item, the state it is in, and the single thing
+that unblocks it, each linking to its own plan. It is deliberately not
+summarized here. Two copies of a status drift — and this file is read at the
+start of every session, while a backlog changes every release, so keeping the
+volatile half out of it is also what keeps the stable half worth caching.
 
-- **llms.txt v2: reviewed, implemented, closed.**
-  Reviewed against the spec Jeremy Howard/Answer.AI published 10 August 2026;
-  the one gap it found shipped in `0.49.0` (see `rel="describedby"` in "Current
-  state"). Recorded so the comparison is not redone from scratch next time v2 —
-  or a v3 — comes up. **Four of the five v2 changes needed no code at all**, and
-  each for its own reason worth keeping: the `.md` URL pattern now allows
-  extension-replacement as well as appending, which produces the identical
-  string for WordPress's extensionless permalinks; path-coverage semantics for
-  multiple `llms.txt` files per subtree have no demand and a single root file is
-  already a valid case; `llms_txt2ctx` context-expansion tooling was dropped
-  from the spec and was never implemented here; and `## Optional` lost its
-  mechanical meaning, which changes nothing because this plugin only ever used
-  it as a label. The plugin's `rel="alternate" type="text/markdown"` discovery
-  already matched the v2 example verbatim in both forms before any of this.
-  The implementation work also caught two things the initial review got wrong
-  by reading its own summary of the code rather than the code, both worth
-  remembering as a class: a helper described as needing generalisation
-  already had it, and a gate described as sufficient would have advertised a
-  404 on every default install.
+**A "what's outstanding" review must also list `private-plans/` in the private
+companion repository** (see "This repository is public" above). Some plans live
+only there; they are not named in this repository on purpose, and
+`docs/STATUS.md` repeats that instruction rather than their contents.
 
-- **Freeform content in a mixed post never gets `wpautop()` on the main render
-  path either** (noticed August 2026 while fixing the appended path in `0.47.1`;
-  recorded, deliberately not changed). `ContentRenderer::render()`'s block branch
-  calls `render_block()` in a loop rather than `do_blocks()`, so a `blockName
-  === null` block's text is emitted verbatim — the same gap the appended path
-  had. It rarely shows there because a freeform block's saved markup usually
-  already contains its own `<p>` tags; the appended path bites because its input
-  is genuinely bare text. Changing how every mixed post's body renders is not a
-  patch-release change and needs its own verification against real content, so
-  it is a separate decision rather than a silent fix. If picked up, the shape is
-  the same three lines `render_appended()` now uses.
+Closed measurements and evaluations live in
+[`docs/evaluations.md`](docs/evaluations.md) — the answers that exist so the
+same question is not investigated twice. **Read it before proposing any of
+these**, each of which was evaluated and closed: llms.txt v2, the caching and
+`304` host measurement, the `acceptmarkdown.com` guides, the block-native
+Markdown engine, and server-side diagnostics.
 
-- **The caching contract is done; the `304` is a host property, not a gap.**
-  Measured on webdietrolequinte.it (RunCloud/nginx behind Cloudflare) right
-  after `0.29.0` shipped. Recorded as a closed measurement, NOT as pending
-  work — nothing here calls for a plugin change, and the maintainer has
-  explicitly declined to hand-tune the server for it. Re-measuring on a second,
-  differently configured stack is the only thing still worth doing, and only
-  out of curiosity. What was found:
-  - the headers are correct — `public, max-age=0, must-revalidate`, no
-    `Expires`, `ETag` and `Last-Modified` present, negotiated route still
-    `no-store` — and **no `304` is ever produced**;
-  - the reason is not the plugin: `If-None-Match: *` also answers `200`, and
-    that wildcard makes `etag_matches()` return true without comparing
-    anything, so PHP demonstrably never receives the header. Confirmed against
-    the origin directly (`--resolve`, `server: nginx-rc`): the header is gone
-    **before** Cloudflare, stripped by nginx, which removes conditional headers
-    from the upstream request when caching is configured for the location —
-    it wants the whole entity to store, then declines to store it because
-    `max-age=0` says it is stale on arrival. Fixable only in the host's nginx
-    config (exclude `.md` from the cached location), and **deliberately not
-    done**: a `304` saves the body, ~12 KB, not the ~1 s of WordPress boot that
-    dominates the response (measured: TTFB ~1.0–1.2 s on `.md`, ~0.4 s on a
-    page-cache hit of the same article in HTML). The bottleneck is the boot, and
-    no header touches it. Do not "fix" this by shipping host-specific config:
-    the plugin sends a standard header that is correct everywhere and needs
-    tuning nowhere; a stack that forwards conditional headers gets its `304`s
-    for free.
-  - Cloudflare **weakens strong ETags in transit**: `/llms.txt` emits `"…"` and
-    arrives as `W/"…"`. Live confirmation that the `0.28.0` weak-tag decision
-    was right, and that the symmetric comparison in `etag_matches()` is what
-    keeps the round trip possible at all.
-  A host that ignores `Cache-Control` on the way in
-  (`fastcgi_ignore_headers`) would instead reintroduce staleness, and the
-  answer there is a purge integration, not a header.
-  **Control experiment, run on the same host (July 2026): the `max-age=0`
-  explanation above is correct.** `sysmda_cache_control` was pointed at
-  `public, max-age=0, s-maxage=600, must-revalidate` from an mu-plugin, and the
-  RunCloud nginx cache — which had answered `x-runcache-status: MISS` on every
-  single `.md` request before — started answering **`HIT`**, with PHP no longer
-  running. Nothing else changed. So the cache was never unable to store the
-  `.md`; it was declining to, exactly because the response declared itself stale
-  on arrival. Two details worth keeping: nginx adds no `Age` header on a hit
-  (`x-runcache-status` is the only reliable signal there), and Cloudflare stayed
-  `cf-cache-status: DYNAMIC` throughout, confirming the `4b` table's prediction
-  that `.md` is not a default-cached extension and needs an explicit Cache Rule.
-  **What it does NOT buy, and the reason the default does not move:** a one-pass
-  crawl is unaffected. Each URL is visited once, so every one is a first-time
-  miss that boots WordPress anyway — 800 articles are still 800 boots. The
-  lifetime pays off on re-crawls, on concurrent crawlers hitting the same URL
-  (which is the realistic way to exhaust PHP-FPM workers, far more than the
-  request total), and on ordinary repeat traffic. Against a single sweep the
-  answer is rate limiting upstream, not a header. The cost is the documented one:
-  nothing purges a `.md`, so an edit is invisible for up to the lifetime. This is
-  a per-site trade, taken deliberately, and it stays out of the default —
-  correctness of series, speed by explicit choice.
-- **`acceptmarkdown.com` guides: reviewed, closed** (July 2026 — the
-  *Generating the Markdown* and *Caching & CDN* pages, by Ben Word / Roots, which
-  is also why they present `roots/post-content-to-markdown` as *the* WordPress
-  approach). Recorded so the review is not redone from scratch. Outcome: three
-  changes, all shipped in `0.30.0` and all with a decision above — the `.htaccess`
-  406 bypass removed, `sysmda_front_matter_enabled`, `sysmda_markdown_prewarm` —
-  plus two FAQ entries (behind a CDN, and the three-request test that proves no
-  cache is mixing representations). Everything else was already covered, and in
-  places exceeded: their "what to strip" list is satisfied *by construction*
-  (rendering cleaned blocks rather than scraping the page means the chrome never
-  enters the pipeline, which also makes their "scope the conversion to `<main>`"
-  advice moot), and their "preserve what matters" list is satisfied item by item
-  plus absolute-URL resolution, highlighter line reconstruction, `<dl>` and
-  synced patterns. Their taxonomy of three approaches does not describe this
-  plugin at all: it is neither an SSG, nor write-time dual rendering, nor an
-  edge proxy re-fetching HTML, so two of the three tradeoffs they attribute to
-  "runtime conversion" (per-request cost, and output drifting with a CSS change)
-  do not apply. Deliberately NOT taken: their write-time "store both
-  representations" model (the `Cache` helper already covers it without growing
-  the DB) and every Nginx/Varnish/VCL/Worker snippet — the "do not ship
-  host-specific config" rule from the `0.29.0` measurement stands.
-- **Block-native Markdown engine: evaluated, not built** (August 2026 — a
-  handoff document proposed replacing the generic HTML conversion with a
-  pipeline rendering Markdown straight from `parse_blocks()`, keeping
-  `render_block()` + League only as a fallback). Recorded so the evaluation is
-  not redone from scratch. Outcome: **the premise did not survive measurement**,
-  and what shipped instead was `0.38.0`'s delimiter hardening. What was found,
-  against `league/html-to-markdown` 5.1.1 with this plugin's config:
-  - **The library is already correct on most of what the proposal wanted to
-    replace.** Nested lists at three levels, `<ol start>`, ordered-in-unordered,
-    multi-paragraph list items, nested blockquotes, GFM tables with escaped
-    pipes, `core/buttons` → a plain link, separators, and links with spaces or
-    parentheses all convert correctly today. Nested lists in particular were
-    singled out in the proposal as the biggest expected win; they were already
-    right.
-  - **The defects that are real were all one class — an unsized delimiter — and
-    none of them is fixed by rendering blocks natively.** A native `core/code`
-    renderer would fix the fence breakout for `core/code` only, leaving Code
-    Block Pro (a third-party block), Classic content and ACF WYSIWYG broken;
-    and the prose-fence case is `core/paragraph`, where a native renderer would
-    need the identical escaping anyway. Overriding the library's converters
-    fixes every source at once, which is why that is what shipped.
-  - **Performance is not a motivator.** Measured on an 18 KB article: the whole
-    conversion stage is **8.6 ms** and the DOM pass **1.1 ms**, against the
-    ~1000–1200 ms `.md` TTFB already documented in the `0.29.0` measurement
-    above. Under 1% of the response; the WordPress boot dominates, as it does
-    everywhere else in this plugin.
-  - **It would retire none of the five DOM passes.** Class exclusion, `<dl>`
-    flattening, highlighter normalization and URL absolutization must all stay
-    for the fallback path, so the engine is strictly additive — a second
-    permanent pipeline, which is the proposal's own stated risk.
-  - The one obstacle the proposal treated as decisive had already been removed:
-    `sysmda_markdown_source_content`, `_rendered_html` and `_preamble` were
-    classified **Advanced** in `0.37.0` precisely so a future engine could move
-    them (`docs/filters.md`). That is not a reason to build it, only a reason it
-    would not be blocked.
-  **What would reopen it**: a census of real content showing a large share of
-  the corpus inside blocks whose *meaning* — not merely layout — is lost through
-  `render_block()`. Layout wrappers do not count: their children already convert
-  correctly. The single genuinely block-aware idea worth keeping was
-  `core/embed` → the canonical URL rather than the rendered oEmbed markup, and
-  **that shipped in `0.43.0`** — as one DOM pass keyed on the `wp-block-embed`
-  class, not as a block renderer, so it covers embed blocks from other plugins
-  and already-resolved markup for free. Nothing of the engine proposal survives
-  it.
-- **Evaluate enriching/managing `/llms.txt` further**: beyond the current enriched
-  mode, consider what else is worth adding (candidates TBD, see also the LLM
-  signals idea above).
-- **Server-side diagnostics** (parked, *future thought* — we will revisit):
-  a read-only, in-process admin view of per-post servability, `.md` preview,
-  size/token estimates, stripped/unconverted markup and unresolved internal
-  links. Removed from the active plan in July 2026: `strip_tags()` cannot detect
-  all conversion loss, `url_to_postid() === 0` does not prove a link is broken,
-  and an in-process comparison cannot measure the public response through its
-  cache/proxy layers. Do not promote it back to a plan without real demand and a
-  deliberately small, read-only MVP on a separate admin page. The only shipped
-  request-side telemetry remains the count-only `.md` hit counter above.
+The decisions that must not be reopened at all are below, in *Product
+decisions*; this section is only about where the open work is written down.
+
 
 ## Product decisions (durable)
 
@@ -2103,7 +1835,7 @@ The v1 scope is done and widely exceeded. Implemented:
   conceptually duplicate `/llms.txt` — which per public data is requested
   almost only by SEO tools anyway. The value of a homepage `.md` is the
   real-time assistant fetch of the actual content: if ever implemented, it is
-  the converted body of the static front page only (see "Open / to do").
+  the converted body of the static front page only (see `docs/STATUS.md`).
 - **NO XML sitemap for the `.md` URLs** (decided, do not propose again): the
   `.md` responses are `noindex` by design, so listing them in a sitemap would
   send contradictory signals to search engines (Search Console: "submitted URL
@@ -2111,8 +1843,7 @@ The v1 scope is done and widely exceeded. Implemented:
   and a second sitemap generator would overlap with the SEO plugin's sitemaps
   (Rank Math & co.). Discovery for the real audience (LLMs/agents) is already
   covered by the HTML and HTTP `rel="alternate"` links and by `/llms.txt`.
-  Freshness signals go into `/llms.txt` itself (see the `lastmod` item in "Open
-  / to do"): no
+  Freshness signals go into `/llms.txt` itself (the optional `lastmod` mode): no
   separate machine-index endpoint either.
 - **`.md` hit counter is count-only** (decided): when enabled it stores ONLY
   aggregate daily counters split bot/human. NEVER store IP addresses, raw
@@ -2385,14 +2116,17 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 ├── bin/release-tag.sh            ← creates + pushes missing release tags (run by the Release tag workflow; also usable locally)
 ├── bin/docs-audit.php            ← on-demand report of where the documentation lags the plugin
 ├── DIST/                         ← build output of bin/build.sh (NOT versioned)
-├── docs/                         ← public contracts, active plans and operational notes
+├── docs/                         ← public contracts, the backlog, plans and operational notes
+│   ├── STATUS.md                 ← THE BACKLOG: every open item, its state and what unblocks it (the only place a status lives)
+│   ├── evaluations.md            ← closed measurements and rejected proposals — read before reproposing one
 │   ├── filters.md                ← developer extension API (public contract)
 │   ├── output-format.md          ← Markdown output format (public contract)
 │   ├── staging-acceptance.md     ← real-WordPress release checklist
 │   ├── cache-infrastructure-notes.md
 │   ├── exclusion-scanner-plan.md
-│   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section (designed, not started)
-│   ├── review-followup-plan.md   ← THE HANDOFF: what the 0.50.0 review found, what shipped in 0.50.1/0.51.0, and where to pick up
+│   ├── llms-txt-noindex-plan.md  ← noindex-aware /llms.txt + a ## Sitemaps section
+│   ├── markdown-fidelity-plan.md ← table grids and label escaping (shipped; kept as the record)
+│   ├── review-followup-plan.md   ← what the 0.50.0 external review found, and the reasoning behind each fix
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
@@ -2729,6 +2463,16 @@ not exist as far as the public API is concerned.
    a client sending only `If-Modified-Since` never presents the ETag, so a
    fingerprint that lives in the ETag alone still answers `304` with a stale
    body.
+   **(a) is a rule about references in general, not about synced patterns**,
+   and it had to be learned twice: `BricksAdapter::fingerprint()` recorded a
+   page's own `template` elements and stopped, so a template referenced by a
+   template went unwatched and the `.md` served a stale body for the full TTL
+   (`0.52.0`, B1 of the `0.50.0` review — measured on a real install, not
+   inferred). The general form: **whatever the renderer follows out of the
+   post, the fingerprint follows to the same depth** — with a `$seen` set that
+   is both the cycle guard and the deduplicator, and a depth cap behind it. If
+   a future adapter resolves a reference at render time, that reference is a
+   dependency, transitively, on the day it is added.
    **Everything in the hash is on the every-request path, `304`s included**:
    `cache_version()` produces the ETag, so it runs before the cache lookup and
    before any header, and the filters it reads run with it —
@@ -2803,7 +2547,7 @@ not exist as far as the public API is concerned.
    required by wordpress.org). **No translation catalogs or manual translation
    loader belong in the plugin or repository**: WordPress automatically loads
    the language packs built by translate.wordpress.org. Translations are managed
-   there once the plugin is live (see "Open / to do"). Installs from the GitHub
+   there once the plugin is live (see `docs/STATUS.md`). Installs from the GitHub
    zip are English-only by design until an official language pack is available.
 
 ## Notes from the reference plugin (ProgressPlanner/markdown-alternate)
@@ -3158,6 +2902,24 @@ Test posts:
     PHP and the client is revalidating on its own. Finally, keep a plain post's
     `Last-Modified`, update the plugin, and confirm that same
     `If-Modified-Since` is answered `200`.
+
+25. **Nested Bricks templates.** A `page → outer template → inner template`
+    chain (the page's `template` element points at the outer, the outer's at
+    the inner). Warm the page's `.md`, record the `ETag`, then edit **only the
+    inner template**: the `.md` must return the new text with a different
+    `ETag`, and the recorded `ETag` must stop being answered `304`. Editing
+    the outer alone does the same. A one-level chain proves nothing here — a
+    directly referenced template already moved the validator in `0.46.0`; the
+    nested one is the whole fixture. Deleting the inner template, pointing the
+    outer at a different one, and a ring of two templates referencing each
+    other (which must terminate, not hang) are the other three.
+
+26. **`HEAD` costs no conversion.** `curl -sI` on a `.md` URL returns the same
+    status and the same headers as the `GET` — `Content-Type`, `ETag`,
+    `X-Robots-Tag`, canonical `Link`, `Cache-Control` — and no body. With the
+    body cache emptied first, a `HEAD` must leave it empty and the following
+    `GET` must be what populates it; check the cache entry, not the response
+    time.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

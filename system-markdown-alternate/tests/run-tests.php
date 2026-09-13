@@ -2283,6 +2283,103 @@ $GLOBALS['sysmda_test_status'] = array();
 unset( $GLOBALS['sysmda_test_terms'][60], $GLOBALS['sysmda_test_terms'][61] );
 unset( $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] );
 
+// ─── PERF1: no body is built for a HEAD request ───────────────────────
+//
+// serve_markdown() exits, so the wiring itself is a staging check
+// (docs/staging-acceptance.md); what is pure logic here is the predicate that
+// decides it. Deliberately the OPPOSITE of is_read_request() on an absent
+// method: no method at all means no HTTP request — cron, WP-CLI, this harness
+// — and those callers want the document, so an absent method is never a HEAD.
+
+$sysmda_method_before = isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : null;
+
+$_SERVER['REQUEST_METHOD'] = 'HEAD';
+check( 'head: HEAD is a head request', true, MarkdownController::is_head_request() );
+check( 'head: HEAD is still a read request', true, MarkdownController::is_read_request() );
+
+$_SERVER['REQUEST_METHOD'] = 'head';
+check( 'head: the method is case-insensitive', true, MarkdownController::is_head_request() );
+
+$_SERVER['REQUEST_METHOD'] = 'GET';
+check( 'head: GET is not a head request', false, MarkdownController::is_head_request() );
+
+$_SERVER['REQUEST_METHOD'] = 'POST';
+check( 'head: POST is not a head request', false, MarkdownController::is_head_request() );
+
+unset( $_SERVER['REQUEST_METHOD'] );
+check( 'head: an absent method is not a head request', false, MarkdownController::is_head_request() );
+check( 'head: an absent method is still a read request', true, MarkdownController::is_read_request() );
+
+if ( null !== $sysmda_method_before ) {
+	$_SERVER['REQUEST_METHOD'] = $sysmda_method_before;
+}
+
+// ─── PERF2: the two fingerprints are computed once per response ───────
+//
+// Both validators need the same pair, and 0.51.0 made the second evaluation
+// unconditional in exchange for them agreeing — so the pair was computed twice
+// per request. dependencies_fingerprint() is not the cheap hash it looks like
+// (parse_blocks() over the whole post_content, and again over every referenced
+// synced pattern), so serve_markdown() now takes the tuple once and hands it to
+// both. What is asserted here is exactly that: given the tuple, neither callee
+// recomputes — and without it, both still do, which is what keeps every other
+// caller (prewarm(), and the reflection-driven tests above) free to omit it.
+
+class SysmdaCountingMetadata extends MetadataBuilder {
+	public $dependency_calls = 0;
+
+	public function dependencies_fingerprint( WP_Post $post ): string {
+		$this->dependency_calls++;
+
+		return parent::dependencies_fingerprint( $post );
+	}
+}
+
+$sysmda_counting_metadata   = new SysmdaCountingMetadata( new ShortcodeCleaner(), $sysmda_renderer );
+$sysmda_counting_controller = new MarkdownController(
+	new ContentRenderer( new BlockCleaner( new ShortcodeCleaner() ), new ShortcodeCleaner() ),
+	new MarkdownConverter(),
+	$sysmda_counting_metadata
+);
+
+$sysmda_fp_method = sysmda_reflection_method( MarkdownController::class, 'fingerprints' );
+
+$sysmda_perf_post = new WP_Post(
+	array(
+		'ID'                => 62,
+		'post_type'         => 'post',
+		'permalink'         => 'https://example.com/perf/',
+		'post_modified_gmt' => '2026-07-01 08:30:00',
+	)
+);
+
+// The shape serve_markdown() uses: one evaluation, then two consumers that ask
+// for nothing further.
+$sysmda_counting_metadata->dependency_calls = 0;
+$sysmda_snapshot                            = $sysmda_fp_method->invoke( $sysmda_counting_controller, $sysmda_perf_post );
+
+check( 'perf2: the snapshot is the (taxonomies, dependencies) pair', 2, count( $sysmda_snapshot ) );
+
+$sysmda_cv_method->invoke( $sysmda_counting_controller, $sysmda_perf_post, $sysmda_snapshot );
+$sysmda_ad_method->invoke( $sysmda_counting_controller, $sysmda_perf_post, $sysmda_snapshot );
+
+check( 'perf2: a handed-in snapshot is not recomputed by either consumer', 1, $sysmda_counting_metadata->dependency_calls );
+
+// Omitting it keeps the old behaviour, which is what lets a single-shot caller
+// like prewarm() stay as it is.
+$sysmda_counting_metadata->dependency_calls = 0;
+$sysmda_cv_method->invoke( $sysmda_counting_controller, $sysmda_perf_post );
+$sysmda_ad_method->invoke( $sysmda_counting_controller, $sysmda_perf_post );
+check( 'perf2: without a snapshot each consumer computes its own', 2, $sysmda_counting_metadata->dependency_calls );
+
+// The value must be identical either way, or the optimisation would be a
+// behaviour change wearing a performance label.
+check(
+	'perf2: the ETag is byte-identical with and without the snapshot',
+	$sysmda_cv_method->invoke( $sysmda_counting_controller, $sysmda_perf_post ),
+	$sysmda_cv_method->invoke( $sysmda_counting_controller, $sysmda_perf_post, $sysmda_snapshot )
+);
+
 // ─── LlmsTxtController: line escaping ─────────────────────────────────
 
 // escape_link_text: escape characters that would break [text](url).
@@ -4253,6 +4350,167 @@ check(
 $sysmda_has_pc_method = sysmda_reflection_method( BricksAdapter::class, 'tree_has_post_content_element' );
 check( 'bricks adapter: detects a post-content element', true, $sysmda_has_pc_method->invoke( null, array( array( 'name' => 'post-content' ) ) ) );
 check( 'bricks adapter: an ordinary tree has none', false, $sysmda_has_pc_method->invoke( null, $sysmda_bricks_tree ) );
+
+// ─── B1: a NESTED template is a dependency too ──────────────────────────────
+//
+// Measured on a real Bricks 2.3.12 install before this was written (see
+// docs/review-followup-plan.md §1): on a `page -> outer -> inner` chain,
+// editing ONLY the inner template changed the rendered document while
+// fingerprint() stayed byte-identical, so the `.md` served the stale body for
+// the full TTL and answered a conditional request 304. The rendering half is
+// Bricks' own — Element_Template::render() loads the referenced template's
+// tree and renders it through [bricks_template], which walks a nested
+// `template` element the same way — so the dependency walk has to recurse too.
+//
+// Negative control for the whole block: reverting collect_template_refs() to a
+// single pass over the page's own elements flips the four "moves" assertions.
+
+/** Registers a bricks_template post with its own stored tree. */
+$sysmda_bricks_template = static function ( $id, $modified, array $tree ) {
+	$GLOBALS['sysmda_test_posts'][ $id ] = new WP_Post(
+		array(
+			'ID'                => $id,
+			'post_type'         => 'bricks_template',
+			'post_modified_gmt' => $modified,
+		)
+	);
+	$GLOBALS['sysmda_test_meta'][ $id ]  = array( '_bricks_page_content_2' => $tree );
+};
+
+/** A tree whose single element references $id through a `template` element. */
+$sysmda_bricks_ref = static function ( $id, $element_id = 'tpl' ) {
+	return array(
+		array(
+			'id'       => $element_id,
+			'name'     => 'template',
+			'settings' => array( 'template' => $id ),
+		),
+	);
+};
+
+$sysmda_bricks_template( 881, '2026-09-01 10:00:00', $sysmda_bricks_ref( 882, 'inner-ref' ) ); // outer -> inner
+$sysmda_bricks_template( 882, '2026-09-01 10:00:00', array( array( 'id' => 'leaf', 'name' => 'heading', 'settings' => array( 'text' => 'INNER_SENTINEL_V1' ) ) ) );
+
+$sysmda_nested_page   = $sysmda_bricks_post( $sysmda_bricks_ref( 881 ), 'bricks', 970 );
+$sysmda_nested_fp_v1  = $sysmda_bricks->fingerprint( $sysmda_nested_page );
+
+check( 'bricks B1: a nested chain still produces a templates part', true, isset( $sysmda_nested_fp_v1['templates'] ) && '' !== $sysmda_nested_fp_v1['templates'] );
+
+// The measured defect itself: only the INNER template is edited. The page's
+// tree, the page's post row and the outer template are all untouched.
+$GLOBALS['sysmda_test_posts'][882]->post_modified_gmt = '2026-09-01 11:30:00';
+check(
+	'bricks B1: editing only the nested template moves the fingerprint',
+	true,
+	$sysmda_nested_fp_v1['templates'] !== $sysmda_bricks->fingerprint( $sysmda_nested_page )['templates']
+);
+
+// The page's own tree hash must NOT move for any of this: the whole point is
+// that the templates part is the only thing carrying out-of-post state.
+check(
+	'bricks B1: the page tree hash is untouched by a template edit',
+	$sysmda_nested_fp_v1['blob'],
+	$sysmda_bricks->fingerprint( $sysmda_nested_page )['blob']
+);
+
+// Reassigning the outer template to a different inner one is a different
+// document with the same dates, so the part has to move on the reference too.
+$sysmda_nested_fp_v2 = $sysmda_bricks->fingerprint( $sysmda_nested_page );
+$sysmda_bricks_template( 883, '2026-09-01 10:00:00', array() );
+$GLOBALS['sysmda_test_meta'][881]['_bricks_page_content_2'] = $sysmda_bricks_ref( 883, 'inner-ref' );
+check(
+	'bricks B1: reassigning the nested reference moves the fingerprint',
+	true,
+	$sysmda_nested_fp_v2['templates'] !== $sysmda_bricks->fingerprint( $sysmda_nested_page )['templates']
+);
+
+// A reference to a template that does not exist records `missing` rather than
+// being skipped: creating it later changes the rendered body, and a skipped
+// reference would leave the validator exactly where it was.
+$GLOBALS['sysmda_test_meta'][881]['_bricks_page_content_2'] = $sysmda_bricks_ref( 884, 'inner-ref' );
+$sysmda_missing_fp = $sysmda_bricks->fingerprint( $sysmda_nested_page );
+$sysmda_bricks_template( 884, '2026-09-01 10:00:00', array() );
+check(
+	'bricks B1: creating a previously missing nested template moves the fingerprint',
+	true,
+	$sysmda_missing_fp['templates'] !== $sysmda_bricks->fingerprint( $sysmda_nested_page )['templates']
+);
+
+// Deleting it moves it back the other way, for the same reason.
+unset( $GLOBALS['sysmda_test_posts'][884] );
+check(
+	'bricks B1: deleting a nested template moves the fingerprint',
+	true,
+	$sysmda_missing_fp['templates'] === $sysmda_bricks->fingerprint( $sysmda_nested_page )['templates']
+);
+
+// Malformed stored data, exactly as in lineage_classes(): a ring of templates
+// must end the walk instead of recursing forever. `$seen` is the guard, and it
+// is also the deduplicator — a template referenced twice is one dependency.
+$sysmda_bricks_template( 891, '2026-09-01 10:00:00', $sysmda_bricks_ref( 892, 'ring-b' ) );
+$sysmda_bricks_template( 892, '2026-09-01 10:00:00', $sysmda_bricks_ref( 891, 'ring-a' ) );
+$sysmda_ring_page = $sysmda_bricks_post( $sysmda_bricks_ref( 891 ), 'bricks', 971 );
+check( 'bricks B1: a cyclic template chain terminates', true, '' !== $sysmda_bricks->fingerprint( $sysmda_ring_page )['templates'] );
+
+// A template that references itself is the degenerate ring.
+$sysmda_bricks_template( 893, '2026-09-01 10:00:00', $sysmda_bricks_ref( 893, 'self' ) );
+$sysmda_self_page = $sysmda_bricks_post( $sysmda_bricks_ref( 893 ), 'bricks', 972 );
+check( 'bricks B1: a self-referencing template terminates', true, '' !== $sysmda_bricks->fingerprint( $sysmda_self_page )['templates'] );
+
+// Deduplication: the same template referenced twice on one page is one
+// dependency, so both pages below describe the same dependency set.
+$sysmda_bricks_template( 894, '2026-09-01 10:00:00', array() );
+$sysmda_twice_page = $sysmda_bricks_post(
+	array_merge( $sysmda_bricks_ref( 894, 'a' ), $sysmda_bricks_ref( 894, 'b' ) ),
+	'bricks',
+	973
+);
+$sysmda_once_page = $sysmda_bricks_post( $sysmda_bricks_ref( 894, 'a' ), 'bricks', 974 );
+check(
+	'bricks B1: a template referenced twice contributes once',
+	$sysmda_bricks->fingerprint( $sysmda_once_page )['templates'],
+	$sysmda_bricks->fingerprint( $sysmda_twice_page )['templates']
+);
+
+// MAX_TEMPLATE_DEPTH is the backstop behind `$seen`, for a chain the set cannot
+// describe. A chain longer than the cap terminates and keeps everything it
+// reached; the elements beyond it are the pre-fix behaviour for that branch.
+$sysmda_deep_first = 900;
+for ( $sysmda_i = 0; $sysmda_i < BricksAdapter::MAX_TEMPLATE_DEPTH + 3; $sysmda_i++ ) {
+	$sysmda_bricks_template(
+		$sysmda_deep_first + $sysmda_i,
+		'2026-09-01 10:00:00',
+		$sysmda_bricks_ref( $sysmda_deep_first + $sysmda_i + 1, 'next' )
+	);
+}
+$sysmda_deep_page = $sysmda_bricks_post( $sysmda_bricks_ref( $sysmda_deep_first ), 'bricks', 975 );
+$sysmda_deep_fp   = $sysmda_bricks->fingerprint( $sysmda_deep_page );
+check( 'bricks B1: an over-deep chain terminates and still fingerprints', true, '' !== $sysmda_deep_fp['templates'] );
+
+// The cap truncates rather than failing: a template within the cap still moves
+// the value, one beyond it does not. Asserting both is what makes the cap a
+// documented boundary rather than an unverified constant.
+$GLOBALS['sysmda_test_posts'][ $sysmda_deep_first + 1 ]->post_modified_gmt = '2026-09-02 12:00:00';
+check(
+	'bricks B1: a template inside the depth cap still moves the fingerprint',
+	true,
+	$sysmda_deep_fp['templates'] !== $sysmda_bricks->fingerprint( $sysmda_deep_page )['templates']
+);
+
+$sysmda_deep_fp2 = $sysmda_bricks->fingerprint( $sysmda_deep_page );
+$GLOBALS['sysmda_test_posts'][ $sysmda_deep_first + BricksAdapter::MAX_TEMPLATE_DEPTH + 1 ]->post_modified_gmt = '2026-09-03 12:00:00';
+check(
+	'bricks B1: beyond the depth cap the walk has stopped (documented boundary)',
+	$sysmda_deep_fp2['templates'],
+	$sysmda_bricks->fingerprint( $sysmda_deep_page )['templates']
+);
+
+// A post the adapter does not claim contributes nothing, nested or not.
+check(
+	'bricks B1: an unclaimed post still fingerprints to nothing',
+	array(),
+	$sysmda_bricks->fingerprint( $sysmda_bricks_post( $sysmda_bricks_ref( 881 ), 'wordpress', 976 ) )
+);
 
 // ─── ContentRenderer: the page-builder adapter seam ────────────────────────
 

@@ -1,7 +1,8 @@
 # Exclusion scanner — discovering what the `.md` is actually publishing
 
-> Implementation plan. Status: **parked, not started.** Written against
-> `main @ 0.38.2`, revised for `0.39.0`.
+> Implementation plan. **The status of this work lives in
+> [`STATUS.md`](STATUS.md), not here** — one place, so the two cannot disagree.
+> Written against `main @ 0.38.2`, revised for `0.39.0`.
 >
 > Deferred by the maintainer in August 2026, after the measurement in §2 and
 > before any code: scanning the content corpus is work to do "when the plugin is

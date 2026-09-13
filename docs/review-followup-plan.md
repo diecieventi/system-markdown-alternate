@@ -1,32 +1,18 @@
-# External review follow-up — the handoff
+# The `0.50.0` external review — findings and what was done about each
 
-**Status: 10 September 2026, after `0.51.0`.**
+**This file is the reasoning, not the status.** What is still open, and what
+unblocks it, is in [`STATUS.md`](STATUS.md) — one place, so the two cannot
+disagree. Read this one when you pick an item up: every entry records the
+measurement that established it, the alternatives that were rejected, and the
+acceptance it owes, none of which should be re-derived.
 
-| | |
-|---|---|
-| **Shipped in `0.50.1`** | R1, R4, R6, R7 |
-| **Shipped in `0.51.0`** | R5 (+ the larger validator finding it uncovered), R2, and Phase 2 of the private fidelity plan (table grids) |
-| **Open, ready to build** | **B1** — measured and confirmed, needs code |
-| **Open, blocked on one query** | **R3** — corpus scan came back empty but inconclusive |
-| **Open, small** | **PERF1**, **PERF2** |
-| **Open, recommended decline** | **H1** |
+Of the eight findings, **six are shipped** — R1, R4, R6 and R7 in `0.50.1`; R2
+and R5 in `0.51.0` — along with B1, PERF1 and PERF2 in `0.52.0`. **R3** stays
+parked on one SQL query and **H1** carries a recommendation to decline; both
+are in `STATUS.md`, with their gate.
 
-## Pick up here
-
-The next piece of work is **B1** (§1 below). It is measured, confirmed, scoped,
-and independent of everything else in this file. Nothing has to be re-derived
-before starting it — the measurement, its result and the shape of the fix are
-all recorded in §1.
-
-Two things worth doing in the same session, because both are cheap and one of
-them may close an item for free:
-
-1. **Run R3's corpus query on the production reference site** (§4 has the SQL).
-   The three connected installs answered "no occurrences", but none of them
-   holds a single synced pattern, so the denominator is zero and the answer
-   carries no information. One query decides whether R3 is work or a note.
-2. **PERF1** (§5) is two lines and belongs in whatever next touches
-   `serve_markdown()`.
+Finding IDs are the review's own, kept so the two documents can be read side by
+side.
 
 The rest of this file is the reasoning behind what already shipped. It is kept
 because each entry records a measurement or a rejected alternative that would
@@ -40,8 +26,9 @@ otherwise be re-derived — not because any of it is pending.
   (`private-security/code-review-0.50.0-2026-09-07.md`), where it was written
   because it carried the reproduction of an unfixed disclosure defect. That
   defect is R1, now fixed, so everything in this file is stated in the open.
-- The table work has its own plan in the private repository
-  (`private-plans/markdown-fidelity-plan.md`), both phases now shipped.
+- The table work has its own record in
+  [`markdown-fidelity-plan.md`](markdown-fidelity-plan.md), both phases shipped
+  (it lived in the private companion repository until then).
 - Durable decisions from all of this are in `AGENTS.md`; the two public
   contracts are `docs/output-format.md` and `docs/filters.md`; the
   real-WordPress checks are in `docs/staging-acceptance.md` and `AGENTS.md`'s
@@ -73,7 +60,7 @@ pattern is never expanded, anywhere"), with the corollary that generalizes it:
 | R5 | A plugin version change bumps the cache salt, so an upgrade stops date-only revalidation | `AdminSettings::maybe_bump_for_plugin_version()` |
 | — | **`Last-Modified` is withheld whenever the date is not a usable validator** — found while measuring R5, and the reason R5's own fix would otherwise have been a no-op on most hosting | `MarkdownController::advertised_modified_timestamp()` |
 | R2 | A Bricks leaf's span now carries its ancestors' classes, so an exclusion on a container reaches the description fallback and the enriched `/llms.txt` | `BricksAdapter::lineage_classes()` |
-| — | **Table grids** (Phase 2 of the private fidelity plan, not a review finding): a table with no header of its own keeps its first row as data, and `colspan`/`rowspan` are expanded so values stay in their own column | `ContentRenderer::normalize_tables()` |
+| — | **Table grids** (Phase 2 of [`markdown-fidelity-plan.md`](markdown-fidelity-plan.md), not a review finding): a table with no header of its own keeps its first row as data, and `colspan`/`rowspan` are expanded so values stay in their own column | `ContentRenderer::normalize_tables()` |
 
 **The second one was not in the review, and it changes how R5 has to be read.**
 The recommended fix below works by making `date_is_strong_validator()` return
@@ -105,7 +92,7 @@ reproduced the exact column shift the pass exists to prevent.
 Open items first in intent, but kept in the review's own order so the two
 documents read side by side. Each heading says whether it is shipped or open.
 
-### 1. B1 — nested Bricks templates: **measured, confirmed, needs code**
+### 1. B1 — nested Bricks templates — **shipped in `0.52.0`**
 
 The measurement this plan made blocking was taken on 10 September 2026, on
 `sma-bricks-instawp-co` (Bricks 2.3.12; `BricksAdapter.php` and
@@ -134,12 +121,26 @@ through the `[bricks_template]` shortcode, which walks a nested `template`
 element the same way. The recursion is real, and `referenced_template_fingerprint()`
 walks only the page's own top-level elements.
 
-**Implement** a bounded, deduplicated recursive walk with cycle protection,
-following the shape of the synced-pattern dependency walk in `MetadataBuilder`.
-Measure the added cost: this runs on every request, `304`s included, and the
-existing budget (~0.09 ms on a 60-element tree) is the baseline to compare
-against. Test nested edits, deletion, reassignment, repeated references and
-cycles.
+**Implemented** as `BricksAdapter::collect_template_refs()`: a bounded,
+deduplicated recursive walk with cycle protection, following the shape of
+`MetadataBuilder::collect_pattern_refs()`. `$seen` is both the cycle guard and
+the deduplicator; `MAX_TEMPLATE_DEPTH` (10) is the backstop behind it, for a
+chain the set cannot describe.
+
+**Cost, measured on the same staging rather than assumed** — this runs on every
+request, `304`s included. The walk adds one `get_post()` plus one
+`get_post_meta()` per *distinct* template reached: **0.005 ms warm, 0.43 ms
+cold**, so 0.05 ms / 4.3 ms at the depth cap, against the ~1000-1200 ms `.md`
+TTFB. A page with no `template` element pays nothing at all, which is every
+page on a site that does not use Bricks templates. For scale, the existing blob
+hash is ~0.09 ms on a 60-element tree, and `fingerprint()` as a whole measured
+0.0143 ms on the staging's real 6-element page.
+
+Covered in the suite: a nested edit, reassignment, a missing template being
+created and then deleted, a two-template ring, a self-reference, a template
+referenced twice contributing once, and both sides of the depth cap. The
+negative control is the point — disabling the recursion flips exactly the four
+assertions that depend on it.
 
 This is **not** the documented `cid` component limitation. Do not close it by
 pointing at that one, and do not widen the fix to components.
@@ -347,7 +348,7 @@ different; non-overridden fields keep their defaults; nested patterns and severa
 named blocks keep their context; exclusions, code-region masking and the cycle
 guard still hold; behaviour on a WordPress without overrides is unchanged.
 
-### 5. PERF1 / PERF2 — small, and unblocked now that R5 has shipped
+### 5. PERF1 / PERF2 — **both shipped in `0.52.0`**
 
 - **PERF1 (HEAD).** `serve_markdown()` renders the body even for `HEAD`, which
   the server then discards. An early exit after the headers is two lines. Do it
@@ -379,6 +380,17 @@ guard still hold; behaviour on a WordPress without overrides is unchanged.
   has to be deliberate either way — and note that a snapshot *reduces* the
   count, which `docs/filters.md` already permits by requiring those callbacks to
   be cheap and side-effect-free.
+
+  **What shipped is narrower than "request-local", and the narrowing is the
+  finding.** A snapshot keyed by post ID and held for the whole request was
+  written first, and broke fourteen existing assertions — every one of them a
+  case where the configuration legitimately changes between two evaluations for
+  the same post. That is not a test artefact: a memo living longer than one
+  response outlives a settings change, or a save, in the same process.
+  `serve_markdown()` therefore computes the pair once and **hands it to both
+  callees**, the same shape `0.51.0` already used for the advertised date, and
+  every caller may omit it and have it computed — which is what leaves
+  `prewarm()` (one `cache_version()` call, no second reader) untouched.
 
 ### 6. H1 — literal text in the `# Title` — **recommendation: decline, or do it narrowly**
 

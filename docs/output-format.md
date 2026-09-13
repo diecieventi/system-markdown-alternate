@@ -558,6 +558,12 @@ brief, a successful Markdown response carries:
   Authenticated `.md` requests are rebuilt in the visitor's context, bypass the
   shared body cache and carry neither validator; they are never answered `304`.
 
+  A `HEAD` response carries exactly the headers its `GET` would and no body
+  (since `0.52.0` the document is not even built, because the server discards
+  it). No `Content-Length` is sent, so nothing advertised depends on the body
+  having been produced — but a site filter with side effects, including
+  `sysmda_markdown_output`, does not run for such a request.
+
   Conditional headers are honoured on `GET` and `HEAD` only (since `0.50.1`).
   On any other method the same headers are a precondition rather than a
   revalidation — a failed `If-None-Match` there is a `412`, never a `304` — and
