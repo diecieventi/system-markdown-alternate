@@ -57,22 +57,13 @@ class BuilderDetector {
 	/**
 	 * Builders that will never be supported, whatever happens.
 	 *
-	 * Decided with the maintainer in August 2026: a post built with one of
-	 * these has no Markdown representation, full stop. They are not waiting for
-	 * anything.
+	 * Decided with the maintainer in August 2026 and closed for Elementor in
+	 * September 2026: a post built with one of these has no Markdown
+	 * representation, full stop. They are not waiting for anything, and there
+	 * is no second list of builders that are — an adapter is written when a
+	 * builder is taken on, as Bricks was, not promised in a constant.
 	 */
-	const NEVER_SUPPORTED = array( 'divi', 'wpbakery', 'oxygen', 'beaver-builder', 'breakdance' );
-
-	/**
-	 * Builders that are vetoed only until their adapter exists.
-	 *
-	 * The list is how the work is phased: one mechanism, incremental coverage,
-	 * and no window in which an empty or wrong `.md` is published. `bricks`
-	 * moved out of here in Phase 2 (`BricksAdapter`), with no other edit —
-	 * that is the whole point of the phasing mechanism. Elementor is parked
-	 * and may never move (see docs/page-builders-plan.md).
-	 */
-	const AWAITING_ADAPTER = array( 'elementor' );
+	const NEVER_SUPPORTED = array( 'elementor', 'divi', 'wpbakery', 'oxygen', 'beaver-builder', 'breakdance' );
 
 	/**
 	 * How each builder declares, per post, that it renders the front end.
@@ -186,13 +177,13 @@ class BuilderDetector {
 	 * @return string[]
 	 */
 	public static function unsupported_builders( \WP_Post $post ): array {
-		$builders = array_merge( self::NEVER_SUPPORTED, self::AWAITING_ADAPTER );
+		$builders = self::NEVER_SUPPORTED;
 
 		/**
 		 * Filters the page builders whose posts have no Markdown representation.
 		 *
-		 * Defaults to every builder the plugin can detect, because none of them
-		 * has an adapter yet. Remove a key to serve that builder's posts again —
+		 * Defaults to every builder the plugin can detect except `bricks`, which
+		 * has an adapter. Remove a key to serve that builder's posts again —
 		 * which means accepting whatever the ordinary pipeline makes of them, an
 		 * empty document for the meta-based builders and layout chrome converted
 		 * as prose for the shortcode-based ones. Return an empty array to switch

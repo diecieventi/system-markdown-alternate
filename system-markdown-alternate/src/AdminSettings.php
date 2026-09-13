@@ -1369,7 +1369,7 @@ class AdminSettings {
 			return '';
 		}
 
-		$vetoed  = array_merge( BuilderDetector::NEVER_SUPPORTED, BuilderDetector::AWAITING_ADAPTER );
+		$vetoed  = BuilderDetector::NEVER_SUPPORTED;
 		$parts   = array();
 		$flagged = array();
 

@@ -97,15 +97,110 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
   and already-resolved markup for free. Nothing of the engine proposal survives
   it.
 
-- **Server-side diagnostics** (parked, *future thought* — we will revisit):
+- **Server-side diagnostics: removed from the active plan, not pending**
+  (July 2026):
   a read-only, in-process admin view of per-post servability, `.md` preview,
   size/token estimates, stripped/unconverted markup and unresolved internal
-  links. Removed from the active plan in July 2026: `strip_tags()` cannot detect
+  links. Why it was dropped: `strip_tags()` cannot detect
   all conversion loss, `url_to_postid() === 0` does not prove a link is broken,
   and an in-process comparison cannot measure the public response through its
   cache/proxy layers. Do not promote it back to a plan without real demand and a
   deliberately small, read-only MVP on a separate admin page. The only shipped
   request-side telemetry remains the count-only `.md` hit counter above.
+
+- **Escaping Markdown syntax in the `# Title`: measured, declined**
+  (September 2026, H1 of the `0.50.0` external review). The H1 is assembled by
+  concatenating the stripped title after `# `, so a title reading
+  `Literal *stars*` publishes as emphasis. The plugin's own `0.46.1` and
+  `0.47.1` decisions ("a text field is text") argue for escaping it, and the
+  review proposed reusing `MarkdownConverter::escape_inline()`. **That remedy
+  does not work**, measured against `league/html-to-markdown` 5.1.1 as pinned:
+
+  ```
+  escape_inline( 'Tips & Tricks' )     => 'Tips &amp; Tricks'
+  escape_inline( 'Under_scores_here' ) => 'Under\_scores\_here'
+  ```
+
+  `escape_inline()` runs `htmlspecialchars()` before converting, so it puts an
+  HTML entity in the H1 of every title containing an ampersand — common — and
+  escapes intraword underscores CommonMark does not treat as emphasis anyway.
+  The only correct fix is a title-specific escaper covering the characters
+  active at the start of and inside a heading line, which changes bytes for
+  every title containing `*`, `_` or `[` and moves a documented output
+  contract. Declined against a defect nobody has reported; see the durable
+  decision in `AGENTS.md`. If it is ever taken, it is the narrow escaper,
+  never `escape_inline()`.
+
+- **A `.md` for the site homepage: postponed indefinitely, shape recorded**
+  (decided July 2026, moved out of the backlog September 2026). Re-evaluate
+  only if the `.md` hit counter ever shows real demand; until then this is not
+  work, and the separate "NO synthesized homepage index" decision in `AGENTS.md`
+  stands unchanged. The shape, if it is ever taken, is already settled and is
+  recorded here so it is not re-derived: **static front page only**
+  (`show_on_front = 'page'` — a real `WP_Post` through the existing pipeline),
+  behind its own opt-in toggle (e.g. `sysmda_markdown_homepage`, default off)
+  independent of `sysmda_markdown_supported_post_types`; when the front page is
+  the blog index, **skip** it (an archive, no `WP_Post`) and say so in the
+  panel. Four implementation notes that cost time to work out:
+  - URL `https://example.com/.md`: `url_to_postid('/')` may return 0 for the
+    front page, so resolution needs a `get_option( 'page_on_front' )` fallback;
+    trailing-slash and query handling as today.
+  - Eligibility through `PostSupport::is_servable()` — single source of truth,
+    without loosening the rule for anything else.
+  - `print_alternate_link()` guards on `is_singular( $types )`, which is false
+    for a front page whose type is not enabled: a guard to revisit.
+  - Verify conversion quality first — front pages are block-heavy — and cover
+    both `show_on_front` branches with tests.
+
+- **Three ideas from `Serve Markdown` (`serve-md`), recorded and not planned**
+  (read in full August 2026; wordpress.org, `akumarjain`, v1.0). Nobody has
+  asked for any of them and none is greenlit; they are here so the reading is
+  not redone. That plugin is smaller and less mature on every axis that matters
+  here — regex-based HTML→Markdown instead of a DOM pipeline, `the_content`
+  instead of `render_block()` (reintroducing exactly the injected related/CTA
+  content this plugin's rendering choice avoids), no caching, no `ETag`/`304`,
+  and an `Accept` parser that never compares against `text/html`'s own q-value
+  and sends no `Vary`. None of that is worth adopting. Three narrower ideas
+  are:
+  - **Per-post opt-out.** A single postmeta checkbox in a meta box, independent
+    of every exclusion axis this plugin already has (post type, post format,
+    taxonomy inclusion, page-builder veto, password). None of those cover "this
+    one post, for an editorial reason". Cheap and additive; the natural
+    implementation reuses the existing `sysmda_post_is_servable` veto filter
+    rather than adding a gate to `is_servable()`.
+  - **Category/tag exclusion.** Excluding whole taxonomy terms is an axis this
+    plugin does not have at all. Same discipline as the extra custom fields:
+    explicit, opt-in, additive, never auto-detected.
+  - **A per-request crawler log — evaluated and NOT proposed**, because it
+    reopens a decision already made on purpose. Their logger stores, per
+    Markdown request, the raw IP, the full User-Agent and a fine-grained
+    timestamp. That is exactly what the count-only hit-counter decision forbids
+    here, and exactly the shape "server-side diagnostics" already declined. What
+    *did* stay inside both boundaries — a per-known-bot-name breakdown of the
+    bot total — **shipped in `0.48.0`**.
+
+- **Freeform content in a mixed post never gets `wpautop()` on the main render
+  path either** (noticed August 2026 while fixing the appended path in
+  `0.47.1`; recorded, deliberately not changed). `ContentRenderer::render()`'s
+  block branch calls `render_block()` in a loop rather than `do_blocks()`, so a
+  `blockName === null` block's text is emitted verbatim — the same gap the
+  appended path had. It rarely shows there because a freeform block's saved
+  markup usually already contains its own `<p>` tags; the appended path bit
+  because its input is genuinely bare text. Changing how every mixed post's body
+  renders is not a patch-release change and needs its own verification against
+  real content, so it is a separate decision rather than a silent fix. If ever
+  picked up, the shape is the same three lines `render_appended()` now uses.
+
+- **Formalized LLM signals in `/llms.txt`: an idea, not a plan.** Worth
+  revisiting only if the Cloudflare-and-others specification settles; the hook
+  is already in place (`sysmda_llms_txt_footer`), so nothing needs building in
+  advance.
+
+- **Enriching `/llms.txt` further: an open question with no candidates.** Beyond
+  the existing enriched mode there is nothing specific proposed — the item read
+  "candidates TBD" for as long as it sat in the backlog, which is what makes it
+  a question rather than work. Recorded here so it stays askable without being
+  re-read and re-dismissed as an open item every release.
 
 ## Infrastructure measurements
 
