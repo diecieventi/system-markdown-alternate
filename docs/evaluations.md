@@ -202,6 +202,15 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
   a question rather than work. Recorded here so it stays askable without being
   re-read and re-dismissed as an open item every release.
 
+- **R3, synced-pattern instance overrides: measured, closed without a fix**
+  (September 2026). `BlockCleaner` drops a `core/block` instance's `content`
+  attribute, so a pattern override would be published as the pattern's default
+  text. On the production reference site — the one corpus that uses synced
+  patterns — neither published pattern declares `core/pattern-overrides`
+  bindings, so no override can exist. The measurement, the query pitfalls and
+  the fix shape to use if a site that authors overrides ever reports it are in
+  [`review-followup-plan.md`](review-followup-plan.md).
+
 ## Infrastructure measurements
 
 - **The caching contract is done; the `304` is a host property, not a gap.**
@@ -261,7 +270,7 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
 
 - **Polylang free: translations sharing a slug — measured, not a plugin
   defect** (September 2026). **Polylang Pro is not covered, and that half is
-  open** — `STATUS.md` item 4. The question: the `.md` suffix route resolves the post
+  open** — `STATUS.md` item 3. The question: the `.md` suffix route resolves the post
   through `url_to_postid()`, which knows nothing about languages, so does it
   serve the wrong translation when two translations share a URL slug? Measured
   on `sma.instawp.co` with Polylang 3.8.9 (free) and `0.53.0`: English as the

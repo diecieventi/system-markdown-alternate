@@ -1825,6 +1825,16 @@ decisions*; this section is only about where the open work is written down.
   its golden fixtures, and answers a defect nobody has reported. The
   measurement is in `docs/evaluations.md` so it is not redone. If a real report
   ever arrives, the fix is the narrow escaper, never `escape_inline()`.
+- **Pattern overrides (R3) stay unfixed until a site that authors them
+  reports it** (decided September 2026, on measurement — do not reopen it as
+  code cleanup). `BlockCleaner::expand_reusable()` flattens a `core/block`
+  reference and drops its `content` attribute, so a per-instance override would
+  come out as the pattern's default text. It is the most invasive fix left from
+  the `0.50.0` review, and its audience was measured empty: on the production
+  reference site, the only corpus with synced patterns, no pattern declares
+  `core/pattern-overrides` bindings, and without them no override can exist.
+  The measurement and the fix shape to use on the day it matters are in
+  `docs/review-followup-plan.md`.
 - **NO rate limiting on `.md` requests** (decided): do not anticipate; only
   reconsider if the hit-counter data ever shows real abuse.
 - **NO synthesized homepage index** (decided, do not propose again; the
