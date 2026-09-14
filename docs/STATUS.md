@@ -21,49 +21,26 @@ backlog, because it has to be re-read and re-dismissed every time.
 > them out of the public repository. List that folder — do not infer its
 > contents from this file.
 
-Released: **0.53.0**, live on wordpress.org since 13 September 2026, and
-accepted on both staging sites on 14 September. **`0.53.1`** fixes the one
-defect that run found and carries the refreshed screenshots to the listing; it
-is tagged on merge and still has to be published.
+Released: **0.53.1**, live on wordpress.org since 14 September 2026 and
+verified the same day: the first request after an upgrade on staging, and the
+refreshed screenshots on the listing. No open defect.
 
 ## Open work
 
 | # | Item | State | What unblocks it | Detail |
 |---|---|---|---|---|
-| 1 | **Publish and verify `0.53.1`** | Prepared, not published | The two Actions taps, then a first-request staging check and a look at the listing | below |
-| 2 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
-| 3 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
-| 4 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
+| 1 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
+| 2 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
+| 3 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
 
-**1. Publish and verify `0.53.1`.** The release fixes the stale `304` the
-`0.53.0` staging run found on the **first** request after an upgrade (the
-detail is in the `0.53.1` changelog entry and in the upgrade decision in
-`AGENTS.md`). Three things close it, in order:
-
-- **Publish**: `Publish release`, then `Deploy to WordPress.org` with the tag,
-  both from the Actions tab. No `RELEASE_TOKEN` is configured, so the second
-  does not start by itself.
-- **The listing's screenshots.** PR #147 retook `screenshot-1` …
-  `screenshot-4`, but it merged the morning **after** `0.53.0` was deployed, and
-  the deploy stages `.wordpress-org/` from the release tag — so the listing
-  still serves the shots with the removed `llms.txt` tab and aside (checked on
-  `ps.w.org`: byte sizes identical to the `v0.53.0` files), with the pre-#147
-  caption for `screenshot-2`. `v0.53.1` contains the new ones; after its
-  deploy, check `ps.w.org`, not the repository.
-- **A targeted staging check**: upgrade one site `0.53.0` → `0.53.1` with a
-  re-saved plain post's `Last-Modified` in hand, and send it as
-  `If-Modified-Since` on the **first** front-end request after the upgrade.
-  It must be `200`. The second request proves nothing — it is how `0.51.0`'s
-  own check passed while the first was broken.
-
-**2. Italian translation.** The plugin is live on wordpress.org, so the old
+**1. Italian translation.** The plugin is live on wordpress.org, so the old
 blocker is gone. On translate.wordpress.org the `dev` project holds 116 strings:
 51 translated and approved, 65 untranslated, none waiting for review, with a
 locale editor already approving (`piermario`). A language pack is generated at
 90%, so ~105 of the 116 have to land. No translation files belong in this
 repository — see the i18n note in `AGENTS.md`.
 
-**3. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
+**2. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
 own `content` attribute, so the plugin publishes a synced pattern's default text
 where the page shows the per-instance override. Real, and the most invasive fix
 of the `0.50.0` review. Three connected installs scanned clean — but none of
@@ -71,7 +48,7 @@ them holds a single synced pattern, so the denominator is zero and the result
 carries no information. The SQL is in the plan; run it on the production
 reference site before spending anything.
 
-**4. Exclusion scanner.** An admin page inventorying the shortcode tags and
+**3. Exclusion scanner.** An admin page inventorying the shortcode tags and
 block names actually present in the servable corpus, so the three exclusion
 lists can be filled from evidence. The *damage* half shipped in `0.40.0` (lists
 accumulate, code samples are safe); *discovery* is what remains, and it waits on
