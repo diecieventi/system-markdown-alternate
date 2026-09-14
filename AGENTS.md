@@ -1544,6 +1544,15 @@ decisions*; this section is only about where the open work is written down.
   shipped together with the decision above: it works by making
   `date_is_strong_validator()` return false, and nginx was overriding that from
   outside PHP.
+  **Known exception, open as of `0.53.0`: the first request after the upgrade**
+  (found by the 14 September 2026 staging run, item 1 of `docs/STATUS.md`). The
+  bump is only *marked* in memory and written at `shutdown`, while
+  `date_is_strong_validator()` reads the *stored* salt — so the request that
+  detects the upgrade, and any request running before it finishes, still trusts
+  the date and can answer a pre-upgrade `If-Modified-Since` with `304`.
+  Reproduced over real HTTP on both staging sites; the second request is
+  correct. Until the fix ships, do not treat this decision as closing the stale
+  date-only `304` on upgrade entirely.
 - **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
   (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
   `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
@@ -2520,7 +2529,10 @@ not exist as far as the public API is concerned.
    next time that post is saved — which is exactly when the date starts telling
    the truth again. Since `0.51.0` a **plugin version change** marks that same
    bump (`maybe_bump_for_plugin_version()`), so an upgrade that changes how
-   content converts stops the date path for every post older than it.
+   content converts stops the date path for every post older than it — from the
+   request *after* the one that detects it, as of `0.53.0`: the bump is written
+   at `shutdown`, so that first request still reads the old salt (see the
+   known exception in the durable decision).
    **And the refusal now withholds the `Last-Modified` header itself**
    (`advertised_modified_timestamp()`): the decision is worthless while the
    response still advertises the date, because a reverse proxy will revalidate
@@ -2670,8 +2682,10 @@ as required for dependency review by WordPress.org Plugin Check.
   day the `Publish release` workflow came into use. Every deploy from then on is
   a `workflow_dispatch`.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
-  and are updated with `10up/action-wordpress-plugin-asset-update` from the
-  repo's `.wordpress-org/` folder.
+  and are synced by the deploy workflow itself (`ASSETS_DIR: .wordpress-org`),
+  **from the release tag it checks out** — there is no separate asset-update
+  workflow, so a change to `.wordpress-org/` merged after a release's tag waits
+  for the next release.
   **A release that changes the settings page owes new screenshots, and this is
   a publish gate rather than a merge gate** (added September 2026, after Codex
   caught it on PR #146). `.wordpress-org/` is synced verbatim on every deploy,
@@ -2683,7 +2697,11 @@ as required for dependency review by WordPress.org Plugin Check.
   code change (a browser and a WordPress admin session are required), so a
   PR **cannot** close this — it records the debt in `docs/STATUS.md` and the
   acceptance run pays it. Check the shots against the panel whenever a tab,
-  a field or the layout moves.
+  a field or the layout moves. **The debt is paid when the listing shows the
+  new shots, not when the repository does**: retake them *before* tagging the
+  release that needs them. `0.53.0` is the example the other way round — the
+  shots were retaken in #147 the morning after the deploy, the row was closed
+  on merge, and the listing kept serving the old ones.
 
 ### Playground Live Preview
 
@@ -2927,10 +2945,12 @@ Test posts:
     with no notice, and every other setting survives that save. Deleting the
     plugin removes the five `sysmda_llms_txt_*` options. Run this on an
     **upgraded** install, not a fresh one: a fresh install cannot show that the
-    URL was released or that the old options are cleaned up. While the panel is
-    open, **retake `screenshot-1` … `screenshot-4`** (see `docs/STATUS.md`):
-    they still carry the removed tab and aside, and the listing is synced from
-    them on the next deploy.
+    URL was released or that the old options are cleaned up. The screenshots
+    were retaken in PR #147, but that merged **after** `0.53.0` was deployed,
+    and the deploy stages `.wordpress-org/` from the release tag — so the
+    listing keeps the old shots until the next tagged release is deployed (see
+    `docs/STATUS.md`). Check the listing's `screenshot-1` … `screenshot-4`
+    after that deploy, not the repository.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.
