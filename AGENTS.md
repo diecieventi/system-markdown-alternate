@@ -1544,6 +1544,15 @@ decisions*; this section is only about where the open work is written down.
   shipped together with the decision above: it works by making
   `date_is_strong_validator()` return false, and nginx was overriding that from
   outside PHP.
+  **Known exception, open as of `0.53.0`: the first request after the upgrade**
+  (found by the 14 September 2026 staging run, item 1 of `docs/STATUS.md`). The
+  bump is only *marked* in memory and written at `shutdown`, while
+  `date_is_strong_validator()` reads the *stored* salt — so the request that
+  detects the upgrade, and any request running before it finishes, still trusts
+  the date and can answer a pre-upgrade `If-Modified-Since` with `304`.
+  Reproduced over real HTTP on both staging sites; the second request is
+  correct. Until the fix ships, do not treat this decision as closing the stale
+  date-only `304` on upgrade entirely.
 - **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
   (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
   `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
@@ -2520,7 +2529,10 @@ not exist as far as the public API is concerned.
    next time that post is saved — which is exactly when the date starts telling
    the truth again. Since `0.51.0` a **plugin version change** marks that same
    bump (`maybe_bump_for_plugin_version()`), so an upgrade that changes how
-   content converts stops the date path for every post older than it.
+   content converts stops the date path for every post older than it — from the
+   request *after* the one that detects it, as of `0.53.0`: the bump is written
+   at `shutdown`, so that first request still reads the old salt (see the
+   known exception in the durable decision).
    **And the refusal now withholds the `Last-Modified` header itself**
    (`advertised_modified_timestamp()`): the decision is worthless while the
    response still advertises the date, because a reverse proxy will revalidate
