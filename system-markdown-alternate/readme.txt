@@ -4,7 +4,7 @@ Tags: markdown, ai, llm, content negotiation, content discovery
 Requires at least: 6.1
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.53.0
+Stable tag: 0.53.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -188,6 +188,10 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 
 == Changelog ==
 
+= 0.53.1 =
+
+* Fixed: right after the plugin was updated, the very first request for a page's Markdown could still tell a client that revalidates by date that its copy was current, so that client kept the version from before the update. `0.51.0` made an update count as a change, but only from the second request on; it now counts from the first. Nothing to do after updating.
+
 = 0.53.0 =
 
 * **Removed: the `/llms.txt` endpoint.** This plugin no longer generates that file, and no longer advertises one with the `rel="describedby"` link. Building a site-wide index was the only thing here that was not a Markdown version of a single post, and it is better served by the SEO plugins that already own the site's indexes — so the scope is now exactly what the plugin's name says. The `.md` URLs, content negotiation, the `rel="alternate"` discovery links, the shortcodes and everything else are untouched.
@@ -199,17 +203,12 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 * Fixed, on **Bricks** pages built from templates: editing a template that is itself used *inside* another template left the page's Markdown untouched — the old version kept being served for up to a day, and a client asking "has this changed?" was told it had not. Only templates referenced directly by the page were being watched; a template referenced by a template now counts the same way, however deep the chain goes.
 * Faster, invisibly: a `HEAD` request (a "just the headers, please" request, used by link checkers and monitoring tools) no longer builds the document the server is going to throw away, and the two checks that decide how a response may be cached are now computed once per request instead of twice. The Markdown itself, and every header, are byte-for-byte what they were.
 
-= 0.51.0 =
-
-* Fixed: a **plugin update** did not stop date-only revalidation. An update can change how existing content converts without touching a single post — `0.50.1` did it twice — and a client that revalidates with `If-Modified-Since` alone was still told "not modified", keeping the pre-update version. A version change now invalidates the same way a settings save does.
-* Fixed, and larger than it looks: `Last-Modified` was sent on every Markdown response, including the ones where the plugin had already decided the date could not prove a copy was current (a post with custom taxonomies, a synced pattern, a featured image, or after any site-wide change). That decision only governed the plugin's own answer, while the header invited **everything else** to revalidate against the date — and a web server in front of WordPress will: measured on an ordinary nginx stack, a fresh response was converted into an empty "not modified" before it left the server, handing the reader a stale copy. The header is now sent only when the date really does determine the document; the `ETag`, which accounts for all of those inputs, is the validator in every other case.
-* Fixed: on a **Bricks** page, marking a container or section `md-exclude` removed its content from the Markdown body but not from the front-matter `description` or the page's `/llms.txt` entry, which are built from a cheaper reading of the stored layout. That reading now accounts for the elements a piece of text sits inside, so an exclusion anywhere above it applies everywhere — which is what the setting has always promised.
-* Fixed: **tables**. Markdown requires a table to have a header row, and the block editor writes one only when you switch its header section on — which is off by default. So an ordinary table published its first row of *data* as the column headings, turning values into labels. A table with no header of its own now gets an empty one and keeps every row as a row; a table that does have a header row is unchanged.
-* Fixed: merged table cells (`colspan` / `rowspan`) produced rows with the wrong number of columns, which quietly shifted every following value under the wrong heading. The grid is now filled out so each value stays in its own column.
-
 [View the full changelog](https://github.com/diecieventi/system-markdown-alternate/blob/main/CHANGELOG.md)
 
 == Upgrade Notice ==
+
+= 0.53.1 =
+Recommended for every site. Completes the 0.51.0 fix: the first request after a plugin update no longer tells a client that revalidates by date that its old copy of the Markdown is still current. Nothing to do after updating.
 
 = 0.53.0 =
 The /llms.txt endpoint is removed. If you had it enabled it stops being served after this update — generate that file with your SEO plugin instead, or another dedicated one. Everything else is unchanged: the .md URLs, negotiation, discovery links and shortcodes all keep working exactly as before, and no other setting is touched.
