@@ -132,10 +132,15 @@ the server.
   that proves it: send `If-Modified-Since` equal to the `Last-Modified` the
   response advertises, and confirm a `200` with a body.
 - **A plugin upgrade invalidates date-only revalidation** (since `0.51.0`).
-  Before updating, `curl -sI` a plain post and keep its `Last-Modified`. Update
-  the plugin, then re-request it with that `If-Modified-Since`: the response
-  must be a `200`, not a `304`. Saving that post afterwards restores the date
-  path for it.
+  Before updating, `curl -sI` a plain post and keep its `Last-Modified` (re-save
+  the post first if the header is absent — a salt newer than the post already
+  withholds it). Update the plugin, then re-request it with that
+  `If-Modified-Since` **before any other front-end request reaches the site**:
+  the response must be a `200`, not a `304`. It has to be the first request,
+  because that is the one that detects the upgrade while the salt bump is still
+  only pending — the second request proves nothing, and is exactly how `0.51.0`
+  passed while the first request was broken until `0.53.1`. Saving that post
+  afterwards restores the date path for it.
 - **An exclusion on a Bricks container reaches the description** (since
   `0.51.0`). Put `md-exclude` in the *CSS Classes* field of a Bricks **container
   or section**, not of the text element itself, and give the page no Rank Math

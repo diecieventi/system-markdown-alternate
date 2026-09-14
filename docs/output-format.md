@@ -523,6 +523,11 @@ brief, a successful Markdown response carries:
   header is not sent at all**. The `ETag`, which covers every one of those
   inputs, is then the sole validator.
 
+  A plugin upgrade counts from the very first request that runs the new
+  version: until that version has been recorded, the date is refused on every
+  post. Since `0.53.1`; from `0.51.0` to `0.53.0` that first request (and any
+  request running alongside it) still honoured the pre-upgrade date.
+
   Since `0.51.0`; before that the header was sent regardless, as information.
   It was not harmless: `Last-Modified` is a validator, and an intermediary is
   entitled to revalidate against it. Measured on an ordinary nginx-in-front-of-

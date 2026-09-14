@@ -1544,15 +1544,21 @@ decisions*; this section is only about where the open work is written down.
   shipped together with the decision above: it works by making
   `date_is_strong_validator()` return false, and nginx was overriding that from
   outside PHP.
-  **Known exception, open as of `0.53.0`: the first request after the upgrade**
-  (found by the 14 September 2026 staging run, item 1 of `docs/STATUS.md`). The
-  bump is only *marked* in memory and written at `shutdown`, while
-  `date_is_strong_validator()` reads the *stored* salt — so the request that
-  detects the upgrade, and any request running before it finishes, still trusts
-  the date and can answer a pre-upgrade `If-Modified-Since` with `304`.
-  Reproduced over real HTTP on both staging sites; the second request is
-  correct. Until the fix ships, do not treat this decision as closing the stale
-  date-only `304` on upgrade entirely.
+  **The first request after the upgrade was the exception until `0.53.1`**
+  (found by the 14 September 2026 staging run). The bump is only *marked* in
+  memory and written at `shutdown`, while `date_is_strong_validator()` reads the
+  *stored* salt — so the request that detects the upgrade, and any request
+  running before it finishes, still trusted the date and answered a pre-upgrade
+  `If-Modified-Since` with `304`. Reproduced over real HTTP on both staging
+  sites; the second request was correct, which is how `0.51.0`'s own check
+  passed. `0.53.1` makes the validator refuse the date **while the stored
+  `sysmda_version` differs from `SYSMDA_VERSION`** — an absent option included,
+  which covers a fresh install and an upgrade from before the option existed.
+  Two things not to redo: do **not** move the salt write out of `shutdown` to
+  close this (the deferred write is what makes a settings save safe, see
+  `flush_cache_salt()`), and do not test the upgrade on anything but the first
+  request. The general form: **a pending invalidation has to be visible to the
+  validator in the request that raised it**, not only once it is persisted.
 - **The URLs the plugin owns say `public, max-age=0, must-revalidate`**
   (decided July 2026, `0.29.0` — **replaces** the previous "NO freshness
   `Cache-Control` on the dedicated `.md` URLs", which was withdrawn on
@@ -2529,10 +2535,11 @@ not exist as far as the public API is concerned.
    next time that post is saved — which is exactly when the date starts telling
    the truth again. Since `0.51.0` a **plugin version change** marks that same
    bump (`maybe_bump_for_plugin_version()`), so an upgrade that changes how
-   content converts stops the date path for every post older than it — from the
-   request *after* the one that detects it, as of `0.53.0`: the bump is written
-   at `shutdown`, so that first request still reads the old salt (see the
-   known exception in the durable decision).
+   content converts stops the date path for every post older than it —
+   including the request that detects it, since `0.53.1`: the bump is written
+   at `shutdown`, so that request still reads the old salt, and the validator
+   refuses the date on its own while the stored `sysmda_version` differs from
+   `SYSMDA_VERSION` (see the durable decision).
    **And the refusal now withholds the `Last-Modified` header itself**
    (`advertised_modified_timestamp()`): the decision is worthless while the
    response still advertises the date, because a reverse proxy will revalidate
@@ -2916,7 +2923,9 @@ Test posts:
     and confirm a `200` **with a body** — a `304` there means something between
     PHP and the client is revalidating on its own. Finally, keep a plain post's
     `Last-Modified`, update the plugin, and confirm that same
-    `If-Modified-Since` is answered `200`.
+    `If-Modified-Since` is answered `200` **on the first front-end request after
+    the update** — the second proves nothing, because by then the deferred salt
+    write has landed (the `0.53.1` fix was invisible to every later request).
 
 25. **Nested Bricks templates.** A `page → outer template → inner template`
     chain (the page's `template` element points at the outer, the outer's at

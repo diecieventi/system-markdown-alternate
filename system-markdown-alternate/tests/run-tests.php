@@ -1999,6 +1999,11 @@ check( 'Link cross-relation: an alternate does not satisfy canonical', false, Ma
 $sysmda_hc_method = sysmda_reflection_method( MarkdownController::class, 'handle_conditional' );
 $sysmda_ad_method = sysmda_reflection_method( MarkdownController::class, 'advertised_modified_timestamp' );
 
+// The steady state every request after an upgrade's first one sees: the running
+// version is already recorded. The pending-upgrade case is asserted on its own
+// below; without this every date assertion here would be testing it by accident.
+$GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] = SYSMDA_VERSION;
+
 /** The modification timestamp the response would advertise for this post. */
 $sysmda_advertised = function ( $post ) use ( $sysmda_ad_method, $sysmda_controller ) {
 	return (int) $sysmda_ad_method->invoke( $sysmda_controller, $post );
@@ -2221,6 +2226,30 @@ check( 'headers: the ETag is still sent as the sole validator', true, '' !== \Di
 $GLOBALS['sysmda_test_filters']                      = array();
 $GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
 check( 'headers: no Last-Modified once the salt is newer than the post', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+
+// An upgrade the site has not finished recording (0.53.1). The bump is only
+// MARKED in memory and written at shutdown, so the request that detects the
+// upgrade still reads the pre-upgrade salt — older than the post — and trusted
+// the date: measured on both staging sites, the first request after 0.51.0 →
+// 0.53.0 answered a pre-upgrade If-Modified-Since with a bodyless 304. The
+// stored version is what tells this request an upgrade is in flight.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt']              = (string) ( strtotime( '2026-06-01 00:00:00 GMT' ) . '-a1b2c3d4' );
+$GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] = '0.0.1-previous';
+check( 'headers: no Last-Modified while an upgrade is not yet recorded', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+check( 'conditional: IMS ignored while an upgrade is not yet recorded', false, $sysmda_ims( $sysmda_cv_post, $sysmda_fresh_since ) );
+check( 'conditional: no stale 304 while an upgrade is not yet recorded', array(), $GLOBALS['sysmda_test_status'] );
+
+// Never recorded at all is the same situation: a fresh install, or an upgrade
+// from a release older than the option (0.50.x and earlier).
+unset( $GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] );
+check( 'headers: no Last-Modified before any version was recorded', '', $sysmda_last_modified_header( $sysmda_cv_post ) );
+
+// And once the running version is recorded, the date is a validator again.
+$GLOBALS['sysmda_test_options'][ AdminSettings::OPTION_VERSION ] = SYSMDA_VERSION;
+check( 'headers: Last-Modified returns once the running version is recorded', true, '' !== $sysmda_last_modified_header( $sysmda_cv_post ) );
+
+// Back to the salt-newer state the ETag-matched 304 below is written against.
+$GLOBALS['sysmda_test_options']['sysmda_cache_salt'] = (string) ( strtotime( '2026-07-02 00:00:00 GMT' ) . '-a1b2c3d4' );
 
 // And an ETag-matched 304 must not re-advertise it either: handing the date
 // back on the 304 arms the very next request's revalidation against it.

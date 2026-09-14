@@ -1083,6 +1083,21 @@ class MarkdownController {
 			return false;
 		}
 
+		// An upgrade this site has not finished recording (0.53.1). The salt
+		// bump it raises is only marked in memory and written at shutdown, so
+		// the request that detects the upgrade — and any request running before
+		// that one finishes — still reads the pre-upgrade salt below and would
+		// trust the date. Measured on two staging sites: the first request after
+		// an upgrade answered a pre-upgrade If-Modified-Since with a bodyless
+		// 304. The stored version is persisted in that same shutdown, so while
+		// it differs from the running one the bump is still pending. An absent
+		// option counts too: a fresh install, or an upgrade from a release that
+		// predates it. Moving the salt write earlier is NOT the fix — deferring
+		// it is what keeps a settings save safe (AdminSettings::flush_cache_salt()).
+		if ( SYSMDA_VERSION !== (string) get_option( AdminSettings::OPTION_VERSION, '' ) ) {
+			return false;
+		}
+
 		$modified = $this->last_modified_timestamp( $post );
 
 		// Strictly older, not "not newer". Both values have one-second
