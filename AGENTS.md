@@ -2670,8 +2670,10 @@ as required for dependency review by WordPress.org Plugin Check.
   day the `Publish release` workflow came into use. Every deploy from then on is
   a `workflow_dispatch`.
   Banner/icon/screenshots live in the SVN `/assets` folder (not in the plugin)
-  and are updated with `10up/action-wordpress-plugin-asset-update` from the
-  repo's `.wordpress-org/` folder.
+  and are synced by the deploy workflow itself (`ASSETS_DIR: .wordpress-org`),
+  **from the release tag it checks out** — there is no separate asset-update
+  workflow, so a change to `.wordpress-org/` merged after a release's tag waits
+  for the next release.
   **A release that changes the settings page owes new screenshots, and this is
   a publish gate rather than a merge gate** (added September 2026, after Codex
   caught it on PR #146). `.wordpress-org/` is synced verbatim on every deploy,
@@ -2683,7 +2685,11 @@ as required for dependency review by WordPress.org Plugin Check.
   code change (a browser and a WordPress admin session are required), so a
   PR **cannot** close this — it records the debt in `docs/STATUS.md` and the
   acceptance run pays it. Check the shots against the panel whenever a tab,
-  a field or the layout moves.
+  a field or the layout moves. **The debt is paid when the listing shows the
+  new shots, not when the repository does**: retake them *before* tagging the
+  release that needs them. `0.53.0` is the example the other way round — the
+  shots were retaken in #147 the morning after the deploy, the row was closed
+  on merge, and the listing kept serving the old ones.
 
 ### Playground Live Preview
 
@@ -2927,10 +2933,12 @@ Test posts:
     with no notice, and every other setting survives that save. Deleting the
     plugin removes the five `sysmda_llms_txt_*` options. Run this on an
     **upgraded** install, not a fresh one: a fresh install cannot show that the
-    URL was released or that the old options are cleaned up. While the panel is
-    open, **retake `screenshot-1` … `screenshot-4`** (see `docs/STATUS.md`):
-    they still carry the removed tab and aside, and the listing is synced from
-    them on the next deploy.
+    URL was released or that the old options are cleaned up. The screenshots
+    were retaken in PR #147, but that merged **after** `0.53.0` was deployed,
+    and the deploy stages `.wordpress-org/` from the release tag — so the
+    listing keeps the old shots until the next tagged release is deployed (see
+    `docs/STATUS.md`). Check the listing's `screenshot-1` … `screenshot-4`
+    after that deploy, not the repository.
 
 Always verify: `Content-Type: text/markdown; charset=utf-8`,
 `X-Robots-Tag: noindex, follow`; no private/draft/non-enabled content exposed.

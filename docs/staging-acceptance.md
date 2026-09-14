@@ -187,6 +187,45 @@ repository.
 
 ## Latest full pass
 
+- **2026-09-14 — System Markdown Alternate 0.53.0 — broad, not the full matrix; one failure**
+
+  Platforms: **both** staging sites, upgraded in place from `0.51.0` (neither
+  had received `0.52.0`) — `sma-bricks.instawp.co`, WordPress 7.1, PHP 8.4.7,
+  Bricks 2.3.13; and `sma.instawp.co`, WordPress 7.1, PHP 8.4.20,
+  GeneratePress 3.6.1. Both had `/llms.txt` enabled before the upgrade, which
+  is the state the removal fixture needs. Run after the release had already
+  reached wordpress.org, from the GitHub Release package (SHA-256 checked
+  against the published digest before install). Rollback archives were taken
+  first and removed afterwards, with every fixture this run created. The panel
+  was checked in-process (page rendered via PHP as an administrator, registered
+  settings run through their sanitizers), not in a browser.
+
+  | Check | Result |
+  |---|---|
+  | `/llms.txt` after the upgrade → WordPress 404; no `describedby` in the head or the `Link:` header; Markdown `alternate` unchanged in both | passed on both |
+  | Panel: four tabs, no aside, one form, no llms setting registered, every saved value survives sanitization | passed on both |
+  | Uninstall (`sma` only): plugin files, every `sysmda_*` option (the five `sysmda_llms_txt_*` included) and every transient removed; after reinstalling, the other settings restored byte-identical | passed |
+  | **A plugin upgrade invalidates date-only revalidation**: re-saved plain post, advertised `Last-Modified` answered `304` before the upgrade | **failed on the first request after the upgrade, on both** — `304` with no body; the second request got `200` with the body. Cause: the upgrade's salt bump is written at `shutdown`, while `date_is_strong_validator()` reads the stored salt during the same request. Tracked in `STATUS.md` |
+  | `Last-Modified`: present on a plain post; absent on a post with a featured image and on a Bricks page, where `If-Modified-Since` equal to `post_modified` came back `200` with a body through nginx; removed by a settings save, restored by re-saving the post | passed |
+  | Headerless table → empty header row, data intact; `colspan`/`rowspan` placeholders at the covered column; a table with `<thead>` unchanged in shape | passed |
+  | Password-protected synced pattern, referenced directly and from inside a public one → absent from the body and the `description`, and from the HTML page; removing the password brings it back in all three, restoring it removes it again, `ETag` moves both ways | passed |
+  | Nested Bricks templates: editing only the inner template, then only the outer, re-pointing the outer, deleting the inner — each moves the `ETag` and the old one is no longer answered `304`; a ring of two templates terminates | passed |
+  | `md-exclude` on a Bricks **container** → text absent from the body and the `description`; stale `post_content` never used | passed |
+  | `HEAD` on an emptied body cache leaves it empty, the following `GET` populates it; headers identical to the `GET` | passed on both |
+  | `POST` with `If-None-Match: *` to a `.md` → `200` with the document; `POST` to the canonical permalink with `Accept: text/markdown` → HTML | passed on both |
+  | Regression: `.md` headers, negotiation (`no-store`, `Vary: Accept`), `?format=markdown` byte-identical to the `.md`, `406`, feed and embed stay non-Markdown, password/post-format/draft → 404, Bricks page with real image `src` and its *Render with WordPress* inverse, `If-None-Match` → `304` | passed on both |
+  | `[sysmda_md_actions]` rendered through the real `wp_footer` at priorities 10 and 25 → markup, localization and exactly one script | passed |
+  | Debug log | clean — no plugin warnings or fatals on either site |
+
+  Not covered here: the browser half of the actions menu (placement, Escape,
+  copy); a pre-`0.51.0` capture to compare the header-row table byte for byte;
+  the veto for builders other than Bricks and the census revision count (no
+  fixtures on either site); extra custom fields with a real ACF field group;
+  and WooCommerce, still owed a real install. `post_modified_gmt` of the
+  `sysmda-test-basic` post moved on both sites (re-saved for the validator
+  checks), and `sma-bricks` keeps its legacy `sysmda_llms_txt_*` options, the
+  normal state of an upgraded site that was not uninstalled.
+
 - **2026-08-26 — System Markdown Alternate 0.49.0 (`rel="describedby"`) — targeted, not the full matrix**
 
   Platforms: **both** staging sites, upgraded in place from `0.47.1` (neither
