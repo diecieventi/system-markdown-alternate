@@ -259,8 +259,9 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
   a per-site trade, taken deliberately, and it stays out of the default —
   correctness of series, speed by explicit choice.
 
-- **Polylang: translations sharing a slug — measured, not a plugin defect**
-  (September 2026). The question: the `.md` suffix route resolves the post
+- **Polylang free: translations sharing a slug — measured, not a plugin
+  defect** (September 2026). **Polylang Pro is not covered, and that half is
+  open** — `STATUS.md` item 4. The question: the `.md` suffix route resolves the post
   through `url_to_postid()`, which knows nothing about languages, so does it
   serve the wrong translation when two translations share a URL slug? Measured
   on `sma.instawp.co` with Polylang 3.8.9 (free) and `0.53.0`: English as the
@@ -279,10 +280,13 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
   - **With distinct slugs — the normal case — each language resolved to its
     own post** (`/it/prova-in-italiano.md` and the English
     `/sysmda-test-basic.md`).
-  - **Not covered**: Polylang Pro's shared slugs, where the HTML is expected to
-    resolve by language and `url_to_postid()` might not follow it, and WPML;
-    both paid, neither on staging. Worth measuring only if a Pro or WPML site
-    reports a wrong-language `.md` — until then there is nothing to fix, and
-    the free version cannot produce the precondition.
+  - **What this does NOT settle: Polylang Pro.** Pro supports shared slugs as
+    a feature and routes the HTML by language, so its behaviour is a different
+    question from the one measured here — forcing a shared slug into the free
+    version produces a state the free version does not support, where even the
+    HTML resolved to the wrong language, and that cannot stand in for Pro.
+    Whether `url_to_postid()` follows Pro's routing is unknown, and so is
+    WPML's case; neither is on staging. That half is tracked as open work in
+    `STATUS.md`, not closed here.
   Staging was restored afterwards: fixture posts deleted, Polylang deactivated
   again, its options restored byte-identical, rewrite rules regenerated.

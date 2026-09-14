@@ -23,7 +23,9 @@ backlog, because it has to be re-read and re-dismissed every time.
 
 Released: **0.53.1**, live on wordpress.org since 14 September 2026 and
 verified the same day: the first request after an upgrade on staging, and the
-refreshed screenshots on the listing. No open defect.
+refreshed screenshots on the listing. The defect `0.53.0`'s acceptance run found
+is fixed; the items below remain, R3 among them — a real content-accuracy
+defect waiting on one measurement.
 
 ## Open work
 
@@ -32,6 +34,7 @@ refreshed screenshots on the listing. No open defect.
 | 1 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
 | 2 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
 | 3 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
+| 4 | **Shared slugs on Polylang Pro** — does the `.md` route follow the language when translations share a slug | Unmeasured | A Polylang Pro (or WPML) install; neither staging site has one | [evaluations.md](evaluations.md) |
 
 **1. Italian translation.** The plugin is live on wordpress.org, so the old
 blocker is gone. On translate.wordpress.org the `dev` project holds 116 strings:
@@ -53,6 +56,18 @@ block names actually present in the servable corpus, so the three exclusion
 lists can be filled from evidence. The *damage* half shipped in `0.40.0` (lists
 accumulate, code samples are safe); *discovery* is what remains, and it waits on
 a corpus worth scanning.
+
+**4. Shared slugs on Polylang Pro.** The `.md` suffix route resolves the post
+through `url_to_postid()`, which knows nothing about languages. On Polylang
+**free** that was measured and is not a defect — the free version refuses
+shared slugs, and a slug forced into the database is mis-resolved by WordPress
+itself before this plugin is involved ([evaluations.md](evaluations.md)). That
+says nothing about **Pro**, whose shared-slug feature routes the HTML by
+language: whether the `.md` follows it, or serves the other translation, is
+unknown. What unblocks it is a Pro install with two translations sharing a
+slug, and the same probe — `.md` suffix, `?format=markdown` and
+`Accept: text/markdown` on both language URLs, compared with the HTML. WPML
+raises the same question.
 
 ## Closed — do not redo
 
