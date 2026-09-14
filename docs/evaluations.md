@@ -258,3 +258,35 @@ reopened at all are in `AGENTS.md` under *Product decisions*.
   nothing purges a `.md`, so an edit is invisible for up to the lifetime. This is
   a per-site trade, taken deliberately, and it stays out of the default —
   correctness of series, speed by explicit choice.
+
+- **Polylang free: translations sharing a slug — measured, not a plugin
+  defect** (September 2026). **Polylang Pro is not covered, and that half is
+  open** — `STATUS.md` item 4. The question: the `.md` suffix route resolves the post
+  through `url_to_postid()`, which knows nothing about languages, so does it
+  serve the wrong translation when two translations share a URL slug? Measured
+  on `sma.instawp.co` with Polylang 3.8.9 (free) and `0.53.0`: English as the
+  default language, hidden in the URL; Italian under `/it/`.
+  - **Polylang free does not let translations share a slug.** WordPress saved
+    the Italian translation as `…-2`; the shared slug had to be forced in the
+    database. On the free version the situation cannot arise through the
+    editor — sharing slugs is a Polylang Pro feature.
+  - **With the slug forced, `url_to_postid()` resolves both permalinks to the
+    Italian post, and so does WordPress itself**: the English HTML URL was
+    answered `301` to the Italian page, `x-redirect-by: Polylang`. The `.md`
+    suffix, `?format=markdown` and `Accept: text/markdown` on both URLs all
+    served that same Italian post, with a consistent front-matter `url` and
+    canonical `Link`. The plugin serves what the site resolves; it is not worse
+    than the HTML.
+  - **With distinct slugs — the normal case — each language resolved to its
+    own post** (`/it/prova-in-italiano.md` and the English
+    `/sysmda-test-basic.md`).
+  - **What this does NOT settle: Polylang Pro.** Pro supports shared slugs as
+    a feature and routes the HTML by language, so its behaviour is a different
+    question from the one measured here — forcing a shared slug into the free
+    version produces a state the free version does not support, where even the
+    HTML resolved to the wrong language, and that cannot stand in for Pro.
+    Whether `url_to_postid()` follows Pro's routing is unknown, and so is
+    WPML's case; neither is on staging. That half is tracked as open work in
+    `STATUS.md`, not closed here.
+  Staging was restored afterwards: fixture posts deleted, Polylang deactivated
+  again, its options restored byte-identical, rewrite rules regenerated.

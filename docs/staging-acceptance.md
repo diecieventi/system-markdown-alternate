@@ -192,6 +192,29 @@ repository.
 
 ## Latest full pass
 
+- **2026-09-14 — System Markdown Alternate 0.53.1 — targeted: the first request after an upgrade**
+
+  Platform: `sma.instawp.co`, WordPress 7.1, PHP 8.4.20, GeneratePress 3.6.1,
+  upgraded in place from `0.53.0` with the GitHub Release package (SHA-256
+  checked against the published digest). A rollback archive was taken first and
+  removed afterwards. No request of any kind was sent to the site between the
+  install and the conditional request below, so that request would be the one
+  to see the new files.
+
+  | Check | Result |
+  |---|---|
+  | Before: re-saved plain post, salt older than the post, stored `sysmda_version` = `0.53.0` → `Last-Modified` advertised | confirmed |
+  | **First** front-end request after the upgrade, `If-Modified-Since` = that date | **passed** — `200` with the body and no `Last-Modified`; the same check on `0.53.0` got a bodyless `304` |
+  | That request was the one that detected the upgrade | confirmed — the new salt's timestamp falls inside that request's own start/end second, and `sysmda_version` read `0.53.1` afterwards |
+  | Second request with the same header | `200` |
+  | Debug log | clean — no plugin warnings or fatals |
+
+  Checked the same day, outside the matrix: the listing now shows the
+  screenshots retaken in #147. SVN `assets/` holds them, and the listing
+  requests them with a `?rev=` query that returns the new bytes; the unversioned
+  `ps.w.org` URL still returned the old files from the CDN cache for a while,
+  which the listing does not use — check the `?rev=` URL, not the bare one.
+
 - **2026-09-14 — System Markdown Alternate 0.53.0 — broad, not the full matrix; one failure**
 
   Platforms: **both** staging sites, upgraded in place from `0.51.0` (neither
