@@ -24,17 +24,16 @@ backlog, because it has to be re-read and re-dismissed every time.
 Released: **0.53.1**, live on wordpress.org since 14 September 2026 and
 verified the same day: the first request after an upgrade on staging, and the
 refreshed screenshots on the listing. The defect `0.53.0`'s acceptance run found
-is fixed; the items below remain, R3 among them — a real content-accuracy
-defect waiting on one measurement.
+is fixed. R3, the last finding of the `0.50.0` review, was closed without a fix
+on the production measurement (see [review-followup-plan.md](review-followup-plan.md)).
 
 ## Open work
 
 | # | Item | State | What unblocks it | Detail |
 |---|---|---|---|---|
 | 1 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
-| 2 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
-| 3 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
-| 4 | **Shared slugs on Polylang Pro** — does the `.md` route follow the language when translations share a slug | Unmeasured | A Polylang Pro (or WPML) install; neither staging site has one | [evaluations.md](evaluations.md) |
+| 2 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
+| 3 | **Shared slugs on Polylang Pro** — does the `.md` route follow the language when translations share a slug | Unmeasured | A Polylang Pro (or WPML) install; neither staging site has one | [evaluations.md](evaluations.md) |
 
 **1. Italian translation.** The plugin is live on wordpress.org, so the old
 blocker is gone. On translate.wordpress.org the `dev` project holds 116 strings:
@@ -43,21 +42,13 @@ locale editor already approving (`piermario`). A language pack is generated at
 90%, so ~105 of the 116 have to land. No translation files belong in this
 repository — see the i18n note in `AGENTS.md`.
 
-**2. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
-own `content` attribute, so the plugin publishes a synced pattern's default text
-where the page shows the per-instance override. Real, and the most invasive fix
-of the `0.50.0` review. Three connected installs scanned clean — but none of
-them holds a single synced pattern, so the denominator is zero and the result
-carries no information. The SQL is in the plan; run it on the production
-reference site before spending anything.
-
-**3. Exclusion scanner.** An admin page inventorying the shortcode tags and
+**2. Exclusion scanner.** An admin page inventorying the shortcode tags and
 block names actually present in the servable corpus, so the three exclusion
 lists can be filled from evidence. The *damage* half shipped in `0.40.0` (lists
 accumulate, code samples are safe); *discovery* is what remains, and it waits on
 a corpus worth scanning.
 
-**4. Shared slugs on Polylang Pro.** The `.md` suffix route resolves the post
+**3. Shared slugs on Polylang Pro.** The `.md` suffix route resolves the post
 through `url_to_postid()`, which knows nothing about languages. On Polylang
 **free** that was measured and is not a defect — the free version refuses
 shared slugs, and a slug forced into the database is mis-resolved by WordPress

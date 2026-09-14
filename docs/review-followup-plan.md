@@ -1,11 +1,12 @@
-# The `0.50.0` external review — the record, and the one finding still open
+# The `0.50.0` external review — the record
 
 **This file is the reasoning, not the status.** What is open, and what unblocks
 it, is in [`STATUS.md`](STATUS.md) — one place, so the two cannot disagree.
 
 Of the review's eight findings plus the two performance notes, **nine are
-shipped and one is declined**. Exactly one remains open: **R3**, parked on a
-single SQL query. Finding IDs are the review's own.
+shipped, one is declined and one is closed without a fix**: R3, on a
+measurement of the production reference site (September 2026). Nothing from
+this review is open. Finding IDs are the review's own.
 
 | ID | Outcome | Where |
 |---|---|---|
@@ -19,7 +20,7 @@ single SQL query. Finding IDs are the review's own.
 | B1 | Shipped `0.52.0` — a nested Bricks template is a cache dependency, followed transitively | `BricksAdapter::collect_template_refs()` |
 | PERF1 / PERF2 | Shipped `0.52.0` — no document is built for a `HEAD`; the dependency fingerprints are computed once per response and handed to both validators | `MarkdownController` |
 | H1 | **Declined** — see *Markdown syntax in the `# Title` stays unescaped* in `AGENTS.md`, and the measurement in [`evaluations.md`](evaluations.md) | — |
-| R3 | **Open** — below | — |
+| R3 | **Closed without a fix** — no pattern on the production reference site is authored with overrides; below | — |
 
 Every durable decision that came out of these is in `AGENTS.md`; the public
 contracts are `docs/output-format.md` and `docs/filters.md`; the real-WordPress
@@ -43,7 +44,7 @@ both are already durable decisions in `AGENTS.md`:
   Proved to be the proxy rather than the plugin by emptying the body cache
   first and watching that same request repopulate it **with the new content**.
 
-## R3 — synced-pattern instance overrides — the one open finding
+## R3 — synced-pattern instance overrides — closed without a fix
 
 **The defect.** `BlockCleaner` replaces a `core/block` node with the referenced
 pattern's parsed blocks and drops the reference's own `content` attribute.
@@ -68,20 +69,52 @@ Three connected installs were scanned for `<!-- wp:block` carrying a
 | `sma-bricks.instawp.co` | 34 | 0 | 0 | **0** |
 | `hvf.instawp.co` | 23 | 0 | 0 | **0** |
 
-Literally this satisfies "no occurrences, no work". **Do not close it on that
-basis.** None of the three corpora contains a single synced pattern, so the
-denominator is zero and the result cannot distinguish "nobody authors
-overrides" from "these three sites do not use patterns at all". The corpus that
-would settle it is the production reference site, which is not connected to
-these sessions. Run this there before spending anything:
+Literally this satisfies "no occurrences, no work", and it was **not** closed
+on that basis: none of the three corpora contains a single synced pattern, so
+the denominator is zero and the result cannot distinguish "nobody authors
+overrides" from "these three sites do not use patterns at all".
 
-```sql
-SELECT ID, post_type, post_title FROM wp_posts
-WHERE post_status = 'publish'
-  AND post_content REGEXP '<!--[[:space:]]*wp:block[[:space:]]*\\{[^}]*"content"[[:space:]]*:';
+**The production reference site settled it, on 14 September 2026.** Three
+read-only queries through WP-CLI, table prefix resolved by `wp db prefix`:
+
+| Question | Result |
+|---|---|
+| Published synced patterns (`wp_block`) | **2** |
+| …of which declare `core/pattern-overrides` bindings | **0** |
+| Published content referencing a pattern (`wp:block {`) | 0 |
+| Published `core/block` instances carrying a `"content"` attribute | 0 |
+
+The decisive row is the second. An instance override can only exist for a
+pattern authored with `core/pattern-overrides` bindings, and neither pattern on
+the one corpus that uses synced patterns has any — so there is no content the
+defect could misrepresent, now or through an edit to an existing reference. The
+defect is real in the code and stays unfixed: its audience is a site that
+authors overrides, on WordPress 6.6+, and none has been seen. **Reopen it only
+on a report from such a site**, not to tidy up the code; the fix shape below is
+kept for that day.
+
+Two things worth not re-deriving if it is ever measured again:
+
+- The query must ask the **patterns** whether they declare bindings, not only
+  the posts whether they carry `"content"`. A corpus whose patterns are all
+  unreferenced answers the second question with zero rows and still says
+  nothing, as this one would have on its own.
+- **In an interactive bash, never put `<!--` inside double quotes.** `!` starts
+  history expansion, and the first run of these queries silently searched for
+  `<-v wp:block` instead — zero rows, for the wrong reason. The forms below
+  contain no `!` and were the ones that ran:
+
+```bash
+wp db query "SELECT ID, (post_content LIKE '%core/pattern-overrides%') AS has_overrides FROM $(wp db prefix)posts WHERE post_type = 'wp_block' AND post_status = 'publish';"
 ```
 
-Zero rows on a corpus that *does* use synced patterns closes it for good.
+```bash
+wp db query "SELECT COUNT(*) FROM $(wp db prefix)posts WHERE post_status = 'publish' AND post_content LIKE '%wp:block {%';"
+```
+
+```bash
+wp db query "SELECT ID, post_type FROM $(wp db prefix)posts WHERE post_status = 'publish' AND post_content REGEXP 'wp:block[[:space:]]*[{][^}]*\"content\"[[:space:]]*:';"
+```
 
 **If it is built.** Core (`wp-includes/blocks/block.php`) attaches the parsed
 pattern blocks as the `core/block` instance's inner blocks and lets its declared
