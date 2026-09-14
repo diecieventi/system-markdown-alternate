@@ -29,9 +29,8 @@ Released: **0.52.0**, live on wordpress.org. No open issue.
 |---|---|---|---|---|
 | 1 | **Staging acceptance run on `0.52.0`** | Overdue | Nothing — both staging sites are connected and still on `0.51.0` | [staging-acceptance.md](staging-acceptance.md) |
 | 2 | **Italian translation** on translate.wordpress.org | Ready, half done | Nothing — 51/116 strings are approved, 65 remain; a language pack is built at 90% | below |
-| 3 | **Retake the four settings screenshots** | Blocking the `0.53.0` publish | Nothing — a browser on a site running `0.53.0` | below |
-| 4 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
-| 5 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
+| 3 | **R3** — synced-pattern instance overrides | Parked, measured but inconclusive | **One SQL query** on the production reference site | [review-followup-plan.md](review-followup-plan.md) |
+| 4 | **Exclusion scanner** | Parked, designed, not started | A real content corpus to point it at | [exclusion-scanner-plan.md](exclusion-scanner-plan.md) |
 
 **1. Acceptance run.** The last *full* matrix was `0.45.0` on 20 August 2026;
 the last recorded pass of any kind was `0.49.0` on 26 August, and it was
@@ -50,17 +49,7 @@ locale editor already approving (`piermario`). A language pack is generated at
 90%, so ~105 of the 116 have to land. No translation files belong in this
 repository — see the i18n note in `AGENTS.md`.
 
-**3. Settings screenshots.** `screenshot-1` … `screenshot-4` all show the
-`llms.txt` tab and the status aside, and all read **v0.49.2** — four releases
-stale even before `0.53.0` removed the endpoint. `.wordpress-org/` is synced to
-the public listing on every release, so publishing `0.53.0` with them
-advertises a feature that no longer exists to exactly the people deciding
-whether to install. `screenshot-5` (the front-end split button) is fine. This
-is the one item here that gates a *publish* rather than a merge: do it during
-the acceptance run in item 1, from the same site. Found by Codex on PR #146,
-after the removal PR recorded only `screenshot-1` as stale.
-
-**4. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
+**3. R3 — pattern overrides.** `BlockCleaner` drops a `core/block` instance's
 own `content` attribute, so the plugin publishes a synced pattern's default text
 where the page shows the per-instance override. Real, and the most invasive fix
 of the `0.50.0` review. Three connected installs scanned clean — but none of
@@ -68,7 +57,7 @@ them holds a single synced pattern, so the denominator is zero and the result
 carries no information. The SQL is in the plan; run it on the production
 reference site before spending anything.
 
-**5. Exclusion scanner.** An admin page inventorying the shortcode tags and
+**4. Exclusion scanner.** An admin page inventorying the shortcode tags and
 block names actually present in the servable corpus, so the three exclusion
 lists can be filled from evidence. The *damage* half shipped in `0.40.0` (lists
 accumulate, code samples are safe); *discovery* is what remains, and it waits on

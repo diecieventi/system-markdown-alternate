@@ -181,7 +181,7 @@ As above, the browser-like `-A` value matters: a WAF/CDN may block non-browser u
 == Screenshots ==
 
 1. Settings — General: pick the content types that expose a `.md` (nothing is served until at least one is ticked) and set the cache TTL.
-2. Settings — Markdown output: what stays out of the `.md`. Excluded shortcodes, blocks and CSS classes (leave empty for the built-in defaults), plus the custom taxonomies added to the front matter and the ACF fields.
+2. Settings — Markdown output: what stays out of the `.md`. Excluded shortcodes, blocks, CSS classes and builder elements (added to the built-in defaults), plus extra custom fields, custom taxonomies in the front matter and ACF fields.
 3. Settings — Integrations: the `[sysmda_md_url]`, `[sysmda_md_download]` and `[sysmda_md_actions]` shortcodes, with the GenerateBlocks and ACF detection status.
 4. Settings — Advanced: the `X-Robots-Tag` header, the opt-in LiteSpeed cache bypass rules and the `.md` hit counter, split bot vs human.
 5. The `[sysmda_md_actions]` split button on the front end: copy the Markdown, view it in a new tab, or download it — no theme styling required.
