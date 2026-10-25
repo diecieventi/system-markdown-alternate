@@ -32,12 +32,14 @@ jobs:
       # added to branch protection, and docs-site.yml only builds on a push to
       # main — so a malformed Starlight config, component or frontmatter entry
       # passed every pull-request check and failed while deploying the public
-      # site. Node 22 and `npm ci` match that workflow, so what is proven here
-      # is what will be deployed there.
+      # site. The Node version (documentation/.nvmrc, the single place it is
+      # set) and `npm ci` match that workflow, so what is proven here is what
+      # will be deployed there.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: matrix.php == '7.4'
         with:
-          node-version: '22'
+          node-version-file: documentation/.nvmrc
+          check-latest: true
           cache: npm
           cache-dependency-path: documentation/package-lock.json
 

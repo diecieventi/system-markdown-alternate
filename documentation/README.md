@@ -14,6 +14,9 @@ wordpress.org. No `.distignore` entry is needed to keep it that way.
 
 ## Working on it
 
+Requires the Node.js major version in [`.nvmrc`](.nvmrc) (`nvm use` picks it
+up); CI reads the same file.
+
 ```bash
 cd documentation
 npm install
