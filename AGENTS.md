@@ -2124,6 +2124,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 ├── .gitignore
 ├── .github/workflows/ci.yml      ← CI: php -l + tests on PHP 7.4/8.4, + the docs-site build (required check)
 ├── .github/workflows/docs-site.yml    ← builds documentation/ and deploys it to GitHub Pages
+├── .github/dependabot.yml        ← groups the documentation/ npm security fixes into one PR
 ├── .github/workflows/release-tag.yml  ← auto-creates the vX.Y.Z tag on a version bump (also manual)
 ├── .github/workflows/publish-release.yml  ← manual button: publishes the Release for a tag, zip attached
 ├── .github/workflows/deploy-wordpress-org.yml  ← SVN deploy (live: secrets configured; validates the tag before staging)
@@ -2146,6 +2147,7 @@ should assert `home_url()` first and refuse otherwise; it costs one line.
 │   └── page-builders-plan.md
 ├── documentation/                ← user documentation site, Astro Starlight (NOT shipped)
 │   ├── README.md                 ← audience split, link rules, how to write an article
+│   ├── .nvmrc                    ← the Node.js major version, read by both workflows
 │   ├── astro.config.mjs          ← sidebar, site + base path, favicon
 │   ├── remark-base-paths.mjs     ← applies `base` to root-relative Markdown links
 │   └── src/content/docs/<section>/<article>.md  ← 19 articles + index.md (splash)
@@ -2291,8 +2293,10 @@ Two things about it are load-bearing:
   nothing until its name is added to branch protection, and the same file already
   carries the shell lint and the release-tag regression on that argument. Verified
   to fire rather than assumed: a deliberately malformed article exits the build
-  non-zero. Node 22 and `npm ci` are kept identical to the deploy workflow, so
-  what passes here is what gets deployed there.
+  non-zero. Both workflows read the Node version from `documentation/.nvmrc`
+  (with `check-latest`, so a stale runner cache cannot stand in for the newest
+  patch) and both run `npm ci`, so what passes here is what gets deployed there.
+  Changing Node is a one-line edit to that file, never to the workflows.
 
 ## Code conventions
 

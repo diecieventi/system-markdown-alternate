@@ -1,0 +1,20 @@
+# Dependabot for the documentation site (documentation/, never shipped with
+# the plugin). Two choices, both deliberate:
+#
+# - open-pull-requests-limit: 0 turns OFF routine version-update PRs. Only
+#   security updates are opened, and those are not affected by the limit.
+# - The group collects every security fix for this directory into ONE pull
+#   request. Without it Dependabot opens one PR per package, and each merge
+#   rewrites package-lock.json and can trigger the next round of PRs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /documentation
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      documentation-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
